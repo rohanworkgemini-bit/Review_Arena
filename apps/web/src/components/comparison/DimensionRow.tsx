@@ -47,7 +47,7 @@ export function DimensionRow({
         >
           <span
             className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
+              "flex h-5 w-5 items-center justify-center font-mono text-[10px] font-bold",
               aActive ? "bg-primary-foreground/20" : "bg-muted",
             )}
           >
@@ -69,7 +69,7 @@ export function DimensionRow({
         >
           <span
             className={cn(
-              "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
+              "flex h-5 w-5 items-center justify-center font-mono text-[10px] font-bold",
               bActive ? "bg-primary-foreground/20" : "bg-muted",
             )}
           >

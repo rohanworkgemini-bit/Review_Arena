@@ -5,7 +5,6 @@ import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ParticleBackground } from "@/components/ParticleBackground";
 
 // Code-split each route. The leaderboard pulls in recharts (~80 KB);
 // the admin page is rarely visited; reveal pulls in radar deps. Lazy
@@ -55,9 +54,8 @@ const EXPANDED_WIDTH = "14rem";
 const COLLAPSED_WIDTH = "3.5rem";
 
 // AppShell = the standard sidebar + header + main layout. Wrapped
-// around every route EXCEPT "/" — the landing page is rendered
-// full-bleed (no chrome) to read as a marketing surface, matching the
-// Render-style dark hero design.
+// around every route EXCEPT "/" — the landing page renders full-bleed
+// (no sidebar) with its own minimal top bar.
 function AppShell({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -77,10 +75,6 @@ function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="relative flex min-h-screen" style={layoutStyle}>
-      {/* App-wide drifting dot field — single fixed canvas behind
-          everything. Theme-aware: dimmer dark-gray dots on light, white
-          + violet on dark. Sidebar/Header/Cards sit above it at z-10. */}
-      <ParticleBackground variant="fixed" />
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <Header />

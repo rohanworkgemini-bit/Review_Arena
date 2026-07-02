@@ -12,7 +12,7 @@ export function ReviewSkeleton({ label }: { label: string }) {
         {[90, 75, 85, 60, 80, 70].map((w, i) => (
           <div
             key={i}
-            className="h-3 rounded bg-muted animate-pulse"
+            className="h-3  bg-muted animate-pulse"
             style={{ width: `${w}%` }}
           />
         ))}

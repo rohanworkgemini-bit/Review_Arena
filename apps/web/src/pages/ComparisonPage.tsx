@@ -348,7 +348,7 @@ export function ComparisonPage() {
 
       {/* Sticky vote bar — the single primary action on the page. */}
       <div
-        className="fixed bottom-0 right-0 z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 left-0 lg:[left:var(--sidebar-w)]"
+        className="fixed bottom-0 right-0 z-30 border-t bg-background left-0 lg:[left:var(--sidebar-w)]"
       >
         <div className="container flex flex-col gap-2 py-3 md:flex-row md:items-center">
           {bothReady && !allDimensionsFilled ? (
@@ -375,7 +375,7 @@ export function ComparisonPage() {
               }
             >
               <span>A is better</span>
-              <kbd className="ml-2 hidden rounded border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">1</kbd>
+              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">1</kbd>
             </Button>
             <Button
               size="lg"
@@ -390,7 +390,7 @@ export function ComparisonPage() {
               }
             >
               <span>Tie</span>
-              <kbd className="ml-2 hidden rounded border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">2</kbd>
+              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">2</kbd>
             </Button>
             <Button
               size="lg"
@@ -405,7 +405,7 @@ export function ComparisonPage() {
               }
             >
               <span>B is better</span>
-              <kbd className="ml-2 hidden rounded border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">3</kbd>
+              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">3</kbd>
             </Button>
           </div>
         </div>

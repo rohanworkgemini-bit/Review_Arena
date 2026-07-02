@@ -10,80 +10,78 @@
   }
 
   /* ─── Light mode (default :root) ───────────────────────────────────
-     Pure-white canvas. Cards sit a hair off-white (#fafafa) so they
-     still read as elevated against the white background. */
+     Warm paper canvas with white cards — the page reads as a printed
+     sheet, not a screen. The single chromatic accent is an editorial
+     oxblood (the reviewer's red pen), reserved for interactive
+     elements only. Everything else is ink and gray. */
   :root {
-    --background: 0 0% 100%;           /* #ffffff */
-    --foreground: 240 10% 4%;          /* near-black */
+    --background: 45 20% 98%;          /* #FBFAF7 — warm paper */
+    --foreground: 0 0% 12%;            /* #1F1F1F — ink */
 
-    --card: 0 0% 98%;                  /* #fafafa — barely-elevated */
-    --card-foreground: 240 10% 4%;
+    --card: 0 0% 100%;                 /* white sheet on paper */
+    --card-foreground: 0 0% 12%;
 
-    --primary: 262 83% 58%;            /* #8B5CF6 / violet-500 */
+    --primary: 0 52% 32%;              /* #7C2727 — oxblood, red-pen */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 240 5% 92%;
-    --secondary-foreground: 240 10% 4%;
+    --secondary: 45 10% 92%;
+    --secondary-foreground: 0 0% 12%;
 
-    --muted: 240 5% 92%;
-    --muted-foreground: 240 4% 40%;    /* readable gray on light */
+    --muted: 45 10% 93%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 240 5% 90%;              /* hover/active surface */
-    --accent-foreground: 240 10% 4%;
+    --accent: 45 12% 91%;              /* hover/active surface */
+    --accent-foreground: 0 0% 12%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 0 72% 42%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 5% 85%;              /* light hairlines */
-    --input: 240 5% 85%;
-    --ring: 262 83% 58%;
-    --radius: 0.625rem;
-
-    /* Dot-grid utility uses this so the texture flips with the theme.
-       Pulled into a variable rather than a hardcoded rgba so the same
-       CSS class works in both modes. */
-    --dot-grid-color: rgba(0, 0, 0, 0.06);
+    --border: 40 8% 85%;               /* warm hairlines */
+    --input: 40 8% 80%;
+    --ring: 0 52% 32%;
+    --radius: 0rem;                    /* square edges throughout */
   }
 
-  /* ─── Dark mode (Render-style pure-black canvas) ─────────────────── */
+  /* ─── Dark mode ─────────────────────────────────────────────────────
+     Soft near-black (not pure #000) so hairlines and type keep their
+     hierarchy. The red-pen accent lightens for contrast. */
   .dark {
-    --background: 0 0% 0%;
-    --foreground: 0 0% 98%;
+    --background: 30 4% 8%;            /* #151413 */
+    --foreground: 40 8% 92%;
 
-    --card: 0 0% 4%;
-    --card-foreground: 0 0% 98%;
+    --card: 30 4% 10%;
+    --card-foreground: 40 8% 92%;
 
-    --primary: 262 83% 58%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 48% 64%;              /* lightened oxblood */
+    --primary-foreground: 0 0% 8%;
 
-    --secondary: 0 0% 9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 30 3% 15%;
+    --secondary-foreground: 40 8% 92%;
 
-    --muted: 0 0% 9%;
-    --muted-foreground: 0 0% 64%;
+    --muted: 30 3% 15%;
+    --muted-foreground: 40 4% 62%;
 
-    --accent: 0 0% 12%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 30 3% 17%;
+    --accent-foreground: 40 8% 92%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 0 0% 8%;
 
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
-    --ring: 262 83% 58%;
-
-    --dot-grid-color: rgba(255, 255, 255, 0.06);
+    --border: 30 4% 20%;
+    --input: 30 4% 24%;
+    --ring: 0 48% 64%;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
-  /* Subtle dot-grid utility, theme-aware via the --dot-grid-color
-     variable above. */
-  .bg-dot-grid {
-    background-image: radial-gradient(var(--dot-grid-color) 1px, transparent 1px);
-    background-size: 16px 16px;
+  /* Journal register: top-level headings set in IBM Plex Serif. Smaller
+     headings (h3+) stay in Plex Sans so hierarchy comes from the face
+     switch, not just size. */
+  h1,
+  h2 {
+    @apply font-serif;
   }
 }

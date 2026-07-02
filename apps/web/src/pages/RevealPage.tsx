@@ -244,7 +244,7 @@ function RevealCard({
       <CardHeader>
         <CardTitle className="text-base flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs uppercase">
+            <span className=" bg-muted px-2 py-0.5 font-mono text-xs uppercase">
               {slot}
             </span>
             <span>{reveal.systemName}</span>
@@ -325,7 +325,7 @@ function ClaimList({
               counts[k] ? (
                 <span
                   key={k}
-                  className={`rounded border px-1.5 py-0.5 font-mono ${VERDICT_STYLES[k]}`}
+                  className={` border px-1.5 py-0.5 font-mono ${VERDICT_STYLES[k]}`}
                   title={k}
                 >
                   {VERDICT_SHORT[k]} {counts[k]}
@@ -345,7 +345,7 @@ function ClaimList({
             <li key={i} className="rounded-md border px-3 py-2 text-sm">
               <div className="flex items-start gap-2">
                 <span
-                  className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-xs ${VERDICT_STYLES[c.verdict]}`}
+                  className={`shrink-0  border px-1.5 py-0.5 font-mono text-xs ${VERDICT_STYLES[c.verdict]}`}
                   title={c.verdict}
                 >
                   {VERDICT_SHORT[c.verdict]}

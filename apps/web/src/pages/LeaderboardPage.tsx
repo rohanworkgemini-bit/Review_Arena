@@ -292,9 +292,9 @@ function CiBar({
   const widthPct = Math.max(0.5, ((high - low) / span) * 100);
   const markPct = ((rating - min) / span) * 100;
   return (
-    <div className="relative h-2 w-full rounded-full bg-muted">
+    <div className="relative h-2 w-full bg-muted">
       <div
-        className="absolute top-0 h-2 rounded-full bg-primary/40"
+        className="absolute top-0 h-2 bg-primary/40"
         style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
       />
       <div
@@ -314,10 +314,10 @@ function LeaderboardSkeleton() {
     <div className="divide-y">
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="flex items-center gap-4 px-4 py-3">
-          <div className="h-4 w-6 rounded bg-muted animate-pulse" />
-          <div className="h-4 w-40 rounded bg-muted animate-pulse" />
-          <div className="ml-auto h-2 w-48 rounded-full bg-muted animate-pulse" />
-          <div className="h-4 w-12 rounded bg-muted animate-pulse" />
+          <div className="h-4 w-6  bg-muted animate-pulse" />
+          <div className="h-4 w-40  bg-muted animate-pulse" />
+          <div className="ml-auto h-2 w-48 bg-muted animate-pulse" />
+          <div className="h-4 w-12  bg-muted animate-pulse" />
         </div>
       ))}
     </div>

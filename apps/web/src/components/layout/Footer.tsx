@@ -12,12 +12,9 @@ import { Link } from "react-router-dom";
 // to AppShell's flex layout (main is flex-1).
 export function Footer() {
   return (
-    <footer className="border-t bg-card/40 backdrop-blur-sm">
+    <footer className="border-t">
       <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 px-6 py-6 text-xs text-muted-foreground md:flex-row md:items-center">
-        <div className="flex items-center gap-2">
-          <img src="/favicon-32x32.png" alt="" aria-hidden className="h-4 w-4" />
-          <span>ReviewArena · thesis build · single-tenant</span>
-        </div>
+        <span>ReviewArena · thesis build · single-tenant</span>
         <div className="flex items-center gap-5">
           <Link to="/leaderboard" className="transition-colors hover:text-foreground">
             Leaderboard

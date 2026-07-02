@@ -18,9 +18,8 @@ import { useTheme } from "@/lib/theme";
 // /upload can offset themselves without prop drilling.
 //
 // Visual language tracks the design tokens so it adapts between light
-// and dark mode automatically. The brand mark + Vote pill stay violet
-// in both modes (brand is mode-independent). The active nav item uses
-// a violet left-accent stripe + subtle `accent` fill in both modes.
+// and dark mode automatically. The active nav item uses a red-pen
+// (primary) left-accent stripe + subtle `accent` fill in both modes.
 
 interface SidebarProps {
   collapsed: boolean;
@@ -50,14 +49,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* ─── Brand row ─────────────────────────────────────────────── */}
       <div className="flex h-14 items-center justify-between border-b px-3">
         <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold">
-          <img
-            src="/favicon-32x32.png"
-            alt=""
+          <span
             aria-hidden
-            className="h-7 w-7 shrink-0"
-          />
+            className="flex h-7 w-7 shrink-0 items-center justify-center border bg-card font-serif text-sm font-semibold text-primary"
+          >
+            R
+          </span>
           {!collapsed && (
-            <span className="truncate tracking-tight">ReviewArena</span>
+            <span className="truncate font-serif tracking-tight">ReviewArena</span>
           )}
         </Link>
         {!collapsed && (
@@ -88,7 +87,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 // so the row width stays constant.
                 "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 transition-colors hover:bg-accent hover:text-foreground",
                 isActive
-                  ? "border-violet-500 bg-accent font-medium text-foreground"
+                  ? "border-primary bg-accent font-medium text-foreground"
                   : "text-muted-foreground",
                 collapsed && "justify-center border-l-0 px-0",
               )

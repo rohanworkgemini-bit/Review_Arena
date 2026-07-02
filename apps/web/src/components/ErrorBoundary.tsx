@@ -40,13 +40,13 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children;
     return (
       <div className="container py-16">
-        <div className="mx-auto max-w-md rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+        <div className="mx-auto max-w-md border bg-card p-6 text-card-foreground">
           <h2 className="text-lg font-semibold">Something went wrong</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             The page hit an unexpected error. You can try again, or go back to the
             home page.
           </p>
-          <pre className="mt-3 overflow-auto rounded bg-muted/40 p-2 text-xs">
+          <pre className="mt-3 overflow-auto  bg-muted/40 p-2 text-xs">
             {this.state.error.message}
           </pre>
           <div className="mt-4 flex gap-2">

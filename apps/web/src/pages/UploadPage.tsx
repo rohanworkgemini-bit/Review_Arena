@@ -155,7 +155,7 @@ export function UploadPage() {
       )}
 
       <div
-        className="fixed bottom-0 right-0 z-30 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 left-0 lg:[left:var(--sidebar-w)]"
+        className="fixed bottom-0 right-0 z-30 border-t bg-background left-0 lg:[left:var(--sidebar-w)]"
       >
         <div className="container max-w-2xl flex items-center gap-4 py-3">
           {submitting ? (
@@ -282,7 +282,7 @@ function SourceDropdown({
           ref={menuRef}
           role="menu"
           aria-label="Source"
-          className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[14rem] overflow-hidden rounded-md border bg-popover bg-card p-1 shadow-lg"
+          className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[14rem] overflow-hidden border bg-card p-1"
         >
           {SOURCE_OPTIONS.map((opt, idx) => {
             const Icon = opt.icon;
@@ -309,7 +309,7 @@ function SourceDropdown({
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 <span className="flex-1 truncate">{opt.label}</span>
-                {active && <Check className="h-4 w-4 shrink-0 text-violet-500" />}
+                {active && <Check className="h-4 w-4 shrink-0 text-primary" />}
               </button>
             );
           })}

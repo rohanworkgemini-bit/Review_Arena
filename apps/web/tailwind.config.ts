@@ -8,6 +8,11 @@ export default {
   theme: {
     container: { center: true, padding: "1.5rem", screens: { "2xl": "1400px" } },
     extend: {
+      fontFamily: {
+        sans: ['"IBM Plex Sans"', "system-ui", "-apple-system", "sans-serif"],
+        serif: ['"IBM Plex Serif"', "Georgia", "serif"],
+        mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

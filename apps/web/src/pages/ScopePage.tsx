@@ -244,7 +244,7 @@ export function ScopePage() {
               {pickedCount} of {paper.sections.length} sections selected
             </div>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded bg-muted">
+          <div className="h-2 w-full overflow-hidden  bg-muted">
             <div
               className={cn(
                 "h-full transition-all",
@@ -313,7 +313,7 @@ export function ScopePage() {
       </Card>
 
       {/* Sticky action bar */}
-      <div className="fixed bottom-0 left-[var(--sidebar-w)] right-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="fixed bottom-0 left-[var(--sidebar-w)] right-0 border-t bg-background">
         <div className="container max-w-3xl py-3 flex items-center justify-between gap-4">
           <div className="text-xs text-muted-foreground">
             Title + abstract always included. {SCOPE_OVERHEAD_TOKENS} tokens

@@ -46,9 +46,9 @@ export function GeneratingPanel({
                     : `${Math.floor(elapsedMs / 1000)}s`}
                 </div>
               </div>
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <div className="mt-3 h-1.5 w-full overflow-hidden bg-muted">
                 <div
-                  className="h-full rounded-full bg-primary transition-all animate-pulse"
+                  className="h-full bg-primary transition-all animate-pulse"
                   style={{ width: pct > 0 ? `${pct}%` : "20%" }}
                 />
               </div>

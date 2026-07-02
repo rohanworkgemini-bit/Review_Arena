@@ -145,7 +145,7 @@ export function ReviewerPlayground() {
                 className={cn(
                   "flex items-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium transition-colors",
                   active
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -298,7 +298,7 @@ function PlaygroundResult({ data }: { data: PlaygroundResponse }) {
             The system prompt (instructions for the reviewer role) is adapter-specific and
             is not shown here — see <code>services/review-gen/app/adapters/{data.system.adapterKey}.py</code>.
           </p>
-          <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-xs">
+          <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap  bg-background p-3 font-mono text-xs">
             {data.canonicalText}
           </pre>
         </details>
@@ -308,7 +308,7 @@ function PlaygroundResult({ data }: { data: PlaygroundResponse }) {
         <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
           Raw model output ({data.rawOutput.length.toLocaleString()} chars)
         </summary>
-        <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-background p-3 font-mono text-xs">
+        <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap  bg-background p-3 font-mono text-xs">
           {data.rawOutput}
         </pre>
       </details>
@@ -336,7 +336,7 @@ function ScoreGrid({
 
 function ScoreCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border bg-background px-2 py-1.5 text-center">
+    <div className=" border bg-background px-2 py-1.5 text-center">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="font-mono tabular-nums">{value}</div>
     </div>
