@@ -90,3 +90,27 @@ jobs:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
         run: modal deploy ${{ matrix.file }}
+
+      - name: Warm ${{ matrix.app }} after deployment
+        if: matrix.changed == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          # Use GitHub secrets for warming (read .env is not available in CI)
+          MODAL_SHARED_SECRET: ${{ secrets.MODAL_SHARED_SECRET }}
+          DEEPREVIEWER_URL: ${{ secrets.DEEPREVIEWER_URL }}
+          OPENREVIEWER_URL: ${{ secrets.OPENREVIEWER_URL }}
+          CYCLEREVIEWER_URL: ${{ secrets.CYCLEREVIEWER_URL }}
+          SEA_URL: ${{ secrets.SEA_URL }}
+        run: |
+          # Create a temporary .env file for the warming script
+          cat > .env.tmp <<EOF
+          MODAL_SHARED_SECRET="$MODAL_SHARED_SECRET"
+          DEEPREVIEWER_URL="$DEEPREVIEWER_URL"
+          OPENREVIEWER_URL="$OPENREVIEWER_URL"
+          CYCLEREVIEWER_URL="$CYCLEREVIEWER_URL"
+          SEA_URL="$SEA_URL"
+          EOF
+          mv .env.tmp .env
+          # Install curl (usually available but be explicit)
+          apt-get update >/dev/null 2>&1 && apt-get install -y curl >/dev/null 2>&1 || true
+          # Run the warming script for the deployed service
+          bash scripts/warm-modal.sh ${{ matrix.app }}

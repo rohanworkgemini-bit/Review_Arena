@@ -199,6 +199,28 @@ pnpm --filter @reviewarena/api exec tsx scripts/add-paper-uploaded-by-session.ts
 A reverse proxy (Caddy / Nginx) typically routes `/api/*` to `:8000` and
 serves the SPA for everything else.
 
+### Modal service warming (scale-to-zero)
+
+The specialist review models (DeepReviewer-7B, OpenReviewer-8B, CycleReviewer-8B, SEA-E)
+are deployed on Modal with **`min_containers=0`** — they scale completely to zero when idle,
+incurring zero cost between requests.
+
+**Caveat:** cold start takes 2–3 minutes, which exceeds Modal's 150s sync HTTP gateway
+timeout. First request after a long idle will timeout (303 error), then Modal boots the
+container, and the second request succeeds. For a study window, warm the services first:
+
+```bash
+# Warm all services before the study starts (DeepReviewer, OpenReviewer, CycleReviewer, SEA)
+./scripts/warm-modal.sh all
+
+# Check current warmth status
+./scripts/warm-modal.sh status
+```
+
+The CI/CD deployment workflow (`.github/workflows/deploy-modal.yml`) auto-warms each service
+after deployment, but manual warming is still needed before a study window if services have
+idled down completely (>5 min with no requests).
+
 **Backup**: nightly `pg_dump`. PDFs are never persisted — only the
 parsed structure (jsonb) and review outputs are stored.
 
