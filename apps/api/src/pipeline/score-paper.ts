@@ -26,8 +26,14 @@ export async function scoreOneReview(
   paperText: string,
   judge: JudgeClient,
 ): Promise<void> {
+  const start = Date.now();
   const text = renderReviewText(structured);
   const judged = await judgeWithRetry(judge, text, paperText);
+  const elapsed = Date.now() - start;
+  logger.info(
+    { reviewId, claimCount: judged.claims.length, overallScore: judged.overall_score, elapsed_ms: elapsed },
+    "judge_scoring_complete",
+  );
 
   // ClaimChecks: clear and rewrite atomically.
   await db.transaction(async (tx) => {

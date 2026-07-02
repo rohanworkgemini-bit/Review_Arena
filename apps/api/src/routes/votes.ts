@@ -22,6 +22,7 @@ import {
   type Outcome,
 } from "../elo/elo.js";
 import type { Config } from "../config.js";
+import { logger } from "../logger.js";
 
 // Postgres advisory-lock key for serialising vote+snapshot writes.
 // Any constant int8 works; 0xE10E10 = "eloelo" mnemonic, no clash.
@@ -92,6 +93,19 @@ export function votesRouter(config: Config): Router {
         outcome,
       );
 
+      logger.info(
+        {
+          votePayload: { winner: body.winner, decisionMs: body.decisionMs },
+          systems: { A: reviewA.reviewSystem.slug, B: reviewB.reviewSystem.slug },
+          eloBeforeA: ratingABefore,
+          eloBeforeB: ratingBBefore,
+          eloAfterA: ratingAAfter,
+          eloAfterB: ratingBAfter,
+          battleCount: beforeBattles.length,
+        },
+        "vote_submitted: before snapshot",
+      );
+
       // Single transaction wraps:
       //   1. advisory xact-lock (serialises with other writers so
       //      bootstrap CI / snapshot rows don't race),
@@ -130,6 +144,7 @@ export function votesRouter(config: Config): Router {
           for (const d of body.dimensions) {
             await snapshotLeaderboard(tx, newId, d.dimension);
           }
+          logger.info({ voteId: newId, paperId: payload.paperId }, "vote_persisted_and_snapshotted");
           return newId;
         });
       } catch (err) {

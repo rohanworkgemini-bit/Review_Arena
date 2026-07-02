@@ -11,6 +11,7 @@ import type { Orchestrator } from "../pipeline/orchestrator.js";
 import { selectUploadPair } from "../pair/select-upload-pair.js";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
+import { requireAdmin } from "../plugins/admin-auth.js";
 import {
   lengthBandFor,
   normalizeArxivId,
@@ -161,7 +162,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
     }
   });
 
-  // Enabled review systems for the /dev playground dropdown. Light
+  // Enabled review systems for the /admin playground dropdown. Light
   // projection — slug, name, description.
   router.get("/review-systems", async (_req, res, next) => {
     try {
@@ -178,10 +179,12 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
   // /dev "Reviewer Playground" — parse + generate in one shot for a
   // chosen system, return the review (non-streaming). Doesn't touch the
   // papers/reviews tables — pure throwaway call for testing systems.
+  // ADMIN-ONLY: gated by Bearer token (requireAdmin). Billable.
   // Body: multipart with `file` (PDF) + `systemSlug`, OR JSON
   // {url: arxivUrl, systemSlug}.
   router.post(
     "/reviews/playground",
+    requireAdmin(config.ADMIN_TOKEN),
     upload.single("file"),
     async (req, res, next) => {
       try {

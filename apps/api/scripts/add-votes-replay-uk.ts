@@ -1,37 +1,26 @@
-// One-shot: add the replay-protection unique index on votes
-// (session_id, paper_id, review_a_id, review_b_id). Idempotent — safe
-// to re-run via IF NOT EXISTS.
+// DEPRECATED: This script created an old index structure.
+// The schema now uses a pairSig-based index (drizzle/0003_vote_replay_protection.sql).
+// DO NOT RUN THIS. It would create the wrong index.
 //
-// Aborts with a useful message if existing duplicate rows would prevent
-// the index from being created; dedup first, then re-run.
+// If you've already run this and need to clean up:
+//   DROP INDEX IF EXISTS "votes_session_pair_uk";  -- old 4-column index
+// The correct index (votes_session_pair_sig_uk) is created by drizzle migrations.
 //
+// This file is kept for historical reference only.
 // Run via: pnpm --filter @reviewarena/api exec tsx scripts/add-votes-replay-uk.ts
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 
-import { db } from "../src/db/client.js";
-import { sql } from "drizzle-orm";
+console.error("DEPRECATED: This script is no longer used.");
+console.error("The replay-protection index is managed by drizzle migrations.");
+console.error("See drizzle/0003_vote_replay_protection.sql");
+console.error("");
+console.error("If you have the old 4-column index from a prior run, drop it:");
+console.error("  psql $DATABASE_URL -c 'DROP INDEX IF EXISTS votes_session_pair_uk;'");
+console.error("");
+console.error("The correct index (votes_session_pair_sig_uk on 3 columns) will be");
+console.error("created automatically by the next migration or fresh db:push.");
 
-const dupes = await db.execute(sql`
-  SELECT session_id, paper_id, review_a_id, review_b_id, count(*) AS n
-  FROM votes
-  GROUP BY 1, 2, 3, 4
-  HAVING count(*) > 1
-  LIMIT 5
-`);
-
-if (dupes.rowCount && dupes.rowCount > 0) {
-  console.error("Refusing to create unique index — duplicate rows exist:");
-  for (const row of dupes.rows) console.error(row);
-  console.error("Dedup these before re-running.");
-  process.exit(1);
-}
-
-await db.execute(sql`
-  CREATE UNIQUE INDEX IF NOT EXISTS "votes_session_pair_uk"
-    ON "votes" ("session_id", "paper_id", "review_a_id", "review_b_id")
-`);
-console.log("votes_session_pair_uk is now present");
 process.exit(0);

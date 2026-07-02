@@ -45,17 +45,39 @@ const PLACEHOLDER_HEADER: RevealHeader = {
   },
 };
 
+const ERROR_HEADER: RevealHeader = {
+  reviewA: {
+    reviewId: "",
+    systemSlug: "error",
+    systemName: "Error",
+    eloBefore: 0,
+    eloAfter: 0,
+  },
+  reviewB: {
+    reviewId: "",
+    systemSlug: "error",
+    systemName: "Error",
+    eloBefore: 0,
+    eloAfter: 0,
+  },
+};
+
 export function RevealPage() {
   const [params] = useSearchParams();
   const voteId = params.get("voteId");
 
   const header = useMemo<RevealHeader>(() => {
     const raw = params.get("state");
-    if (!raw) return PLACEHOLDER_HEADER;
+    if (!raw) {
+      // Only show placeholder in dev; in prod this is an error (no state param).
+      if (import.meta.env.DEV) return PLACEHOLDER_HEADER;
+      return ERROR_HEADER;
+    }
     try {
       return JSON.parse(decodeURIComponent(raw)) as RevealHeader;
     } catch {
-      return PLACEHOLDER_HEADER;
+      if (import.meta.env.DEV) return PLACEHOLDER_HEADER;
+      return ERROR_HEADER;
     }
   }, [params]);
 
@@ -82,6 +104,20 @@ export function RevealPage() {
   const usingPlaceholder = !params.get("state");
   const detail = revealQuery.data;
   const scoringPending = !!voteId && (!detail || !detail.reviewA.judgeDimensions);
+  // Guard: in prod, require state param (no mocking system IDs)
+  const hasMissingState = !header.reviewA.reviewId && !import.meta.env.DEV;
+  if (hasMissingState) {
+    return (
+      <div className="container py-8">
+        <Card className="border-destructive">
+          <CardHeader>
+            <CardTitle className="text-destructive">Error: no vote state</CardTitle>
+            <CardDescription>This page requires a valid &lt;state&gt; query parameter.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
 
   const radarData = VOTE_DIMENSIONS.map((d) => ({
     dimension: DIMENSION_LABELS[d],

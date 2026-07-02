@@ -16,6 +16,8 @@
  *   same: every snapshot starts from INIT_RATING and replays history.
  */
 
+import { logger } from "../logger.js";
+
 export interface EloConstants {
   K: number;
   BASE: number;
@@ -49,6 +51,7 @@ export function computeElo(
   battles: readonly Battle[],
   c: EloConstants = DEFAULT_ELO,
 ): Map<string, number> {
+  const start = Date.now();
   const alpha = Math.log(c.BASE) / c.SCALE;
   const ratings = new Map<string, number>();
 
@@ -71,6 +74,12 @@ export function computeElo(
     ratings.set(b, rb - update);
   }
 
+  const elapsed = Date.now() - start;
+  const systemCount = ratings.size;
+  logger.debug(
+    { systemCount, battleCount: battles.length, elapsedMs: elapsed },
+    "elo_computation_complete",
+  );
   return ratings;
 }
 

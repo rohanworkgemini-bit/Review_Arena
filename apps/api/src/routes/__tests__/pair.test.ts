@@ -13,7 +13,10 @@ describe("pairToken", () => {
   it("round-trips a signed payload", () => {
     const token = signPairToken(payload, SECRET);
     const verified = verifyPairToken(token, SECRET);
-    expect(verified).toEqual(payload);
+    // The signed payload includes an `iat` timestamp that wasn't in the input payload.
+    expect(verified).toMatchObject(payload);
+    expect(verified?.iat).toBeDefined();
+    expect(typeof verified?.iat).toBe("number");
   });
 
   it("rejects a token signed with a different secret", () => {

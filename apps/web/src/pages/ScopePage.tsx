@@ -73,9 +73,9 @@ export function ScopePage() {
     queryFn: () => getPaperStatus(paperId!),
     enabled: !!paperId,
     // Poll while the paper is still being parsed — sections only land
-    // once status flips to PARSED.
+    // once status flips to PARSED. Stop on terminal states (PARSED, PARSE_FAILED, FAILED).
     refetchInterval: (q) =>
-      q.state.data?.status === "PARSED" || q.state.data?.status === "FAILED" ? false : 1500,
+      q.state.data?.status === "PARSED" || q.state.data?.status === "PARSE_FAILED" || q.state.data?.status === "FAILED" ? false : 1500,
   });
   const paper = queryRes.data;
 

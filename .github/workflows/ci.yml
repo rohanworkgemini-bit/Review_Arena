@@ -47,6 +47,9 @@ jobs:
       - name: Typecheck apps/web
         run: pnpm --filter @reviewarena/web exec tsc --noEmit
 
+      - name: Unit tests (Vitest)
+        run: pnpm --filter @reviewarena/api test
+
   python-syntax:
     name: Python AST + import check (services/review-gen)
     runs-on: ubuntu-latest
