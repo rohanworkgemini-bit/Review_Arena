@@ -42,6 +42,12 @@ export const reviewStatusEnum = pgEnum("review_status", [
   "FAILED",
 ]);
 
+export const judgeStatusEnum = pgEnum("judge_status", [
+  "COMPLETE",
+  "PARTIAL",
+  "FAILED",
+]);
+
 export const voteWinnerEnum = pgEnum("vote_winner", ["A", "B", "TIE"]);
 
 export const voteDimensionEnum = pgEnum("vote_dimension", [
@@ -211,6 +217,10 @@ export const reviews = pgTable(
     // /reviews/stream/:id forwards this to review-gen so the model only
     // sees the chosen sections (full fidelity) + a [REVIEW SCOPE] notice.
     selectedSectionIds: jsonb("selected_section_ids").$type<number[]>(),
+    // Judge execution status: COMPLETE if both passes succeeded,
+    // PARTIAL if one pass succeeded, FAILED if all retries exhausted.
+    // Defaults to COMPLETE for backwards compat with existing rows.
+    judgeStatus: judgeStatusEnum("judge_status").notNull().default("COMPLETE"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

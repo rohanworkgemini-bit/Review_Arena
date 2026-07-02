@@ -1,5 +1,6 @@
 import { timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
+import { logger } from "../logger.js";
 
 // Admin endpoints use a single bearer token from ADMIN_TOKEN. No user model.
 
@@ -9,6 +10,15 @@ export function requireAdmin(adminToken: string) {
     const header = req.headers.authorization ?? "";
     const presented = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
     if (!presented || !constantTimeEqual(presented, adminBuf)) {
+      logger.warn(
+        {
+          reason: !presented ? "missing_header" : "invalid_token",
+          headerLength: header.length,
+          tokenLength: presented.length,
+          path: req.path,
+        },
+        "admin_authorization_failed",
+      );
       res.status(401).json({
         error: "Unauthorized",
         message: "Valid admin bearer token required.",

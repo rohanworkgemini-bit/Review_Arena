@@ -57,6 +57,15 @@ export function votesRouter(config: Config): Router {
 
       const payload = verifyPairToken(body.pairToken, config.PAIR_TOKEN_SECRET);
       if (!payload || payload.sessionId !== req.sessionId) {
+        logger.warn(
+          {
+            reason: !payload ? "invalid_token" : "session_mismatch",
+            tokenLength: body.pairToken?.length,
+            sessionId: req.sessionId,
+            tokenSessionId: payload?.sessionId,
+          },
+          "vote_authorization_failed",
+        );
         res.status(401).json({
           error: "Unauthorized",
           message: "Invalid or expired pairToken.",
@@ -208,10 +217,15 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
   // infra failure (cold-start, loop, empty stream), not low review
   // quality. Exclude those from the quality Elo so the leaderboard ranks
   // reviewing, not uptime. (Reliability is reported separately.)
+  // Also exclude judge_status !== COMPLETE to avoid silent judge failures
+  // corrupting the leaderboard.
   return rows
     .filter(
       (v) =>
-        v.reviewA.status === "COMPLETED" && v.reviewB.status === "COMPLETED",
+        v.reviewA.status === "COMPLETED" &&
+        v.reviewB.status === "COMPLETED" &&
+        v.reviewA.judgeStatus === "COMPLETE" &&
+        v.reviewB.judgeStatus === "COMPLETE",
     )
     .map((v) => ({
       a: v.reviewA.reviewSystem.slug,

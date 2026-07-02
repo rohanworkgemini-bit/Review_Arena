@@ -65,6 +65,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
   router.post("/papers", upload.single("file"), async (req, res, next) => {
     try {
       if (!recordUpload(req.sessionId)) {
+        logger.warn({ sessionId: req.sessionId }, "upload_rate_limit_exceeded");
         res.status(429).json({
           error: "TooManyRequests",
           message: `At most ${UPLOADS_PER_WINDOW} uploads per minute per session.`,
@@ -72,10 +73,12 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         return;
       }
       if (!req.file) {
+        logger.warn({ sessionId: req.sessionId }, "upload_missing_file");
         res.status(400).json({ error: "BadRequest", message: "Multipart field `file` required." });
         return;
       }
       if (req.file.mimetype !== "application/pdf") {
+        logger.warn({ sessionId: req.sessionId, mimetype: req.file.mimetype }, "upload_wrong_mimetype");
         res.status(400).json({ error: "BadRequest", message: "Only application/pdf accepted." });
         return;
       }
