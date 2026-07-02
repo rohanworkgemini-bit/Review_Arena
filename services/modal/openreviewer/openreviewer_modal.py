@@ -55,7 +55,7 @@ PORT = 8000
     timeout=60 * 30,
     scaledown_window=300,
     # See deepreviewer_modal.py for the cap rationale.
-    min_containers=0,    # scale to zero when idle — no cost between requests
+    min_containers=1,    # always-warm for the test window (min_containers=0 doesn't auto-scale reliably)
     max_containers=1,
 )
 @modal.concurrent(max_inputs=4)

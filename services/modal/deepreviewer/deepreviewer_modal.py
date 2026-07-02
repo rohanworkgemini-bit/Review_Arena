@@ -76,7 +76,7 @@ PORT = 8000
     # 4-container cold-start storm (each redownloading ~14 GB and
     # consuming GPU quota). Vote-mode rarely fires both DeepReviewer and
     # OpenReviewer simultaneously enough to need >1.
-    min_containers=0,    # scale to zero when idle — no cost between requests
+    min_containers=1,    # always-warm for the test window (min_containers=0 doesn't auto-scale reliably)
     max_containers=1,
 )
 @modal.concurrent(max_inputs=4)     # vLLM continuous batching
