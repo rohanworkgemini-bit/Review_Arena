@@ -23,6 +23,7 @@ import {
 } from "../elo/elo.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
+import { invalidateLeaderboardCache } from "./leaderboard.js";
 
 // Postgres advisory-lock key for serialising vote+snapshot writes.
 // Any constant int8 works; 0xE10E10 = "eloelo" mnemonic, no clash.
@@ -171,6 +172,9 @@ export function votesRouter(config: Config): Router {
         }
         throw err;
       }
+
+      // Invalidate leaderboard cache for all dimensions since Elo changed
+      invalidateLeaderboardCache();
 
       res.status(201).json({
         voteId,

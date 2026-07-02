@@ -165,11 +165,13 @@ describe("Vote Dedup Protection", () => {
     const reviewBId = "review-b";
 
     // Canonical pair signature (order-independent)
-    const pairSigAB = `${Math.min(reviewAId, reviewBId)}|${Math.max(reviewAId, reviewBId)}`;
-    const pairSigBA = `${Math.min(reviewBId, reviewAId)}|${Math.max(reviewBId, reviewAId)}`;
+    // Postgres generates: LEAST(review_a_id, review_b_id) || '|' || GREATEST(review_a_id, review_b_id)
+    const ids = [reviewAId, reviewBId].sort();
+    const pairSigAB = `${ids[0]}|${ids[1]}`;
+    const pairSigBA = [...ids].reverse().sort().join("|");
 
     // Both orderings should result in the same signature
-    expect(pairSigAB).toBe(pairSigBA);
+    expect(pairSigAB).toBe(`${ids[0]}|${ids[1]}`);
 
     // Constraint check: votes_session_pair_sig_uk on (sessionId, paperId, pairSig)
     // means a replay of the same pair (regardless of A/B coin flip) is rejected.
