@@ -11,3 +11,32 @@ requires-python = ">=3.11"
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+disallow_any_unimported = false
+
+# Strict mode for critical paths (judge scoring)
+[[tool.mypy.overrides]]
+module = "app.judge"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+no_implicit_optional = true
+warn_return_any = true
+
+# Adapters: gradual typing (SDKs are often untyped)
+[[tool.mypy.overrides]]
+module = "app.adapters.*"
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+# Main app
+[[tool.mypy.overrides]]
+module = "app.main"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true

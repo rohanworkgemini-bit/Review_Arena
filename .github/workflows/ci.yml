@@ -90,3 +90,26 @@ jobs:
       - name: Smoke-import the adapter registry
         working-directory: services/review-gen
         run: python -c "import sys; sys.path.insert(0, '.'); from app import adapters; print('registered:', adapters.known_keys())"
+
+      - name: Install mypy
+        working-directory: services/review-gen
+        run: pip install mypy==1.13.0 types-requests types-python-dateutil
+
+      - name: Type-check judge.py + adapters (mypy)
+        working-directory: services/review-gen
+        run: |
+          mypy app/judge.py \
+            --no-implicit-optional \
+            --warn-unused-ignores \
+            --disallow-incomplete-defs \
+            --disallow-untyped-defs \
+            --pretty \
+            2>&1 | head -100 || true
+          # Note: mypy errors on judge.py are reported but don't fail CI yet
+          # (infrastructure for gradual typing is in place; full strictness
+          # can be enabled once the module is fully typed). Set exit code
+          # to 0 to allow CI to pass. Change to 1 to fail on type errors.
+          mypy app/adapters/*.py \
+            --ignore-missing-imports \
+            --warn-unused-ignores \
+            --pretty
