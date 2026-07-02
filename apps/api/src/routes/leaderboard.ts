@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { VoteDimensionSchema } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
 import { eloSnapshots, papers, reviewSystems, votes } from "../db/schema.js";
+import { LeaderboardResponseSchema } from "./schemas.js";
 
 // In-memory cache for leaderboard results. Invalidated on each vote.
 // Key: "overall" | dimension name, Value: { result, expiresAt }
@@ -80,15 +81,15 @@ export function leaderboardRouter(): Router {
       const [paperCountRow] = await db.select({ c: sql<number>`count(*)::int` }).from(papers);
       const [voteCountRow] = await db.select({ c: sql<number>`count(*)::int` }).from(votes);
 
-      const result = {
+      const result = LeaderboardResponseSchema.parse({
         dimension,
         totalPapers: paperCountRow?.c ?? 0,
         totalVotes: voteCountRow?.c ?? 0,
         entries,
         computedAt: new Date().toISOString(),
-      };
+      });
 
-      // Cache the result
+      // Cache the validated result
       leaderboardCache.set(cacheKey, {
         result,
         expiresAt: Date.now() + CACHE_TTL_MS,
