@@ -14,6 +14,13 @@ import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { Orchestrator } from "../pipeline/orchestrator.js";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import type { Config } from "../config.js";
+import {
+  AdminReviewSystemsListResponseSchema,
+  ReviewSystemSchema,
+  AdminRegenResponseSchema,
+  AdminScoreResponseSchema,
+  AdminExportResponseSchema,
+} from "./schemas.js";
 
 const UpdateReviewSystemSchema = z
   .object({
@@ -46,17 +53,17 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
       const rows = await db.query.reviewSystems.findMany({
         orderBy: asc(reviewSystems.createdAt),
       });
-      res.json(
-        rows.map((s) => ({
-          id: s.id,
-          slug: s.slug,
-          name: s.name,
-          description: s.description,
-          adapterKey: s.adapterKey,
-          enabled: s.enabled,
-          createdAt: s.createdAt.toISOString(),
-        })),
-      );
+      const payload = rows.map((s) => ({
+        id: s.id,
+        slug: s.slug,
+        name: s.name,
+        description: s.description,
+        adapterKey: s.adapterKey,
+        enabled: s.enabled,
+        createdAt: s.createdAt.toISOString(),
+      }));
+      const validated = AdminReviewSystemsListResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }
@@ -84,7 +91,7 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         })
         .returning();
       const c = created!;
-      res.status(201).json({
+      const payload = {
         id: c.id,
         slug: c.slug,
         name: c.name,
@@ -92,7 +99,9 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         adapterKey: c.adapterKey,
         enabled: c.enabled,
         createdAt: c.createdAt.toISOString(),
-      });
+      };
+      const validated = ReviewSystemSchema.parse(payload);
+      res.status(201).json(validated);
     } catch (e) {
       next(e);
     }
@@ -221,12 +230,14 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
       void orch
         .generateAllReviews(paper, paper.parsedStructure as unknown as ParsedPaper)
         .catch((err) => req.log?.error?.({ err }, "regenerate crashed"));
-      res.json({
+      const payload = {
         ok: true,
         paperId: paper.id,
         dropped: deleted.length,
         message: "Generation re-dispatched. Poll GET /papers/:id for progress.",
-      });
+      };
+      const validated = AdminRegenResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }
@@ -237,7 +248,9 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
   router.post("/admin/papers/:id/score", async (req, res, next) => {
     try {
       await scorePaper(req.params.id, judge);
-      res.json({ ok: true, paperId: req.params.id });
+      const payload = { ok: true, paperId: req.params.id };
+      const validated = AdminScoreResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }
@@ -255,17 +268,19 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         db.query.claimChecks.findMany(),
         db.query.eloSnapshots.findMany(),
       ]);
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        systems,
+        papers: paperRows,
+        votes: voteRows,
+        metrics: metricRows,
+        claims: claimRows,
+        snapshots: snapshotRows,
+      };
+      const validated = AdminExportResponseSchema.parse(payload);
       res
         .setHeader("content-disposition", `attachment; filename=reviewarena-export-${Date.now()}.json`)
-        .json({
-          exportedAt: new Date().toISOString(),
-          systems,
-          papers: paperRows,
-          votes: voteRows,
-          metrics: metricRows,
-          claims: claimRows,
-          snapshots: snapshotRows,
-        });
+        .json(validated);
     } catch (e) {
       next(e);
     }

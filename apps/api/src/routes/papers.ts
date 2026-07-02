@@ -18,6 +18,11 @@ import {
   recordUpload,
   UPLOADS_PER_WINDOW,
 } from "./papers-helpers.js";
+import {
+  UploadPaperResponseSchema,
+  PaperDetailResponseSchema,
+  PaperScopeResponseSchema,
+} from "./schemas.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -110,7 +115,9 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         req.log?.error?.({ err, paperId: paper.id }, "pipeline crashed");
       });
 
-      res.status(201).json({ paperId: paper.id, status: "PARSING", deduplicated: false });
+      const uploadPayload = { paperId: paper.id, status: "PARSING", deduplicated: false };
+      const validated = UploadPaperResponseSchema.parse(uploadPayload);
+      res.status(201).json(validated);
     } catch (e) {
       next(e);
     }
@@ -159,7 +166,9 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
       void runArxivPipeline(paper.id, arxivId).catch((err) => {
         req.log?.error?.({ err, paperId: paper.id }, "pipeline crashed");
       });
-      res.status(201).json({ paperId: paper.id, status: "PARSING", deduplicated: false });
+      const uploadPayload = { paperId: paper.id, status: "PARSING", deduplicated: false };
+      const validated = UploadPaperResponseSchema.parse(uploadPayload);
+      res.status(201).json(validated);
     } catch (e) {
       next(e);
     }
@@ -349,7 +358,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         where: eq(reviews.paperId, id),
       });
 
-      res.json({
+      const payload = {
         id: paper.id,
         title: paper.userTitle ?? paper.extractedTitle,
         status: paper.status,
@@ -362,7 +371,9 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         reviewIds: pairRows,
         sections,
         selectedSectionIds: firstReviewWithScope?.selectedSectionIds ?? null,
-      });
+      };
+      const validated = PaperDetailResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }
@@ -420,7 +431,9 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         .where(eq(reviews.paperId, id))
         .returning({ id: reviews.id });
 
-      res.json({ updatedReviewCount: updated.length, selectedSectionIds: normalized });
+      const payload = { updatedReviewCount: updated.length, selectedSectionIds: normalized };
+      const validated = PaperScopeResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }

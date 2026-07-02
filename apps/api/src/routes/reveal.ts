@@ -2,6 +2,7 @@ import { Router } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { votes, type ClaimCheck, type MetricScore } from "../db/schema.js";
+import { RevealResponseSchema } from "./schemas.js";
 
 // GET /reveal/:voteId — paper-grounded ClaimCheck rows + LLM-judge scores
 // (overall + per-dimension) for both reviews. Populated by
@@ -61,7 +62,9 @@ export function revealRouter(): Router {
         };
       };
 
-      res.json({ reviewA: pack(vote.reviewA), reviewB: pack(vote.reviewB) });
+      const payload = { reviewA: pack(vote.reviewA), reviewB: pack(vote.reviewB) };
+      const validated = RevealResponseSchema.parse(payload);
+      res.json(validated);
     } catch (e) {
       next(e);
     }

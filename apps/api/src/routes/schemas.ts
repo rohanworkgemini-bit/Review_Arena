@@ -34,33 +34,26 @@ export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
 
 // ─── GET /reveal ────────────────────────────────────────────────────────────
 
+export const ClaimCheckSchema = z.object({
+  claim: z.string(),
+  verdict: z.enum(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"]),
+  evidence: z.string().nullable(),
+  judgeModel: z.string().nullable(),
+});
+
 export const RevealReviewSchema = z.object({
   reviewId: CuidSchema,
-  systemSlug: z.string(),
   systemName: z.string(),
-  eloBefore: z.number(),
-  eloAfter: z.number(),
+  claims: z.array(ClaimCheckSchema),
+  verifiabilityFraction: z.number(),
+  judgeOverall: z.number().nullable(),
+  judgeVerifiability: z.number().nullable(),
+  judgeDimensions: z.record(z.number()).nullable(),
 });
 
 export const RevealResponseSchema = z.object({
   reviewA: RevealReviewSchema,
   reviewB: RevealReviewSchema,
-  structuredA: StructuredReviewSchema.nullable(),
-  structuredB: StructuredReviewSchema.nullable(),
-  dimensionScoresA: z.record(z.number()),
-  dimensionScoresB: z.record(z.number()),
-  overallScoreA: z.number().nullable(),
-  overallScoreB: z.number().nullable(),
-  claimChecksA: z
-    .array(
-      z.object({
-        claim: z.string(),
-        verdict: z.enum(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"]),
-        evidence: z.string().nullable(),
-      }),
-    )
-    .nullable(),
-  claimChecksB: z.array(z.any()).nullable(), // same shape as claimChecksA
 });
 
 export type RevealResponse = z.infer<typeof RevealResponseSchema>;
@@ -74,23 +67,59 @@ export const SubmitVoteResponseSchema = z.object({
 
 export type SubmitVoteResponse = z.infer<typeof SubmitVoteResponseSchema>;
 
+// ─── POST /papers (response) ────────────────────────────────────────────────
+
+export const UploadPaperResponseSchema = z.object({
+  paperId: CuidSchema,
+  status: z.string(),
+  deduplicated: z.boolean(),
+});
+
+export type UploadPaperResponse = z.infer<typeof UploadPaperResponseSchema>;
+
 // ─── GET /papers/:id ────────────────────────────────────────────────────────
+
+export const SectionSchema = z.object({
+  id: z.number(),
+  heading: z.string(),
+  level: z.number(),
+  approxTokens: z.number(),
+});
+
+export const PairReviewSchema = z.object({
+  reviewId: CuidSchema,
+  slug: z.string(),
+});
 
 export const PaperDetailResponseSchema = z.object({
   id: CuidSchema,
   title: z.string().nullable(),
-  status: z.enum(["UPLOADED", "PARSING", "PARSED", "PARSE_FAILED"]),
+  status: z.string(),
   pageCount: z.number().int().nullable(),
-  errorMessage: z.string().nullable(),
   reviewCount: z.number().int(),
+  completedReviewCount: z.number().int(),
+  terminalReviewCount: z.number().int(),
+  expectedReviewCount: z.number().int(),
   createdAt: z.string(),
+  reviewIds: z.array(PairReviewSchema),
+  sections: z.array(SectionSchema),
+  selectedSectionIds: z.array(z.number()).nullable(),
 });
 
 export type PaperDetailResponse = z.infer<typeof PaperDetailResponseSchema>;
 
+// ─── POST /papers/:id/scope (response) ──────────────────────────────────────
+
+export const PaperScopeResponseSchema = z.object({
+  updatedReviewCount: z.number().int(),
+  selectedSectionIds: z.array(z.number()).nullable(),
+});
+
+export type PaperScopeResponse = z.infer<typeof PaperScopeResponseSchema>;
+
 // ─── Admin endpoints ────────────────────────────────────────────────────────
 
-export const ReviewSystemResponseSchema = z.object({
+export const ReviewSystemSchema = z.object({
   id: CuidSchema,
   slug: z.string(),
   name: z.string(),
@@ -100,13 +129,36 @@ export const ReviewSystemResponseSchema = z.object({
   createdAt: z.string(),
 });
 
+export type ReviewSystem = z.infer<typeof ReviewSystemSchema>;
+
+export const AdminReviewSystemsListResponseSchema = z.array(ReviewSystemSchema);
+
+export type AdminReviewSystemsListResponse = z.infer<typeof AdminReviewSystemsListResponseSchema>;
+
+export const AdminRegenResponseSchema = z.object({
+  ok: z.boolean(),
+  paperId: CuidSchema,
+  dropped: z.number().int(),
+  message: z.string(),
+});
+
+export type AdminRegenResponse = z.infer<typeof AdminRegenResponseSchema>;
+
+export const AdminScoreResponseSchema = z.object({
+  ok: z.boolean(),
+  paperId: CuidSchema,
+});
+
+export type AdminScoreResponse = z.infer<typeof AdminScoreResponseSchema>;
+
 export const AdminExportResponseSchema = z.object({
   exportedAt: z.string(),
+  systems: z.array(z.any()),
   papers: z.array(z.any()),
-  reviews: z.array(z.any()),
   votes: z.array(z.any()),
-  dimensionVotes: z.array(z.any()),
-  eloSnapshots: z.array(z.any()),
+  metrics: z.array(z.any()),
+  claims: z.array(z.any()),
+  snapshots: z.array(z.any()),
 });
 
 export type AdminExportResponse = z.infer<typeof AdminExportResponseSchema>;
