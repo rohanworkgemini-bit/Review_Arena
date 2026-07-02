@@ -116,6 +116,55 @@ app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
 app.use(sessionMiddleware);
 
+// Rate limiting — protect against abuse
+// Per-session limits: most endpoints are generous (for legitimate users),
+// but uploads + votes are stricter to prevent DOS.
+const createRateLimiter = (maxRequests: number, windowMs: number) => {
+  const stores = new Map<string, { count: number; resetAt: number }>();
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const key = req.sessionId ?? "";
+    if (!key) return next(); // No session = skip rate limit
+
+    const now = Date.now();
+    let entry = stores.get(key);
+
+    if (!entry || now >= entry.resetAt) {
+      entry = { count: 0, resetAt: now + windowMs };
+      stores.set(key, entry);
+    }
+
+    entry.count++;
+    res.set("RateLimit-Limit", maxRequests.toString());
+    res.set("RateLimit-Remaining", Math.max(0, maxRequests - entry.count).toString());
+    res.set("RateLimit-Reset", Math.ceil(entry.resetAt / 1000).toString());
+
+    if (entry.count > maxRequests) {
+      logger.warn(
+        { sessionId: key, endpoint: req.path, limit: maxRequests },
+        "rate_limit_exceeded",
+      );
+      res.status(429).json({
+        error: "TooManyRequests",
+        message: `Rate limit exceeded (${maxRequests} requests per ${windowMs / 1000}s)`,
+        retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+      });
+      return;
+    }
+
+    next();
+  };
+};
+
+// Apply rate limits to different endpoints
+const uploadLimiter = createRateLimiter(5, 60 * 1000); // 5 per minute
+const voteLimiter = createRateLimiter(30, 60 * 1000); // 30 per minute
+const generalLimiter = createRateLimiter(100, 60 * 1000); // 100 per minute
+
+app.post("/papers", uploadLimiter); // Already has internal throttle, this is backup
+app.post("/votes", voteLimiter);
+app.use(generalLimiter); // All other endpoints
+
 // /health — actual readiness probe. Pings the DB so a misconfigured
 // connection string or unreachable Postgres reports 503 instead of
 // silently lying. The DB ping is sub-millisecond on a warm pool.
