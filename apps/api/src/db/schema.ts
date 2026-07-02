@@ -258,6 +258,10 @@ export const votes = pgTable(
     sessionId: text("session_id").notNull(),
     userAgent: text("user_agent"),
     decisionMs: integer("decision_ms"),
+    // Quality flag: true if vote meets criteria for exclusion from Elo
+    // (e.g., decision time < 3s). Flagged votes still recorded but excluded
+    // from leaderboard computation for fairness (B4 control).
+    qualityFlagged: boolean("quality_flagged").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     // Canonical pair signature, auto-computed by Postgres as
     // LEAST(a, b) || '|' || GREATEST(a, b). Used by the dedupe index
@@ -287,6 +291,7 @@ export const votes = pgTable(
       t.paperId,
       t.pairSig,
     ),
+    qualityFlaggedIdx: index("votes_quality_flagged_idx").on(t.qualityFlagged),
   }),
 );
 

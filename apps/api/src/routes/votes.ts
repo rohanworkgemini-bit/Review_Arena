@@ -91,6 +91,17 @@ export function votesRouter(config: Config): Router {
 
       const outcome: Outcome = body.winner === "A" ? 1 : body.winner === "B" ? 0 : 0.5;
 
+      // Quality flagging: votes with decision time < 3s flagged for potential
+      // botting. Flagged votes recorded but excluded from Elo (fairness B4).
+      const DECISION_TIME_FLOOR_MS = 3000;
+      const qualityFlagged = (body.decisionMs ?? Infinity) < DECISION_TIME_FLOOR_MS;
+      if (qualityFlagged) {
+        logger.info(
+          { decisionMs: body.decisionMs, sessionId: req.sessionId },
+          "vote_flagged: decision time below floor",
+        );
+      }
+
       // eloBefore on the pre-vote history; eloAfter via incremental update
       // for the reveal screen's delta.
       const beforeBattles = await loadBattles(db);
@@ -138,6 +149,7 @@ export function votesRouter(config: Config): Router {
               sessionId: req.sessionId,
               userAgent: req.headers["user-agent"] ?? null,
               decisionMs: body.decisionMs ?? null,
+              qualityFlagged,
             })
             .returning({ id: votes.id });
           const newId = created!.id;
@@ -223,13 +235,16 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
   // reviewing, not uptime. (Reliability is reported separately.)
   // Also exclude judge_status !== COMPLETE to avoid silent judge failures
   // corrupting the leaderboard.
+  // FAIRNESS B4 — exclude votes flagged for low quality (e.g., decision time
+  // < 3s) to detect potential botting or inattentive votes.
   return rows
     .filter(
       (v) =>
         v.reviewA.status === "COMPLETED" &&
         v.reviewB.status === "COMPLETED" &&
         v.reviewA.judgeStatus === "COMPLETE" &&
-        v.reviewB.judgeStatus === "COMPLETE",
+        v.reviewB.judgeStatus === "COMPLETE" &&
+        !v.qualityFlagged,
     )
     .map((v) => ({
       a: v.reviewA.reviewSystem.slug,
@@ -260,11 +275,13 @@ async function snapshotLeaderboard(
       orderBy: asc(dimensionVotes.createdAt),
     });
     // FAIRNESS B1 — exclude dimension votes on failed comparisons too.
+    // FAIRNESS B4 — exclude votes flagged for low quality.
     battles = rows
       .filter(
         (dv) =>
           dv.vote.reviewA.status === "COMPLETED" &&
-          dv.vote.reviewB.status === "COMPLETED",
+          dv.vote.reviewB.status === "COMPLETED" &&
+          !dv.vote.qualityFlagged,
       )
       .map((dv) => ({
         a: dv.vote.reviewA.reviewSystem.slug,
