@@ -9,11 +9,39 @@
 
 import { Router } from "express";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { reviews } from "../db/schema.js";
 import { db } from "../db/client.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { JudgeClient } from "../clients/judge-client.js";
 import { renderPaperText, scoreOneReview } from "../pipeline/score-paper.js";
+import { logger } from "../logger.js";
+
+// SSE frame schemas for type safety
+const SSETokenFrameSchema = z.object({
+  type: z.literal("token"),
+  text: z.string(),
+});
+
+const SSEErrorFrameSchema = z.object({
+  type: z.literal("error"),
+  code: z.enum([
+    "PARSE_FAILED",
+    "GENERATION_TIMEOUT",
+    "GENERATION_FAILED",
+    "JUDGE_FAILED",
+    "UNKNOWN_ERROR",
+  ]),
+  message: z.string(),
+  retriable: z.boolean().optional().default(true),
+});
+
+const SSEDoneFrameSchema = z.object({
+  type: z.literal("done"),
+  review: z.record(z.unknown()),
+  raw_output: z.string(),
+  generation_ms: z.number().int().nonnegative(),
+});
 
 export interface ReviewsStreamDeps {
   reviewGen: ReviewGenClient;
@@ -167,6 +195,13 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
             accumulated += evt.text;
             sse("token", { text: evt.text });
           } else if (evt.kind === "done") {
+            const doneFrame = SSEDoneFrameSchema.parse({
+              type: "done",
+              review: evt.review,
+              raw_output: evt.rawOutput,
+              generation_ms: evt.generationMs,
+            });
+
             await db
               .update(reviews)
               .set({
@@ -183,21 +218,47 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
                 updatedAt: new Date(),
               })
               .where(eq(reviews.id, review.id));
-            sse("done", {
-              review: evt.review,
-              raw_output: evt.rawOutput,
-              generation_ms: evt.generationMs,
-            });
+
+            logger.info(
+              {
+                reviewId: review.id,
+                generationMs: evt.generationMs,
+                ttftMs: firstTokenMs,
+                outputTokens: evt.metrics?.outputTokens,
+              },
+              "review_generation_completed",
+            );
+
+            sse("done", doneFrame);
+
             if (judge) {
               const paperText = renderPaperText(
                 paperStructure as unknown as Parameters<typeof renderPaperText>[0],
               );
               void scoreOneReview(review.id, evt.review, paperText, judge).catch(
-                (err: unknown) =>
-                  req.log?.warn?.({ err, reviewId: review.id }, "judge failed"),
+                (err: unknown) => {
+                  logger.warn(
+                    { err, reviewId: review.id },
+                    "judge_scoring_failed",
+                  );
+                },
               );
             }
           } else if (evt.kind === "error") {
+            // Categorize error for client's retry logic
+            const code = evt.message.includes("timeout")
+              ? "GENERATION_TIMEOUT"
+              : evt.message.includes("parse")
+                ? "PARSE_FAILED"
+                : "GENERATION_FAILED";
+
+            const errorFrame = SSEErrorFrameSchema.parse({
+              type: "error",
+              code,
+              message: evt.message,
+              retriable: code !== "PARSE_FAILED", // parse errors are not retriable
+            });
+
             await db
               .update(reviews)
               .set({
@@ -207,7 +268,13 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
                 updatedAt: new Date(),
               })
               .where(eq(reviews.id, review.id));
-            sse("error", { message: evt.message });
+
+            logger.warn(
+              { reviewId: review.id, code, message: evt.message },
+              "review_generation_failed",
+            );
+
+            sse("error", errorFrame);
           }
         }
       } catch (err) {
@@ -215,17 +282,35 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
         // row in GENERATING — another opener can retry. Only flip to
         // FAILED for genuine upstream errors.
         if (abortController.signal.aborted) {
-          req.log?.info?.({ reviewId }, "stream aborted by client disconnect");
+          logger.info({ reviewId }, "stream_aborted_by_client_disconnect");
           return;
         }
+
         const message = err instanceof Error ? err.message : String(err);
+        const code = message.includes("timeout")
+          ? "GENERATION_TIMEOUT"
+          : "UNKNOWN_ERROR";
+
+        const errorFrame = SSEErrorFrameSchema.parse({
+          type: "error",
+          code,
+          message,
+          retriable: code === "GENERATION_TIMEOUT",
+        });
+
         await db
           .update(reviews)
           .set({ status: "FAILED", errorMessage: message, updatedAt: new Date() })
           .where(eq(reviews.id, review.id))
           .catch(() => {/* best effort */});
+
+        logger.error(
+          { reviewId: review.id, code, error: message },
+          "unexpected_stream_error",
+        );
+
         try {
-          sse("error", { message });
+          sse("error", errorFrame);
         } catch {/* socket already closed */}
         throw err;
       }

@@ -78,7 +78,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       ];
 
       expect(reviewIds).toHaveLength(2);
-      expect(reviewIds[0].reviewId).not.toBe(reviewIds[1].reviewId);
+      expect(reviewIds[0]!.reviewId).not.toBe(reviewIds[1]!.reviewId);
     });
 
     it("should randomize A vs B assignment", () => {
@@ -121,7 +121,9 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
     it("should sign pairToken with HMAC", () => {
       const token = "eyJwIjoicGFwZXIiLCJhIjoicmV2aWV3LWEiLCJiIjoicmV2aWV3LWIiLCJzIjoic2Vzc2lvbiIsInQiOjE2MjAwMDAwMDB9.MAC_SIGNATURE";
 
-      const [payload, signature] = token.split(".");
+      const parts = token.split(".");
+      const payload = parts[0]!;
+      const signature = parts[1]!;
       expect(payload).toBeTruthy();
       expect(signature).toBeTruthy();
       expect(signature.length).toBeGreaterThan(0);
@@ -154,8 +156,8 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
         },
       ];
 
-      expect(sseEvents[0].event).toBe("token");
-      expect(sseEvents[sseEvents.length - 1].event).toBe("done");
+      expect(sseEvents[0]!.event).toBe("token");
+      expect(sseEvents[sseEvents.length - 1]!.event).toBe("done");
     });
 
     it("should mark review as COMPLETED when generation done", () => {
