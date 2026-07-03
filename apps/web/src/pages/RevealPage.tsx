@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
 import {
   Radar,
   RadarChart,
@@ -82,28 +83,29 @@ export function RevealPage() {
   }, [params]);
 
   // ClaimChecks + per-dimension judge scores are fetched by voteId. The
-  // score job may still be running when the user lands here — refetch every
-  // 3s while empty, then stop.
+  // score job may still be running when the user lands here. Each side's
+  // claims + judge scores commit in one transaction, but A and B are scored
+  // independently — so keep polling until BOTH sides have judgeDimensions
+  // (previously we stopped on first partial data, forcing a manual refresh).
+  // Cap at ~3 min of polling in case the judge failed and scores never land.
   const revealQuery = useQuery({
     queryKey: ["reveal", voteId],
     queryFn: () => getReveal(voteId!),
     enabled: !!voteId,
     refetchInterval: (q) => {
+      if (q.state.dataUpdateCount > 60) return false;
       const d = q.state.data;
-      if (!d) return 3000;
-      const hasAnyData =
-        d.reviewA.claims.length > 0 ||
-        d.reviewB.claims.length > 0 ||
-        d.reviewA.judgeDimensions ||
-        d.reviewB.judgeDimensions;
-      return hasAnyData ? false : 3000;
+      const done = !!d?.reviewA.judgeDimensions && !!d?.reviewB.judgeDimensions;
+      return done ? false : 3000;
     },
     retry: 1,
   });
 
   const usingPlaceholder = !params.get("state");
   const detail = revealQuery.data;
-  const scoringPending = !!voteId && (!detail || !detail.reviewA.judgeDimensions);
+  const scoringPending =
+    !!voteId &&
+    (!detail || !detail.reviewA.judgeDimensions || !detail.reviewB.judgeDimensions);
   // Guard: in prod, require state param (no mocking system IDs)
   const hasMissingState = !header.reviewA.reviewId && !import.meta.env.DEV;
   if (hasMissingState) {
@@ -163,9 +165,14 @@ export function RevealPage() {
         <CardHeader>
           <CardTitle className="text-base">LLM-as-judge dimension scores</CardTitle>
           <CardDescription>
-            {scoringPending
-              ? "Scoring in progress — this will populate within a few seconds."
-              : "0–10 per dimension from the judge model. Higher is better."}
+            {scoringPending ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                Scoring in progress — updates automatically as the judge finishes.
+              </span>
+            ) : (
+              "0–10 per dimension from the judge model. Higher is better."
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -205,6 +212,16 @@ export function RevealPage() {
             Each claim each review makes, checked by an LLM-as-judge against the
             paper text.
           </CardDescription>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 font-mono text-xs text-muted-foreground">
+            {(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"] as const).map((k) => (
+              <span key={k} className="inline-flex items-center gap-1.5">
+                <span className={`border px-1 ${VERDICT_STYLES[k]}`}>
+                  {VERDICT_SHORT[k]}
+                </span>
+                {VERDICT_LEGEND[k]}
+              </span>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <ClaimList label="Review A" side={detail?.reviewA} pending={scoringPending} />
@@ -301,6 +318,20 @@ const VERDICT_SHORT: Record<RevealSide["claims"][number]["verdict"], string> = {
   UNSUPPORTED: "?",
 };
 
+// Short legend text (shown under the card title) and the fuller hover
+// tooltips on every ✓ / ✗ / ? marker.
+const VERDICT_LEGEND: Record<RevealSide["claims"][number]["verdict"], string> = {
+  SUPPORTED: "supported",
+  CONTRADICTED: "contradicted",
+  UNSUPPORTED: "unsupported",
+};
+
+const VERDICT_TOOLTIP: Record<RevealSide["claims"][number]["verdict"], string> = {
+  SUPPORTED: "✓ Supported — the paper's text backs this claim.",
+  CONTRADICTED: "✗ Contradicted — the paper's text conflicts with this claim.",
+  UNSUPPORTED: "? Unsupported — no evidence for this claim was found in the paper.",
+};
+
 function ClaimList({
   label,
   side,
@@ -325,8 +356,8 @@ function ClaimList({
               counts[k] ? (
                 <span
                   key={k}
-                  className={` border px-1.5 py-0.5 font-mono ${VERDICT_STYLES[k]}`}
-                  title={k}
+                  className={`cursor-help border px-1.5 py-0.5 font-mono ${VERDICT_STYLES[k]}`}
+                  title={VERDICT_TOOLTIP[k]}
                 >
                   {VERDICT_SHORT[k]} {counts[k]}
                 </span>
@@ -336,8 +367,15 @@ function ClaimList({
         )}
       </div>
       {!side || side.claims.length === 0 ? (
-        <div className="rounded-md border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-          {pending ? "Judging claims…" : "No claims extracted."}
+        <div className="border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+          {pending ? (
+            <span className="inline-flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Judging claims — updates automatically…
+            </span>
+          ) : (
+            "No claims extracted."
+          )}
         </div>
       ) : (
         <ul className="space-y-2">
@@ -345,8 +383,8 @@ function ClaimList({
             <li key={i} className="rounded-md border px-3 py-2 text-sm">
               <div className="flex items-start gap-2">
                 <span
-                  className={`shrink-0  border px-1.5 py-0.5 font-mono text-xs ${VERDICT_STYLES[c.verdict]}`}
-                  title={c.verdict}
+                  className={`shrink-0 cursor-help border px-1.5 py-0.5 font-mono text-xs ${VERDICT_STYLES[c.verdict]}`}
+                  title={VERDICT_TOOLTIP[c.verdict]}
                 >
                   {VERDICT_SHORT[c.verdict]}
                 </span>
