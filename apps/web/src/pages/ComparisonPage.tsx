@@ -238,20 +238,12 @@ export function ComparisonPage() {
 
   return (
     // pb-32 so the sticky bottom bar never covers the last review section.
-    <div className="container py-6 pb-32 space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight truncate">
-            {pair.paper.title ?? "Untitled paper"}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Read both reviews. Decide which is more useful — or call it a tie.
-          </p>
+    <div className="container max-w-[1080px] py-6 pb-32 space-y-5">
+      {usingPlaceholder && (
+        <div className="flex justify-end">
+          <Badge variant="outline">placeholder</Badge>
         </div>
-        {usingPlaceholder && (
-          <Badge variant="outline" className="shrink-0">placeholder</Badge>
-        )}
-      </div>
+      )}
 
       {isGenerating ? (
         <GeneratingPanel
@@ -260,17 +252,33 @@ export function ComparisonPage() {
           parseFailed={statusQuery.data?.status === "PARSE_FAILED"}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <StreamingReviewPanel
-            label="Review A"
-            structured={pair.reviewA.structured ?? null}
-            stream={streamA}
-          />
-          <StreamingReviewPanel
-            label="Review B"
-            structured={pair.reviewB.structured ?? null}
-            stream={streamB}
-          />
+        // The signature: one card, two equal columns, a single 1px divider.
+        <div className="border border-rule2 bg-card">
+          <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
+              Pair / blind
+            </span>
+            <span className="min-w-0 text-right font-serif text-sm italic">
+              <span className="block font-mono text-[10.5px] not-italic tracking-[0.1em] text-graphite">
+                Manuscript
+              </span>
+              “{pair.paper.title ?? "Untitled paper"}”
+            </span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
+            <StreamingReviewPanel
+              label="Review A"
+              structured={pair.reviewA.structured ?? null}
+              stream={streamA}
+            />
+            <div className="hidden bg-rule lg:block" aria-hidden />
+            <div className="h-px bg-rule lg:hidden" aria-hidden />
+            <StreamingReviewPanel
+              label="Review B"
+              structured={pair.reviewB.structured ?? null}
+              stream={streamB}
+            />
+          </div>
         </div>
       )}
 
@@ -279,15 +287,17 @@ export function ComparisonPage() {
           so the requirement is visible immediately. Each dimension is a
           single segmented split-button (matrix-style survey pattern) for
           clear mutual-exclusion and tight vertical rhythm. */}
-      <div className="rounded-lg border bg-card">
+      <div className="border border-rule2 bg-card">
         <button
           type="button"
           onClick={() => setRefineOpen((v) => !v)}
-          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-muted/30"
+          className="flex w-full items-center justify-between gap-3 bg-paper2 px-4 py-3 hover:bg-paper2/70"
         >
-          <div className="flex items-center gap-2">
-            <span className="font-medium">Rate every dimension</span>
-            <span className="text-xs text-muted-foreground">(required)</span>
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
+              Rate every dimension
+            </span>
+            <span className="font-mono text-[11px] text-red">required</span>
           </div>
           <div className="flex items-center gap-3">
             <DimensionProgress
@@ -297,7 +307,7 @@ export function ComparisonPage() {
             <span
               aria-hidden
               className={cn(
-                "text-muted-foreground transition-transform duration-150",
+                "text-graphite transition-transform duration-150",
                 refineOpen && "rotate-90",
               )}
             >
@@ -306,7 +316,7 @@ export function ComparisonPage() {
           </div>
         </button>
         {refineOpen && (
-          <div className="border-t px-4 py-4">
+          <div className="border-t border-rule px-4 py-4">
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
               {VOTE_DIMENSIONS.map((d) => {
                 const v = dimensionValues[d];
@@ -333,7 +343,7 @@ export function ComparisonPage() {
               <button
                 type="button"
                 onClick={() => setDimensionValues({})}
-                className="mt-4 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                className="mt-4 font-mono text-xs text-graphite underline-offset-4 hover:text-ink hover:underline"
               >
                 Clear all picks
               </button>
@@ -343,70 +353,51 @@ export function ComparisonPage() {
       </div>
 
       {voteMutation.isError && (
-        <p className="text-sm text-destructive">{(voteMutation.error as Error).message}</p>
+        <p className="font-mono text-sm text-red">{(voteMutation.error as Error).message}</p>
       )}
 
-      {/* Sticky vote bar — the single primary action on the page. */}
+      {/* Sticky vote strip — the single primary action on the page. */}
       <div
-        className="fixed bottom-0 right-0 z-30 border-t bg-background left-0 lg:[left:var(--sidebar-w)]"
+        className="fixed bottom-0 right-0 z-30 border-t border-rule bg-paper left-0 lg:[left:var(--sidebar-w)]"
       >
-        <div className="container flex flex-col gap-2 py-3 md:flex-row md:items-center">
+        <div className="container max-w-[1080px] flex flex-col gap-2 py-3 md:flex-row md:items-center">
           {bothReady && !allDimensionsFilled ? (
-            <span className="text-xs text-amber-400 md:whitespace-nowrap">
-              Rate all {VOTE_DIMENSIONS.length} dimensions to enable voting
-              ({refinedCount}/{VOTE_DIMENSIONS.length} done)
+            <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-red md:whitespace-nowrap">
+              Rate all {VOTE_DIMENSIONS.length} dimensions to vote ·{" "}
+              {refinedCount}/{VOTE_DIMENSIONS.length}
             </span>
           ) : (
-            <span className="hidden text-xs uppercase tracking-wide text-muted-foreground md:inline">
-              Your verdict
+            <span className="hidden font-mono text-[11px] uppercase tracking-[0.1em] text-graphite md:inline">
+              Which review is more useful?
             </span>
           )}
-          <div className="flex flex-1 gap-2">
-            <Button
-              size="lg"
-              className="flex-1"
-              variant="outline"
-              disabled={submitting || isGenerating || !bothReady || !allDimensionsFilled}
-              onClick={() => voteMutation.mutate("A")}
-              title={
-                !allDimensionsFilled
-                  ? `Rate all ${VOTE_DIMENSIONS.length} dimensions first`
-                  : "Shortcut: 1 or ←"
-              }
-            >
-              <span>A is better</span>
-              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">1</kbd>
-            </Button>
-            <Button
-              size="lg"
-              className="flex-1"
-              variant="outline"
-              disabled={submitting || isGenerating || !bothReady || !allDimensionsFilled}
-              onClick={() => voteMutation.mutate("TIE")}
-              title={
-                !allDimensionsFilled
-                  ? `Rate all ${VOTE_DIMENSIONS.length} dimensions first`
-                  : "Shortcut: 2"
-              }
-            >
-              <span>Tie</span>
-              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">2</kbd>
-            </Button>
-            <Button
-              size="lg"
-              className="flex-1"
-              variant="outline"
-              disabled={submitting || isGenerating || !bothReady || !allDimensionsFilled}
-              onClick={() => voteMutation.mutate("B")}
-              title={
-                !allDimensionsFilled
-                  ? `Rate all ${VOTE_DIMENSIONS.length} dimensions first`
-                  : "Shortcut: 3 or →"
-              }
-            >
-              <span>B is better</span>
-              <kbd className="ml-2 hidden  border bg-muted px-1.5 text-[10px] font-mono text-muted-foreground md:inline">3</kbd>
-            </Button>
+          <div className="flex flex-1 gap-2.5">
+            {(
+              [
+                { winner: "A" as const, label: "Review A", kbd: "1", hint: "Shortcut: 1 or ←" },
+                { winner: "TIE" as const, label: "Tie", kbd: "2", hint: "Shortcut: 2" },
+                { winner: "B" as const, label: "Review B", kbd: "3", hint: "Shortcut: 3 or →" },
+              ]
+            ).map((b) => (
+              <Button
+                key={b.winner}
+                size="lg"
+                className="flex-1"
+                variant="outline"
+                disabled={submitting || isGenerating || !bothReady || !allDimensionsFilled}
+                onClick={() => voteMutation.mutate(b.winner)}
+                title={
+                  !allDimensionsFilled
+                    ? `Rate all ${VOTE_DIMENSIONS.length} dimensions first`
+                    : b.hint
+                }
+              >
+                <span>{b.label}</span>
+                <kbd className="ml-2 hidden border border-rule2 px-1.5 font-mono text-[10px] text-graphite md:inline">
+                  {b.kbd}
+                </kbd>
+              </Button>
+            ))}
           </div>
         </div>
       </div>

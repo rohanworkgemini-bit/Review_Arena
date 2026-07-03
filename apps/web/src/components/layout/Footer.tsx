@@ -1,35 +1,30 @@
 import { Link } from "react-router-dom";
 
 // Site-wide footer. Same component on the landing page and inside the
-// AppShell so the chrome is consistent across the app. Uses design
-// tokens (border / muted-foreground / foreground) so it tracks the
-// theme — currently dark-only, but the tokens would adapt if light
-// mode is reintroduced.
+// AppShell so the chrome is consistent. Mono, graphite, single hairline
+// above; the § tagline carries the pen.
 //
 // The footer sits at the bottom of the page's normal flow (not fixed
-// or sticky) — it appears once the user scrolls to the end of the
-// content. On short pages it naturally hugs the viewport bottom thanks
-// to AppShell's flex layout (main is flex-1).
+// or sticky). On short pages it naturally hugs the viewport bottom
+// thanks to AppShell's flex layout (main is flex-1).
 export function Footer() {
   return (
-    <footer className="border-t">
-      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-3 px-6 py-6 text-xs text-muted-foreground md:flex-row md:items-center">
-        <span>ReviewArena · thesis build · single-tenant</span>
-        <div className="flex items-center gap-5">
-          <Link to="/leaderboard" className="transition-colors hover:text-foreground">
+    <footer className="border-t border-rule">
+      <div className="mx-auto flex max-w-[1080px] flex-col items-start justify-between gap-3 px-7 pb-10 pt-[22px] font-mono text-[11.5px] text-graphite md:flex-row md:items-baseline">
+        <span>ReviewArena · benchmarking peer-review systems at thesis scale</span>
+        <div className="flex items-baseline gap-5">
+          <Link to="/leaderboard" className="transition-colors hover:text-ink">
             Leaderboard
-          </Link>
-          <Link to="/admin" className="transition-colors hover:text-foreground">
-            Admin
           </Link>
           <a
             href="https://github.com/rohanworkgemini/review-arena"
             target="_blank"
             rel="noreferrer noopener"
-            className="transition-colors hover:text-foreground"
+            className="transition-colors hover:text-ink"
           >
             GitHub
           </a>
+          <span className="text-red">§ built for reviewers of reviewers</span>
         </div>
       </div>
     </footer>

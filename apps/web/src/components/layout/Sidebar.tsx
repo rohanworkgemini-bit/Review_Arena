@@ -5,21 +5,17 @@ import {
   Shield,
   ChevronsLeft,
   ChevronsRight,
-  Sun,
-  Moon,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useTheme } from "@/lib/theme";
 
 // Persistent left rail. Only rendered on lg+ — small screens get the
 // fallback Header (top bar). Width is driven by the CSS variable
 // --sidebar-w on the layout root so sticky bottom bars on /compare and
 // /upload can offset themselves without prop drilling.
 //
-// Visual language tracks the design tokens so it adapts between light
-// and dark mode automatically. The active nav item uses a red-pen
-// (primary) left-accent stripe + subtle `accent` fill in both modes.
+// Manuscript register: paper surface, 1px rule hairline, mono nav
+// labels. The active item carries the red pen — text + 2px left rule.
 
 interface SidebarProps {
   collapsed: boolean;
@@ -39,31 +35,30 @@ const navItems: NavItem[] = [
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { theme, toggle: toggleTheme } = useTheme();
-
   return (
     <aside
-      className="sticky top-0 z-10 hidden h-screen shrink-0 flex-col border-r bg-card transition-[width] duration-150 lg:flex"
+      className="sticky top-0 z-10 hidden h-screen shrink-0 flex-col border-r border-rule bg-paper transition-[width] duration-150 lg:flex"
       style={{ width: "var(--sidebar-w)" }}
     >
       {/* ─── Brand row ─────────────────────────────────────────────── */}
-      <div className="flex h-14 items-center justify-between border-b px-3">
-        <Link to="/" className="flex min-w-0 items-center gap-2 font-semibold">
-          <span
-            aria-hidden
-            className="flex h-7 w-7 shrink-0 items-center justify-center border bg-card font-serif text-sm font-semibold text-primary"
-          >
-            R
-          </span>
-          {!collapsed && (
-            <span className="truncate font-serif tracking-tight">ReviewArena</span>
+      <div className="flex h-14 items-center justify-between border-b border-rule px-3">
+        <Link to="/" className="flex min-w-0 items-baseline font-serif font-semibold">
+          {collapsed ? (
+            <span className="mx-auto text-lg">
+              R<sup className="font-mono text-[9px] font-medium text-red">β</sup>
+            </span>
+          ) : (
+            <span className="truncate tracking-tight">
+              ReviewArena
+              <sup className="font-mono text-[10px] font-medium text-red">β</sup>
+            </span>
           )}
         </Link>
         {!collapsed && (
           <button
             type="button"
             onClick={onToggle}
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="p-1 text-graphite transition-colors hover:bg-paper2 hover:text-ink"
             title="Collapse sidebar"
             aria-label="Collapse sidebar"
           >
@@ -72,8 +67,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       </div>
 
-      {/* ─── Nav (all entries get the same left-stripe treatment) ──── */}
-      <nav className="flex flex-col gap-0.5 p-2 text-sm">
+      {/* ─── Nav (mono labels, red left rule on the active entry) ──── */}
+      <nav className="flex flex-col gap-0.5 p-2">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
@@ -82,13 +77,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             title={collapsed ? item.label : undefined}
             className={({ isActive }) =>
               cn(
-                // Violet left-accent stripe on the active item —
-                // visible via border-l-2, transparent when inactive
-                // so the row width stays constant.
-                "flex items-center gap-2 rounded-md border-l-2 border-transparent px-2.5 py-1.5 transition-colors hover:bg-accent hover:text-foreground",
-                isActive
-                  ? "border-primary bg-accent font-medium text-foreground"
-                  : "text-muted-foreground",
+                "flex items-center gap-2 border-l-2 border-transparent px-2.5 py-1.5 font-mono text-[12.5px] tracking-[0.02em] transition-colors hover:bg-paper2 hover:text-ink",
+                isActive ? "border-red text-red" : "text-graphite",
                 collapsed && "justify-center border-l-0 px-0",
               )
             }
@@ -99,47 +89,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         ))}
       </nav>
 
-      {/* ─── Footer: theme toggle + version / collapse ─────────────── */}
-      <div className="mt-auto border-t p-2">
-        <button
-          type="button"
-          onClick={toggleTheme}
-          title={
-            collapsed
-              ? theme === "dark"
-                ? "Switch to light"
-                : "Switch to dark"
-              : undefined
-          }
-          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-            collapsed && "justify-center px-0",
-          )}
-        >
-          {theme === "dark" ? (
-            <Sun className="h-4 w-4 shrink-0" />
-          ) : (
-            <Moon className="h-4 w-4 shrink-0" />
-          )}
-          {!collapsed && (
-            <span className="truncate">
-              {theme === "dark" ? "Light mode" : "Dark mode"}
-            </span>
-          )}
-        </button>
+      {/* ─── Footer: version / collapse ────────────────────────────── */}
+      <div className="mt-auto border-t border-rule p-2">
         {collapsed ? (
           <button
             type="button"
             onClick={onToggle}
-            className="mt-1 flex w-full items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="flex w-full items-center justify-center p-2 text-graphite transition-colors hover:bg-paper2 hover:text-ink"
             title="Expand sidebar"
             aria-label="Expand sidebar"
           >
             <ChevronsRight className="h-4 w-4" />
           </button>
         ) : (
-          <div className="mt-1 px-2 py-1 text-xs text-muted-foreground">
+          <div className="px-2 py-1 font-mono text-[11px] text-graphite">
             v0.1 · anon session
           </div>
         )}

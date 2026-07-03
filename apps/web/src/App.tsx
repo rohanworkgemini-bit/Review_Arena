@@ -74,14 +74,18 @@ function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="relative flex min-h-screen" style={layoutStyle}>
-      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <Header />
-        {/* main is flex-1 so on short pages the Footer still hugs the
-            viewport bottom instead of floating mid-screen. */}
-        <main className="flex-1">{children}</main>
-        <Footer />
+    <div style={layoutStyle}>
+      {/* editor's mark across the very top — same as the landing page */}
+      <div className="h-[3px] bg-red" aria-hidden />
+      <div className="relative flex min-h-[calc(100vh-3px)]">
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+          <Header />
+          {/* main is flex-1 so on short pages the Footer still hugs the
+              viewport bottom instead of floating mid-screen. */}
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </div>
       </div>
     </div>
   );

@@ -11,23 +11,22 @@ const navItems = [
   { to: "/admin", label: "Admin", icon: Shield },
 ];
 
-// Mobile-only top bar — on lg+ the Sidebar handles nav instead. Kept as
-// a separate component so the lg+ flex layout stays clean. Flat and
-// opaque: 1px hairline, active entry marked with the red-pen accent.
+// Mobile-only top bar — on lg+ the Sidebar handles nav instead. Flat
+// paper with a 1px rule; the active entry carries the red pen.
 export function Header() {
   return (
-    <header className="sticky top-0 z-20 border-b bg-background lg:hidden">
+    <header className="sticky top-0 z-20 border-b border-rule bg-paper lg:hidden">
       <div className="container flex h-14 items-center justify-between gap-4">
-        <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span
-            aria-hidden
-            className="flex h-7 w-7 items-center justify-center border bg-card font-serif text-sm font-semibold text-primary"
-          >
-            R
+        <Link to="/" className="font-serif font-semibold tracking-tight">
+          <span className="hidden sm:inline">
+            ReviewArena
+            <sup className="font-mono text-[10px] font-medium text-red">β</sup>
           </span>
-          <span className="hidden font-serif sm:inline">ReviewArena</span>
+          <span className="sm:hidden">
+            R<sup className="font-mono text-[9px] font-medium text-red">β</sup>
+          </span>
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex items-center gap-1">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -35,10 +34,10 @@ export function Header() {
               end={item.to === "/"}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-1.5 border-b-2 px-3 py-1.5 transition-colors hover:bg-accent",
+                  "flex items-center gap-1.5 border-b-2 px-3 py-1.5 font-mono text-[12.5px] tracking-[0.02em] transition-colors hover:bg-paper2",
                   isActive
-                    ? "border-primary font-medium text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
+                    ? "border-red text-red"
+                    : "border-transparent text-graphite hover:text-ink",
                 )
               }
             >

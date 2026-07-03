@@ -139,11 +139,9 @@ export function RevealPage() {
     <div className="container py-8 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            Vote recorded · you preferred
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight mt-1">{winnerLabel}</h1>
-          <p className="text-muted-foreground mt-2">
+          <div className="eyebrow">Vote recorded · you preferred</div>
+          <h1 className="text-3xl font-semibold tracking-[-0.01em] mt-2">{winnerLabel}</h1>
+          <p className="text-graphite mt-2">
             Systems revealed below, along with how the LLM-as-judge sees the same
             reviews.
           </p>
@@ -176,31 +174,39 @@ export function RevealPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[420px]">
+          <div className="h-[420px] font-mono text-xs">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="dimension" />
-                <PolarRadiusAxis angle={30} domain={[0, 10]} />
-                {/* Neutral A/B palette — blue + amber. Using `--destructive`
-                    red for Review B mis-signals "B is worse" before the user
-                    has read either side. */}
+                <PolarGrid stroke="#ddd8cc" />
+                <PolarAngleAxis dataKey="dimension" tick={{ fill: "#6d685f", fontSize: 11 }} />
+                <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: "#6d685f", fontSize: 10 }} />
+                {/* Token palette only. A = ink, B = graphite — using the
+                    red for either side would mis-signal "worse" before
+                    the user has read anything. */}
                 <Radar
                   name="Review A"
                   dataKey="A"
-                  stroke="#3b82f6"
-                  fill="#3b82f6"
-                  fillOpacity={0.3}
+                  stroke="#191815"
+                  fill="#191815"
+                  fillOpacity={0.22}
                 />
                 <Radar
                   name="Review B"
                   dataKey="B"
-                  stroke="#f59e0b"
-                  fill="#f59e0b"
-                  fillOpacity={0.2}
+                  stroke="#6d685f"
+                  fill="#6d685f"
+                  fillOpacity={0.18}
                 />
               </RadarChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex gap-5 font-mono text-[11px] text-graphite">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 bg-ink" /> Review A
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 bg-graphite" /> Review B
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -274,7 +280,7 @@ function RevealCard({
           <div className="font-mono text-3xl">{Math.round(reveal.eloAfter)}</div>
           <div
             className={`font-mono text-sm ${
-              positive ? "text-emerald-600" : "text-destructive"
+              positive ? "text-up" : "text-red"
             }`}
           >
             {positive ? "+" : ""}
@@ -286,9 +292,9 @@ function RevealCard({
         </div>
 
         {(detail?.judgeOverall != null || verifPct != null) && (
-          <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+          <div className="grid grid-cols-2 gap-3 border-t border-dashed border-rule2 px-1 pt-3 text-sm">
             <div>
-              <div className="text-xs uppercase text-muted-foreground">Judge overall</div>
+              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">Judge overall</div>
               <div className="font-mono">
                 {detail?.judgeOverall != null
                   ? `${detail.judgeOverall.toFixed(1)} / 10`
@@ -296,7 +302,7 @@ function RevealCard({
               </div>
             </div>
             <div>
-              <div className="text-xs uppercase text-muted-foreground">Verifiable claims</div>
+              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">Verifiable claims</div>
               <div className="font-mono">{verifPct != null ? `${verifPct}%` : "—"}</div>
             </div>
           </div>
@@ -306,10 +312,11 @@ function RevealCard({
   );
 }
 
+// Hairline chips, text color carries the verdict — no colored fills.
 const VERDICT_STYLES: Record<RevealSide["claims"][number]["verdict"], string> = {
-  SUPPORTED: "bg-emerald-100 text-emerald-900 border-emerald-300",
-  CONTRADICTED: "bg-red-100 text-red-900 border-red-300",
-  UNSUPPORTED: "bg-amber-100 text-amber-900 border-amber-300",
+  SUPPORTED: "border-up/50 text-up",
+  CONTRADICTED: "border-red/50 text-red",
+  UNSUPPORTED: "border-rule2 text-graphite",
 };
 
 const VERDICT_SHORT: Record<RevealSide["claims"][number]["verdict"], string> = {

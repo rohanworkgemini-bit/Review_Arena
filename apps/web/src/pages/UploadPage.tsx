@@ -3,7 +3,6 @@ import { useDropzone, type FileRejection } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { UploadCloud, FileText, Loader2, Link2, Check, ChevronDown } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { uploadArxiv, uploadPaper } from "@/lib/api";
@@ -70,10 +69,11 @@ export function UploadPage() {
   return (
     <div className="container max-w-2xl py-10 pb-32 space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">
+        <div className="eyebrow mb-3">Submit a manuscript</div>
+        <h1 className="text-3xl font-semibold tracking-[-0.01em]">
           Upload a paper
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-graphite mt-1">
           PDF, max 10 MB. Both reviewing systems get the same section
           selection; you then compare the two reviews blinded and vote.
         </p>
@@ -81,32 +81,32 @@ export function UploadPage() {
 
       <SourceDropdown value={source} onChange={setSource} />
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
+      <div className="border-y border-rule py-6">
+        <div className="space-y-4">
           {source === "pdf" ? (
             <div
               {...getRootProps()}
               className={cn(
-                "flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-input p-12 text-center cursor-pointer transition-colors",
-                isDragActive && "border-primary bg-accent/50",
-                file && "border-primary/50 bg-accent/20",
+                "flex flex-col items-center justify-center border border-dashed border-rule2 p-12 text-center cursor-pointer transition-colors",
+                isDragActive && "border-red bg-paper2",
+                file && "border-red/50 bg-paper2/60",
               )}
             >
               <input {...getInputProps()} />
               {file ? (
                 <div className="flex items-center gap-3 text-sm">
-                  <FileText className="h-8 w-8 text-muted-foreground" />
+                  <FileText className="h-8 w-8 text-graphite" />
                   <div className="text-left">
                     <div className="font-medium">{file.name}</div>
-                    <div className="text-muted-foreground">
+                    <div className="font-mono text-xs text-graphite">
                       {(file.size / 1024 / 1024).toFixed(2)} MB · click to replace
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <div className="flex flex-col items-center gap-2 text-graphite">
                   <UploadCloud className="h-10 w-10" />
-                  <div className="text-sm">
+                  <div className="font-mono text-xs tracking-[0.02em]">
                     {isDragActive ? "Release to upload" : "Drag a PDF here, or click to browse"}
                   </div>
                 </div>
@@ -122,9 +122,9 @@ export function UploadPage() {
                 value={arxivUrl}
                 onChange={(e) => setArxivUrl(e.target.value)}
                 placeholder="2312.00752  or  https://arxiv.org/abs/2312.00752"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="w-full border border-rule2 bg-paper px-3 py-2 font-mono text-sm"
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="font-mono text-xs text-graphite">
                 Parsed via arxiv2md.org — works for arXiv papers with HTML
                 rendering.
               </p>
@@ -144,11 +144,11 @@ export function UploadPage() {
                   ? "Falls back to the title extracted from the PDF."
                   : "Falls back to the title from arXiv."
               }
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-1 w-full border border-rule2 bg-paper px-3 py-2 text-sm"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {mutation.isError && (
         <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
@@ -159,12 +159,12 @@ export function UploadPage() {
       >
         <div className="container max-w-2xl flex items-center gap-4 py-3">
           {submitting ? (
-            <div className="flex flex-1 items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex flex-1 items-center gap-2 font-mono text-xs text-graphite">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               <span>Uploading…</span>
             </div>
           ) : (
-            <div className="flex-1 text-sm text-muted-foreground">
+            <div className="flex-1 font-mono text-xs text-graphite">
               {source === "pdf"
                 ? file
                   ? `Ready: ${file.name}`
@@ -265,7 +265,7 @@ function SourceDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-accent"
+        className="inline-flex items-center gap-2 border border-rule2 bg-card px-3 py-2 font-mono text-[13px] font-medium transition-colors hover:bg-paper2"
       >
         <CurrentIcon className="h-4 w-4 text-muted-foreground" />
         <span>{current.label}</span>
@@ -282,7 +282,7 @@ function SourceDropdown({
           ref={menuRef}
           role="menu"
           aria-label="Source"
-          className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[14rem] overflow-hidden border bg-card p-1"
+          className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[14rem] overflow-hidden border border-rule2 bg-card p-1"
         >
           {SOURCE_OPTIONS.map((opt, idx) => {
             const Icon = opt.icon;
@@ -301,10 +301,10 @@ function SourceDropdown({
                 }}
                 onKeyDown={(e) => onItemKey(e, idx)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm transition-colors focus:outline-none",
+                  "flex w-full items-center gap-2 px-2.5 py-2 text-left font-mono text-[13px] transition-colors focus:outline-none",
                   active
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground focus:bg-accent focus:text-foreground",
+                    ? "bg-paper2 text-ink"
+                    : "text-graphite hover:bg-paper2 hover:text-ink focus:bg-paper2 focus:text-ink",
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />

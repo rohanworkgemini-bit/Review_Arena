@@ -1,9 +1,21 @@
 import type { Config } from "tailwindcss";
 
-// shadcn/ui's default theme (HSL CSS variables in globals.css). Keep the
-// names predictable so we can drop in shadcn components verbatim.
+// Manuscript design system — tokens extracted from the reference landing
+// page (reviewarena-landing.html). Single light theme; colors are static
+// hexes so Tailwind opacity modifiers work. The shadcn names (background,
+// primary, muted…) are kept as aliases so existing components resolve.
+const paper = "#faf9f5";
+const paper2 = "#f3f1ea";
+const ink = "#191815";
+const ink2 = "#2b2926";
+const graphite = "#6d685f";
+const rule = "#ddd8cc";
+const rule2 = "#c9c3b4";
+const red = "#9d2b22";
+const redink = "#7a2019";
+const up = "#3a6349";
+
 export default {
-  darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     container: { center: true, padding: "1.5rem", screens: { "2xl": "1400px" } },
@@ -14,37 +26,31 @@ export default {
         mono: ['"IBM Plex Mono"', "ui-monospace", "SFMono-Regular", "monospace"],
       },
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
+        // Named reference tokens
+        paper,
+        paper2,
+        ink,
+        ink2,
+        graphite,
+        rule,
+        rule2,
+        red,
+        redink,
+        up,
+        // shadcn aliases
+        border: rule,
+        input: rule2,
+        ring: red,
+        background: paper,
+        foreground: ink,
+        primary: { DEFAULT: red, foreground: paper },
+        secondary: { DEFAULT: paper2, foreground: ink },
+        muted: { DEFAULT: paper2, foreground: graphite },
+        accent: { DEFAULT: paper2, foreground: ink },
+        destructive: { DEFAULT: red, foreground: paper },
+        card: { DEFAULT: "#fdfcf9", foreground: ink },
       },
-      borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" },
+      borderRadius: { lg: "0", md: "0", sm: "0" },
     },
   },
   plugins: [require("tailwindcss-animate")],

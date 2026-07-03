@@ -1,18 +1,74 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Footer } from "@/components/layout/Footer";
 import { getLeaderboard } from "@/lib/api";
 
-// Public landing page. Editorial register: warm paper canvas, IBM Plex
-// Serif headlines, Plex Mono for data, oxblood reserved for actions.
-// Left-aligned content column inside a wider container — the empty
-// right side is deliberate. No decoration: no particles, gradients,
-// glows, shadows, or rounded corners.
+// Public landing page — a React port of the hand-built reference
+// (reviewarena-landing.html). Manuscript register: warm paper, ink,
+// hairline rules; the red is the reviewer's pen (interactive elements
+// and editorial marks only). The hero embeds a self-contained demo of
+// the signature comparison card: two sample reviews stream in blind,
+// you vote, identities reveal, the Elo delta prints.
+
+// ─── Demo data (from the reference; sample pairs, not live reviews) ─────────
+
+interface DemoPair {
+  paper: string;
+  a: { sys: string; text: string };
+  b: { sys: string; text: string };
+}
+
+const PAIRS: DemoPair[] = [
+  {
+    paper: "Sparse Attention for Long-Context Retrieval",
+    a: {
+      sys: "gpt-4o",
+      text: "The sparsity pattern is well motivated, but there is no wall-clock comparison against FlashAttention-2. Without it, the efficiency claims in Section 4 are unsupported. Major revision.",
+    },
+    b: {
+      sys: "claude-3.5",
+      text: "Strong empirical results, though the Table 3 ablation conflates two variables. The gains may come from the reranker, not the sparse mask — isolate this before acceptance.",
+    },
+  },
+  {
+    paper: "Contrastive Pretraining for Low-Resource ASR",
+    a: {
+      sys: "llama-3.1-70b",
+      text: "Clear writing, reasonable baseline. But the low-resource claim rests on a single 10-hour split; 1- and 5-hour results are needed to support the headline. Borderline.",
+    },
+    b: {
+      sys: "gemini-1.5",
+      text: "Incremental over Wav2Vec2, and the novelty is oversold in the abstract. That said, the error analysis in Section 5 is genuinely useful. Weak accept.",
+    },
+  },
+  {
+    paper: "Differentiable Rendering for Protein Docking",
+    a: {
+      sys: "claude-3.5",
+      text: "Ambitious cross-domain transfer. The gradient estimator is derived correctly, but the docking benchmark uses a non-standard split, making comparison to prior work impossible. Fixable.",
+    },
+    b: {
+      sys: "gpt-4o",
+      text: "Elegant idea, excellent figures. My concern is compute: 400 GPU-hours per complex limits practical use. That tradeoff deserves an honest discussion, not a footnote.",
+    },
+  },
+];
+
+const DEMO_BOARD = [
+  { systemName: "claude-3.5", rating: 1532, voteCount: 2841, ratingCiLow: 1511, ratingCiHigh: 1553 },
+  { systemName: "gpt-4o", rating: 1518, voteCount: 2790, ratingCiLow: 1496, ratingCiHigh: 1540 },
+  { systemName: "gemini-1.5", rating: 1489, voteCount: 2655, ratingCiLow: 1466, ratingCiHigh: 1512 },
+  { systemName: "llama-3.1-70b", rating: 1451, voteCount: 2402, ratingCiLow: 1426, ratingCiHigh: 1476 },
+  { systemName: "mistral-large", rating: 1442, voteCount: 2318, ratingCiLow: 1416, ratingCiHigh: 1468 },
+];
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <TopBar />
+    <div className="min-h-screen bg-paper text-ink">
+      {/* editor's mark across the very top */}
+      <div className="h-[3px] bg-red" aria-hidden />
+      <TopNav />
       <main>
         <Hero />
         <HowItWorks />
@@ -24,122 +80,324 @@ export function LandingPage() {
   );
 }
 
-// ─── Top bar ───────────────────────────────────────────────────────────────
+// ─── Nav ───────────────────────────────────────────────────────────────────
 
-function TopBar() {
+function TopNav() {
   return (
-    <header className="border-b">
-      <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
-        <Link to="/" className="font-serif text-lg font-semibold tracking-tight">
+    <nav className="border-b border-rule">
+      <div className="mx-auto flex max-w-[1080px] items-baseline justify-between px-7 pb-[18px] pt-5">
+        <Link to="/" className="font-serif text-[19px] font-semibold tracking-tight">
           ReviewArena
+          <sup className="font-mono text-[10px] font-medium text-red">β</sup>
         </Link>
-        <nav className="flex items-center gap-6 text-sm">
+        <div className="flex items-baseline gap-[26px]">
           <Link
             to="/leaderboard"
-            className="text-muted-foreground transition-colors hover:text-foreground"
+            className="font-mono text-[12.5px] tracking-[0.02em] text-graphite transition-colors hover:text-ink"
           >
             Leaderboard
           </Link>
-          <Link
-            to="/admin"
-            className="hidden text-muted-foreground transition-colors hover:text-foreground sm:inline"
+          <a
+            href="#how"
+            className="hidden font-mono text-[12.5px] tracking-[0.02em] text-graphite transition-colors hover:text-ink sm:inline"
           >
-            Admin
-          </Link>
+            How it works
+          </a>
           <Link
             to="/upload"
-            className="font-medium text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
+            className="border-b border-red pb-0.5 font-mono text-[12.5px] tracking-[0.02em] text-red"
           >
-            Start a comparison
+            Start comparing →
           </Link>
-        </nav>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+// ─── Hero: copy left, live demo card right, 1px rule between ───────────────
+
+function Hero() {
+  return (
+    <header className="mx-auto max-w-[1080px] px-7">
+      <div className="grid grid-cols-1 items-start py-10 md:grid-cols-[minmax(0,4.3fr)_1px_minmax(0,6.7fr)] md:py-16 md:pb-[72px]">
+        <div className="md:pr-11">
+          <div className="eyebrow mb-[22px]">Blind pairwise evaluation</div>
+          <h1 className="mb-[22px] font-serif text-[clamp(34px,4.6vw,52px)] font-semibold leading-[1.03] tracking-[-0.02em]">
+            Peer review,
+            <br />
+            <em className="font-normal italic text-redink">under review.</em>
+          </h1>
+          <p className="mb-3.5 max-w-[34ch] text-[16.5px] text-ink2">
+            Read two blind reviews of the same paper. Vote on which is more
+            useful. Every verdict updates an <b className="font-semibold">Elo ranking</b> of
+            the systems behind them.
+          </p>
+          <p className="mt-[26px] max-w-[30ch] border-l-2 border-red pl-3.5 font-mono text-xs leading-normal text-graphite">
+            No names until you vote. No stars, no scores — just the two
+            reports and your judgment.
+          </p>
+        </div>
+
+        <div className="hidden self-stretch bg-rule md:block" aria-hidden />
+
+        <div className="mt-9 md:mt-0 md:pl-11">
+          <DemoCard />
+        </div>
       </div>
     </header>
   );
 }
 
-// ─── Hero ──────────────────────────────────────────────────────────────────
+// ─── Demo comparison card (the signature, self-contained) ──────────────────
 
-function Hero() {
+function useReducedMotion() {
   return (
-    <section className="border-b">
-      <div className="mx-auto max-w-5xl px-6 py-24 lg:py-32">
-        <div className="max-w-2xl">
-          <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-            Blind pairwise evaluation
-          </p>
-          <h1 className="mt-6 text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-            Compare AI peer review systems.
-          </h1>
-          <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-            Upload a paper. Read two anonymous reviews side by side. Vote on
-            which would actually help the author. Your votes feed a
-            per-dimension Elo ladder — two reviews, unknown authors, your
-            verdict.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center gap-6">
-            <Link
-              to="/upload"
-              className="bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              Start a comparison
-            </Link>
-            <Link
-              to="/leaderboard"
-              className="text-sm text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
-            >
-              View the leaderboard
-            </Link>
-          </div>
-          <p className="mt-14 font-mono text-xs text-muted-foreground">
-            8 systems · 8 dimensions · Bradley–Terry MLE · 95% bootstrap CIs
-          </p>
-        </div>
-      </div>
-    </section>
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
   );
 }
 
-// ─── How it works ──────────────────────────────────────────────────────────
+/** Word-by-word streamer with the red pen cursor. */
+function useWordStream(text: string, active: boolean, onDone: () => void) {
+  const reduce = useReducedMotion();
+  const [shown, setShown] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
 
-const STEPS: { title: string; body: string }[] = [
+  useEffect(() => {
+    if (!active) return;
+    if (reduce) {
+      setShown(text);
+      setStreaming(false);
+      doneRef.current();
+      return;
+    }
+    setShown("");
+    setStreaming(true);
+    const words = text.split(" ");
+    let i = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      if (i < words.length) {
+        i++;
+        setShown(words.slice(0, i).join(" "));
+        timer = setTimeout(tick, 34 + Math.random() * 26);
+      } else {
+        setStreaming(false);
+        doneRef.current();
+      }
+    };
+    timer = setTimeout(tick, 120);
+    return () => clearTimeout(timer);
+  }, [text, active, reduce]);
+
+  return { shown, streaming };
+}
+
+function expectedScore(r1: number, r2: number) {
+  return 1 / (1 + Math.pow(10, (r2 - r1) / 400));
+}
+
+function DemoCard() {
+  const [idx, setIdx] = useState(0);
+  const [aDone, setADone] = useState(false);
+  const [bDone, setBDone] = useState(false);
+  const [picked, setPicked] = useState<"a" | "b" | null>(null);
+  const [delta, setDelta] = useState(0);
+  const [board, setBoard] = useState(() =>
+    Object.fromEntries(DEMO_BOARD.map((r) => [r.systemName, r.rating])),
+  );
+  const pair = PAIRS[idx]!;
+
+  const a = useWordStream(pair.a.text, true, useCallback(() => setADone(true), []));
+  const b = useWordStream(pair.b.text, true, useCallback(() => setBDone(true), []));
+
+  const ready = aDone && bDone && !picked;
+
+  const vote = (pick: "a" | "b") => {
+    if (picked) return;
+    setPicked(pick);
+    const win = pick === "a" ? pair.a.sys : pair.b.sys;
+    const los = pick === "a" ? pair.b.sys : pair.a.sys;
+    const K = 24;
+    const d = Math.round(K * (1 - expectedScore(board[win] ?? 1500, board[los] ?? 1500)));
+    setDelta(d);
+    setBoard((prev) => ({
+      ...prev,
+      [win]: (prev[win] ?? 1500) + d,
+      [los]: (prev[los] ?? 1500) - d,
+    }));
+  };
+
+  const next = () => {
+    setIdx((i) => (i + 1) % PAIRS.length);
+    setADone(false);
+    setBDone(false);
+    setPicked(null);
+  };
+
+  const win = picked === "a" ? pair.a.sys : pair.b.sys;
+  const los = picked === "a" ? pair.b.sys : pair.a.sys;
+
+  return (
+    <div className="border border-rule2 bg-card">
+      <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
+          Pair {String(idx + 1).padStart(2, "0")} / blind
+        </span>
+        <span className="text-right font-serif text-sm italic">
+          <span className="block font-mono text-[10.5px] not-italic tracking-[0.1em] text-graphite">
+            Manuscript
+          </span>
+          “{pair.paper}”
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_1px_1fr]">
+        <DemoCol
+          label="Review A"
+          who={picked ? pair.a.sys : ""}
+          text={a.shown}
+          streaming={a.streaming}
+          win={picked === "a"}
+        />
+        <div className="hidden bg-rule sm:block" aria-hidden />
+        <div className="h-px bg-rule sm:hidden" aria-hidden />
+        <DemoCol
+          label="Review B"
+          who={picked ? pair.b.sys : ""}
+          text={b.shown}
+          streaming={b.streaming}
+          win={picked === "b"}
+        />
+      </div>
+
+      <div className="border-t border-rule px-4 py-[15px]">
+        <div className="mb-[11px] font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
+          Which review is more useful?
+        </div>
+        <div className="flex gap-2.5">
+          {(["a", "b"] as const).map((side) => (
+            <button
+              key={side}
+              type="button"
+              disabled={!ready}
+              onClick={() => vote(side)}
+              className={
+                "flex-1 border px-3 py-2.5 font-mono text-[13px] font-medium tracking-[0.02em] transition-colors " +
+                (picked === side
+                  ? "border-red bg-red text-paper"
+                  : "border-ink bg-paper text-ink enabled:hover:border-red enabled:hover:bg-red enabled:hover:text-paper disabled:cursor-default disabled:opacity-60")
+              }
+            >
+              Review {side.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        {picked && (
+          <div className="mt-[13px] flex items-baseline justify-between gap-3 border-t border-dashed border-rule2 pt-[13px]">
+            <span className="font-mono text-[12.5px] text-ink2">
+              {win} <b className="text-up">+{delta}</b> · {los}{" "}
+              <b className="text-red">−{delta}</b>
+            </span>
+            <button
+              type="button"
+              onClick={next}
+              className="border-b border-red pb-px font-mono text-[12.5px] text-red"
+            >
+              Next pair →
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DemoCol({
+  label,
+  who,
+  text,
+  streaming,
+  win,
+}: {
+  label: string;
+  who: string;
+  text: string;
+  streaming: boolean;
+  win: boolean;
+}) {
+  return (
+    <div className={"min-h-[186px] px-[17px] pb-[15px] pt-4" + (win ? " bg-red/[0.045]" : "")}>
+      <div className="mb-[11px] flex items-baseline justify-between">
+        <span
+          className={
+            "font-mono text-xs font-medium tracking-[0.04em]" + (win ? " text-red" : "")
+          }
+        >
+          {label}
+        </span>
+        {who && <span className="font-mono text-[11px] text-redink">{who}</span>}
+      </div>
+      <div className="min-h-[120px] text-[14.5px] leading-[1.62] text-ink2">
+        {text}
+        {streaming && <span className="stream-cursor" aria-hidden />}
+      </div>
+    </div>
+  );
+}
+
+// ─── How it works — a genuine sequence, so the numerals earn their place ───
+
+const STEPS: { n: string; title: string; body: string }[] = [
   {
-    title: "Upload a paper",
-    body: "Drop a PDF or paste an arXiv link. The paper is parsed and handed to two review systems chosen by exposure-weighted sampling.",
+    n: "i.",
+    title: "Submit a manuscript",
+    body: "Upload a paper or paste an arXiv link. The same paper goes to two review systems chosen by exposure-weighted sampling.",
   },
   {
-    title: "Read two blind reviews",
-    body: "The reviews stream in side by side with no identities attached. Nothing marks which system wrote which — the content does the arguing.",
+    n: "ii.",
+    title: "Read two reports, blind",
+    body: "Two reviews arrive with their authoring systems hidden. You see only the prose — the argument, the evidence, the ask.",
   },
   {
-    title: "Vote",
-    body: "Pick the review that would help the author more, overall and across eight dimensions: comprehensiveness, clarity, fairness, actionability, constructiveness, objectivity, relevance, technical depth.",
+    n: "iii.",
+    title: "Cast a verdict",
+    body: "Pick the more useful report, and weigh eight dimensions — comprehensiveness, clarity, actionability, and the rest.",
   },
   {
+    n: "iv.",
     title: "The ladder updates",
-    body: "Each vote updates per-dimension Elo ratings via Bradley–Terry maximum likelihood with bootstrap confidence intervals. Identities are revealed only after you vote.",
+    body: "Your vote feeds a bootstrapped Elo model. Rankings shift only as fast as the evidence allows; confidence intervals stay visible.",
   },
 ];
 
 function HowItWorks() {
   return (
-    <section className="border-b">
-      <div className="mx-auto max-w-5xl px-6 py-20 lg:py-28">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          How it works
-        </p>
-        <div className="mt-10 max-w-3xl">
+    <section className="border-t border-rule" id="how">
+      <div className="mx-auto max-w-[1080px] px-7">
+        <div className="eyebrow mb-[34px] pt-[52px]">
+          <b className="font-medium text-red">01</b> How it works
+        </div>
+        <div className="pb-[60px]">
           {STEPS.map((step, i) => (
             <div
-              key={step.title}
-              className="grid grid-cols-[3rem_1fr] gap-4 border-t py-8 last:pb-0"
+              key={step.n}
+              className={
+                "grid grid-cols-[40px_1fr] gap-3.5 py-[22px] pb-6 sm:grid-cols-[56px_1fr] sm:gap-[22px] " +
+                (i > 0 ? "border-t border-rule " : "") +
+                // deliberate asymmetry on even steps (desktop only)
+                (i % 2 === 1 ? "sm:pl-10" : "")
+              }
             >
-              <div className="font-mono text-sm text-primary">{i + 1}</div>
+              <div className="pt-[3px] font-mono text-[13px] text-red">{step.n}</div>
               <div>
-                <h3 className="text-base font-semibold">{step.title}</h3>
-                <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                  {step.body}
-                </p>
+                <h3 className="mb-[5px] font-serif text-xl font-medium tracking-[-0.01em]">
+                  {step.title}
+                </h3>
+                <p className="max-w-[52ch] text-[15px] text-graphite">{step.body}</p>
               </div>
             </div>
           ))}
@@ -149,17 +407,7 @@ function HowItWorks() {
   );
 }
 
-// ─── Standings ─────────────────────────────────────────────────────────────
-
-// Static fallback shown until the API returns real rows (or when it has
-// none yet) — realistic values so the table never reads as lorem ipsum.
-const FALLBACK_ROWS = [
-  { rank: 1, systemName: "GPT-5 Reviewer", systemSlug: "gpt5-reviewer", rating: 1074, ratingCiLow: 1032, ratingCiHigh: 1117, voteCount: 86 },
-  { rank: 2, systemName: "Claude Reviewer", systemSlug: "claude-reviewer", rating: 1049, ratingCiLow: 1004, ratingCiHigh: 1093, voteCount: 81 },
-  { rank: 3, systemName: "Gemini Reviewer", systemSlug: "gemini-reviewer", rating: 1002, ratingCiLow: 957, ratingCiHigh: 1046, voteCount: 78 },
-  { rank: 4, systemName: "Marg (multi-agent)", systemSlug: "marg", rating: 971, ratingCiLow: 924, ratingCiHigh: 1019, voteCount: 74 },
-  { rank: 5, systemName: "OpenReviewer 8B", systemSlug: "openreviewer-8b", rating: 943, ratingCiLow: 891, ratingCiHigh: 995, voteCount: 69 },
-];
+// ─── Standings — data is the aesthetic ─────────────────────────────────────
 
 function Standings() {
   const { data } = useQuery({
@@ -169,53 +417,79 @@ function Standings() {
   });
 
   const live = data?.entries ?? [];
-  const rows = live.length >= 2 ? live.slice(0, 5) : FALLBACK_ROWS;
   const isLive = live.length >= 2;
+  const rows = isLive ? live.slice(0, 6) : DEMO_BOARD;
+  const max = Math.max(...rows.map((r) => r.rating));
+  const min = Math.min(...rows.map((r) => r.rating));
 
   return (
-    <section className="border-b">
-      <div className="mx-auto max-w-5xl px-6 py-20 lg:py-28">
-        <div className="flex flex-wrap items-baseline justify-between gap-4">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Current standings
-          </h2>
-          <p className="font-mono text-xs text-muted-foreground">
+    <section className="border-t border-rule" id="leaderboard">
+      <div className="mx-auto max-w-[1080px] px-7 pb-16">
+        <div className="eyebrow mb-[34px] pt-[52px]">
+          <b className="font-medium text-red">02</b> Standings
+          <span className="ml-auto font-mono text-[11px] normal-case tracking-[0.1em] text-graphite">
             {isLive
-              ? `overall · ${data?.totalVotes ?? 0} votes · ${data?.totalPapers ?? 0} papers`
-              : "overall · sample data"}
-          </p>
+              ? `live · ${data?.totalVotes ?? 0} votes · ${data?.totalPapers ?? 0} papers`
+              : "sample data"}
+          </span>
         </div>
-        <div className="mt-8 overflow-x-auto">
-          <table className="w-full max-w-3xl font-mono text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="py-2 pr-4 font-medium">#</th>
-                <th className="py-2 pr-4 font-medium">System</th>
-                <th className="py-2 pr-4 text-right font-medium">Elo</th>
-                <th className="py-2 pr-4 text-right font-medium">95% CI</th>
-                <th className="py-2 text-right font-medium">Votes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.systemSlug} className="border-b">
-                  <td className="py-2.5 pr-4 text-muted-foreground">{i + 1}</td>
-                  <td className="py-2.5 pr-4">{r.systemName}</td>
-                  <td className="py-2.5 pr-4 text-right">{Math.round(r.rating)}</td>
-                  <td className="py-2.5 pr-4 text-right text-muted-foreground">
-                    [{Math.round(r.ratingCiLow)}, {Math.round(r.ratingCiHigh)}]
+        <table className="w-full border-collapse font-mono text-[13.5px]">
+          <thead>
+            <tr>
+              <th className="border-b border-rule2 pb-[11px] text-left text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
+                System
+              </th>
+              <th className="border-b border-rule2 pb-[11px] text-right text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
+                Elo
+              </th>
+              <th className="border-b border-rule2 pb-[11px] text-right text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
+                Votes
+              </th>
+              <th className="border-b border-rule2 pb-[11px] text-right text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
+                95% CI
+              </th>
+              <th className="hidden w-[34%] border-b border-rule2 pb-[11px] pl-5 text-left text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite md:table-cell">
+                Rating
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const half = Math.round((r.ratingCiHigh - r.ratingCiLow) / 2);
+              const pct = 12 + ((r.rating - min) / (max - min || 1)) * 88;
+              return (
+                <tr key={r.systemName}>
+                  <td className="border-b border-rule py-[13px] font-medium text-ink">
+                    <span className="text-graphite">{String(i + 1).padStart(2, "0")}</span>
+                    &nbsp;&nbsp;{r.systemName}
                   </td>
-                  <td className="py-2.5 text-right text-muted-foreground">{r.voteCount}</td>
+                  <td className="border-b border-rule py-[13px] text-right text-ink">
+                    {Math.round(r.rating)}
+                  </td>
+                  <td className="border-b border-rule py-[13px] text-right text-ink2">
+                    {r.voteCount.toLocaleString()}
+                  </td>
+                  <td className="border-b border-rule py-[13px] text-right text-ink2">±{half}</td>
+                  <td className="hidden border-b border-rule py-[13px] pl-5 md:table-cell">
+                    <span className="relative block h-[7px] border border-rule bg-paper2">
+                      <i className="absolute bottom-0 left-0 top-0 block bg-red" style={{ width: `${pct}%` }} />
+                    </span>
+                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="mt-4 font-mono text-[11px] text-graphite">
+          {isLive
+            ? "Elo initialised at 1000 · K = 4 · intervals from 100 bootstrap resamples"
+            : "Sample table — upload a paper and vote to start the real ladder"}
+        </p>
         <Link
           to="/leaderboard"
-          className="mt-6 inline-block text-sm text-primary underline decoration-primary/40 underline-offset-4 transition-colors hover:decoration-primary"
+          className="mt-4 inline-block border-b border-red pb-px font-mono text-[12.5px] text-red"
         >
-          Full leaderboard, all eight dimensions
+          Full leaderboard, all eight dimensions →
         </Link>
       </div>
     </section>
@@ -226,24 +500,20 @@ function Standings() {
 
 function Closing() {
   return (
-    <section className="border-b">
-      <div className="mx-auto max-w-5xl px-6 py-20">
-        <div className="max-w-2xl">
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Put two reviewers to work on your paper.
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            Two reviews stream in. You decide which one would actually help.
-          </p>
-          <div className="mt-8">
-            <Link
-              to="/upload"
-              className="bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-            >
-              Start a comparison
-            </Link>
-          </div>
-        </div>
+    <section className="border-t-[3px] border-red">
+      <div className="mx-auto max-w-[1080px] px-7 pb-[70px] pt-14 text-center">
+        <h2 className="mb-2 font-serif text-[clamp(26px,3.4vw,36px)] font-semibold tracking-[-0.02em]">
+          Stop trusting the <em className="font-normal italic text-redink">score.</em>
+        </h2>
+        <p className="mb-[26px] text-graphite">
+          Read the reports. Make the call. Let the ladder settle.
+        </p>
+        <Link
+          to="/upload"
+          className="inline-block border border-ink bg-ink px-[26px] py-[13px] font-mono text-sm font-medium tracking-[0.02em] text-paper transition-colors hover:border-red hover:bg-red"
+        >
+          Start a comparison
+        </Link>
       </div>
     </section>
   );
