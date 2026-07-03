@@ -48,7 +48,7 @@ def _encoder():
         return _ENCODER
     _ENCODER_TRIED = True
     try:
-        import tiktoken  # type: ignore[import-not-found]
+        import tiktoken
 
         _ENCODER = tiktoken.get_encoding("cl100k_base")
     except Exception:  # noqa: BLE001 — fall back to the char heuristic

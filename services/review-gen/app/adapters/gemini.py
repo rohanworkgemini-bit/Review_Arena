@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from textwrap import dedent
 
-from typing import Iterator
+from typing import Any, Iterator
 
 from app.adapters._budget import (
     FAIR_OUTPUT_TOKENS,
@@ -78,7 +78,7 @@ class GeminiAdapter(Adapter):
                 "Use the mock adapter for offline development."
             )
         # Lazy import — only loaded when this adapter is actually used.
-        import google.generativeai as genai  # type: ignore[import-not-found]
+        import google.generativeai as genai
 
         genai.configure(api_key=api_key)
         self._model_name = self.config.get("model", "gemini-1.5-flash")
@@ -86,7 +86,9 @@ class GeminiAdapter(Adapter):
             model_name=self._model_name,
             system_instruction=_SYSTEM_PROMPT,
         )
-        self._generation_config = {
+        # dict form is accepted at runtime across google-generativeai versions;
+        # typed as Any so newer stub-shipping versions don't reject it.
+        self._generation_config: Any = {
             "temperature": self.config.get("temperature", 0.4),
             # Equalized output cap (FAIRNESS A1/A4).
             "max_output_tokens": FAIR_OUTPUT_TOKENS,

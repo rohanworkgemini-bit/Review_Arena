@@ -35,6 +35,12 @@ module = "app.adapters.*"
 disallow_untyped_defs = false
 ignore_missing_imports = true
 
+# google.generativeai ships no type stubs (no py.typed marker) — silence
+# both import-untyped (installed) and import-not-found (missing locally).
+[[tool.mypy.overrides]]
+module = ["google", "google.*"]
+ignore_missing_imports = true
+
 # Main app
 [[tool.mypy.overrides]]
 module = "app.main"

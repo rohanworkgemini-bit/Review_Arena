@@ -102,7 +102,7 @@ class OpenAICompatAdapter(Adapter):
                 f"in the environment."
             )
 
-        from openai import OpenAI  # type: ignore[import-not-found]
+        from openai import OpenAI
 
         self._client = OpenAI(api_key=api_key, base_url=base_url)
 

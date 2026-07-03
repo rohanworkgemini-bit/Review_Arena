@@ -89,7 +89,7 @@ class ClaudeAdapter(Adapter):
             )
         # Lazy import so the rest of the service starts without the
         # anthropic SDK installed.
-        from anthropic import Anthropic  # type: ignore[import-not-found]
+        from anthropic import Anthropic
 
         self._client = Anthropic(api_key=api_key)
         self._model = self.config.get("model", "claude-opus-4-8")

@@ -79,7 +79,7 @@ class GPTAdapter(Adapter):
             )
         # Lazy import so the rest of the service starts without the OpenAI
         # client installed.
-        from openai import OpenAI  # type: ignore[import-not-found]
+        from openai import OpenAI
 
         self._client = OpenAI(api_key=api_key)
         self._model = self.config.get("model", "gpt-4o-mini")

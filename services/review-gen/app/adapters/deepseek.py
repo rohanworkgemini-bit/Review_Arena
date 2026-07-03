@@ -93,7 +93,7 @@ class DeepSeekAdapter(Adapter):
             )
         # Lazy import so the rest of the service starts without the
         # openai SDK installed.
-        from openai import OpenAI  # type: ignore[import-not-found]
+        from openai import OpenAI
 
         # DeepSeek exposes an OpenAI-compatible endpoint at api.deepseek.com/v1.
         # Same chat-completions schema, same auth shape — we just point the

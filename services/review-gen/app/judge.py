@@ -25,7 +25,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -120,7 +120,7 @@ def _is_gemini(model: str) -> bool:
 
 
 def _openai_judge_pass(
-    client,
+    client: Any,
     *,
     system_prompt: str,
     user_prompt: str,
@@ -136,7 +136,8 @@ def _openai_judge_pass(
         ],
     )
     raw = response.choices[0].message.content or "{}"
-    return json.loads(raw)
+    data: dict = json.loads(raw)
+    return data
 
 
 def _gemini_judge_pass(
@@ -148,7 +149,7 @@ def _gemini_judge_pass(
     """One Gemini judge call. Uses google.generativeai with
     response_mime_type=application/json so the model returns parseable
     JSON without a code fence."""
-    import google.generativeai as genai  # type: ignore[import-not-found]
+    import google.generativeai as genai
 
     # generativeai is module-global by design — `configure()` sets the
     # API key for the process. Repeated calls are cheap and idempotent.
@@ -165,11 +166,12 @@ def _gemini_judge_pass(
         },
     )
     raw = (response.text or "{}").strip()
-    return json.loads(raw)
+    data: dict = json.loads(raw)
+    return data
 
 
 def _one_judge_pass(
-    client,
+    client: Any,
     *,
     system_prompt: str,
     user_prompt: str,
@@ -248,7 +250,7 @@ def judge_review(
                 f"judge_review with model={model!r} requires OPENAI_API_KEY "
                 "in the environment. There is no mock fallback."
             )
-        from openai import OpenAI  # type: ignore[import-not-found]
+        from openai import OpenAI
         client = OpenAI()
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)
