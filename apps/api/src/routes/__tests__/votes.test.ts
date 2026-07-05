@@ -115,6 +115,38 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
     expect(result.success).toBe(false);
   });
 
+  it("should accept a per-dimension tie (value 0) and an optional note", () => {
+    const withTieAndNote = {
+      pairToken,
+      winner: "TIE" as const,
+      dimensions: [
+        { dimension: "COMPREHENSIVENESS" as const, value: 0 as const, note: "both equally thorough" },
+        ...validDimensions.slice(1),
+      ],
+    };
+
+    const result = SubmitVoteRequestSchema.safeParse(withTieAndNote);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.dimensions[0]!.value).toBe(0);
+      expect(result.data.dimensions[0]!.note).toBe("both equally thorough");
+    }
+  });
+
+  it("should reject a per-dimension note longer than 1000 chars", () => {
+    const longNote = {
+      pairToken,
+      winner: "A" as const,
+      dimensions: [
+        { dimension: "COMPREHENSIVENESS" as const, value: 1 as const, note: "x".repeat(1001) },
+        ...validDimensions.slice(1),
+      ],
+    };
+
+    const result = SubmitVoteRequestSchema.safeParse(longNote);
+    expect(result.success).toBe(false);
+  });
+
   it("should reject missing pairToken", () => {
     const noPair = {
       winner: "A" as const,

@@ -34,20 +34,10 @@ export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
 
 // ─── GET /reveal ────────────────────────────────────────────────────────────
 
-export const ClaimCheckSchema = z.object({
-  claim: z.string(),
-  verdict: z.enum(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"]),
-  evidence: z.string().nullable(),
-  judgeModel: z.string().nullable(),
-});
-
 export const RevealReviewSchema = z.object({
   reviewId: CuidSchema,
   systemName: z.string(),
-  claims: z.array(ClaimCheckSchema),
-  verifiabilityFraction: z.number(),
   judgeOverall: z.number().nullable(),
-  judgeVerifiability: z.number().nullable(),
   judgeDimensions: z.record(z.number()).nullable(),
 });
 
@@ -79,13 +69,6 @@ export type UploadPaperResponse = z.infer<typeof UploadPaperResponseSchema>;
 
 // ─── GET /papers/:id ────────────────────────────────────────────────────────
 
-export const SectionSchema = z.object({
-  id: z.number(),
-  heading: z.string(),
-  level: z.number(),
-  approxTokens: z.number(),
-});
-
 export const PairReviewSchema = z.object({
   reviewId: CuidSchema,
   slug: z.string(),
@@ -102,20 +85,9 @@ export const PaperDetailResponseSchema = z.object({
   expectedReviewCount: z.number().int(),
   createdAt: z.string(),
   reviewIds: z.array(PairReviewSchema),
-  sections: z.array(SectionSchema),
-  selectedSectionIds: z.array(z.number()).nullable(),
 });
 
 export type PaperDetailResponse = z.infer<typeof PaperDetailResponseSchema>;
-
-// ─── POST /papers/:id/scope (response) ──────────────────────────────────────
-
-export const PaperScopeResponseSchema = z.object({
-  updatedReviewCount: z.number().int(),
-  selectedSectionIds: z.array(z.number()).nullable(),
-});
-
-export type PaperScopeResponse = z.infer<typeof PaperScopeResponseSchema>;
 
 // ─── Admin endpoints ────────────────────────────────────────────────────────
 
@@ -157,7 +129,6 @@ export const AdminExportResponseSchema = z.object({
   papers: z.array(z.any()),
   votes: z.array(z.any()),
   metrics: z.array(z.any()),
-  claims: z.array(z.any()),
   snapshots: z.array(z.any()),
 });
 

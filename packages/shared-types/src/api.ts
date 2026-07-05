@@ -70,13 +70,15 @@ export const SubmitVoteRequestSchema = z.object({
   // duplicates). The UI gates the submit button on this; the server
   // enforces it too so a non-UI client can't bypass it and pollute
   // per-dimension leaderboards with sparse data. value is -1 (A wins),
-  // 1 (B wins). We deliberately don't accept 0 / TIE per-dim — overall
-  // TIE is enough; per-dim asks the rater to commit.
+  // 1 (B wins), or 0 (tie on this dimension). Each dimension may carry
+  // an optional free-text `note` explaining the rating (qualitative
+  // signal for thesis analysis).
   dimensions: z
     .array(
       z.object({
         dimension: VoteDimensionSchema,
-        value: z.union([z.literal(-1), z.literal(1)]),
+        value: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+        note: z.string().max(1000).optional(),
       }),
     )
     .length(VOTE_DIMENSIONS.length)
@@ -117,23 +119,10 @@ export type SubmitVoteResponse = z.infer<typeof SubmitVoteResponseSchema>;
 
 // ─── GET /reveal/:voteId ────────────────────────────────────────────────────
 
-export const ClaimVerdictSchema = z.enum(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"]);
-export type ClaimVerdict = z.infer<typeof ClaimVerdictSchema>;
-
 export const RevealSideSchema = z.object({
   reviewId: CuidSchema,
   systemName: z.string(),
-  claims: z.array(
-    z.object({
-      claim: z.string(),
-      verdict: ClaimVerdictSchema,
-      evidence: z.string().nullable(),
-      judgeModel: z.string(),
-    }),
-  ),
-  verifiabilityFraction: z.number().min(0).max(1),
   judgeOverall: z.number().nullable(),
-  judgeVerifiability: z.number().nullable(),
   // Per-dimension judge scores in 0..10, keyed by VoteDimension. null until
   // scoring runs.
   judgeDimensions: z.record(z.string(), z.number()).nullable(),

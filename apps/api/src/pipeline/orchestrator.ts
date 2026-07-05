@@ -10,8 +10,7 @@ import { logger } from "../logger.js";
 // Fan out review generation to every enabled ReviewSystem for a given paper.
 // NOT idempotent — each call inserts fresh review rows. We deliberately
 // dropped the (paperId, reviewSystemId) unique constraint so the same
-// paper can be re-uploaded and get a fresh review pair each time. The
-// user wants iteration on scope selection without dedup short-circuits.
+// paper can be re-uploaded and get a fresh review pair each time.
 
 export interface GenerateOptions {
   /** Original uploaded PDF bytes. Forwarded only to adapters whose
@@ -109,7 +108,7 @@ async function generateOne(
   // Fresh-per-upload: always insert a new row. Each upload gets a
   // distinct review, even if the same (paper, system) pair was reviewed
   // before. Removes the cache-once invariant in favor of letting the
-  // user iterate (change scope, re-test reviewers) without dedup.
+  // user re-test reviewers on the same paper without dedup.
   const [created] = await db
     .insert(reviews)
     .values({
@@ -144,16 +143,16 @@ async function generateOne(
       .where(eq(reviews.id, reviewId));
 
     // Fire judging now, in the background. The review is COMPLETED in the DB
-    // so /pair can already serve it; judging just populates ClaimChecks +
-    // MetricScores that the reveal screen polls for. Running per-review here
-    // (rather than after all adapters finish) lets judging overlap with the
-    // remaining slow generations — saves ~tens of seconds end-to-end.
+    // so /pair can already serve it; judging just populates the MetricScores
+    // that the reveal screen polls for. Running per-review here (rather than
+    // after all adapters finish) lets judging overlap with the remaining slow
+    // generations — saves ~tens of seconds end-to-end.
     if (judge && paperText) {
       void scoreOneReview(reviewId, result.review, paperText, judge).catch(
         (err) =>
           logger.warn(
             { err, reviewId, paperId: paper.id, adapter: system.adapterKey },
-            "judge failed for review; reveal will show no claims",
+            "judge failed for review; reveal will show no judge scores",
           ),
       );
     }

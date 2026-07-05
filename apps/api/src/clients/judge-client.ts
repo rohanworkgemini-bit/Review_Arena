@@ -1,17 +1,8 @@
 import { request } from "undici";
 
-export interface JudgeClaim {
-  claim: string;
-  verdict: "SUPPORTED" | "CONTRADICTED" | "UNSUPPORTED";
-  evidence: string | null;
-  judge_model: string;
-}
-
 export interface JudgeResult {
   overall_score: number;
-  verifiability_score: number;
   dimension_scores: Record<string, number>;
-  claims: JudgeClaim[];
 }
 
 // Keep in sync with DEFAULT_JUDGE_MODEL in services/review-gen/app/judge.py.

@@ -23,9 +23,7 @@ TU Darmstadt.**
 5. Votes update an overall and per-dimension Elo ranking with
    bootstrapped 95% CIs (verbatim FastChat port).
 6. The reveal screen shows which system produced A and B, the Elo
-   before/after, a radar of LLM-judge dimension scores, and a
-   paper-grounded claim check (each review claim labelled
-   **Supported / Contradicted / Unsupported** against the paper text).
+   before/after, and a radar of LLM-judge dimension scores.
 
 ## Live review systems
 
@@ -242,14 +240,14 @@ converges cleanly.
 
 - [x] **Checkpoint 1** — Monorepo, manifests, docker-compose, README
 - [x] **Checkpoint 2** — Schema (Paper, ReviewSystem, Review, Vote,
-       DimensionVote, EloSnapshot, MetricScore, ClaimCheck)
+       DimensionVote, EloSnapshot, MetricScore)
 - [x] **Checkpoint 3** — Express routes + Elo module + Vitest cases
 - [x] **Checkpoint 4** — Four frontend screens (Leaderboard, Upload,
        Comparison, Reveal)
 - [x] **Checkpoint 5** — FastAPI review-gen + 4 live adapters
 - [x] **Checkpoint 6** — Upload → parse → pair-select → generate →
        vote → Elo → snapshot → reveal, with SSE streaming end-to-end
-- [x] **Checkpoint 7** — Paper-grounded ClaimCheck, BLEU/ROUGE/judge,
+- [x] **Checkpoint 7** — BLEU/ROUGE/judge scoring,
        BERTopic / word-frequency analytics
 - [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Modal deploys,
        [thesis evaluation script](scripts/thesis_eval.py)

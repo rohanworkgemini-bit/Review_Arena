@@ -159,6 +159,7 @@ export function votesRouter(config: Config): Router {
               voteId: newId,
               dimension: d.dimension,
               value: d.value,
+              note: d.note?.trim() ? d.note.trim() : null,
             })),
           );
 

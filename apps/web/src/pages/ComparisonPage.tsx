@@ -83,6 +83,8 @@ export function ComparisonPage() {
 
   const startedAt = useMemo(() => Date.now(), [paperId]);
   const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>({});
+  // Optional free-text rationale per dimension, keyed the same way.
+  const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>({});
   // Per-dimension picks are REQUIRED — open by default so the rater
   // sees right away that 8 picks are needed before they can submit.
   const [refineOpen, setRefineOpen] = useState(true);
@@ -154,7 +156,8 @@ export function ComparisonPage() {
         decisionMs: Date.now() - startedAt,
         dimensions: Object.entries(dimensionValues).map(([dimension, value]) => ({
           dimension: dimension as VoteDimension,
-          value: value as -1 | 1,
+          value: value as -1 | 0 | 1,
+          note: dimensionNotes[dimension as VoteDimension]?.trim() || undefined,
         })),
       }),
     onSuccess: (data) => {
@@ -320,9 +323,10 @@ export function ComparisonPage() {
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
               {VOTE_DIMENSIONS.map((d) => {
                 const v = dimensionValues[d];
-                const pick = (next: -1 | 1) =>
+                const pick = (next: -1 | 0 | 1) =>
                   setDimensionValues((prev) => {
                     const copy = { ...prev };
+                    // Click the already-selected side to deselect.
                     if (copy[d] === next) delete copy[d];
                     else copy[d] = next;
                     return copy;
@@ -333,8 +337,11 @@ export function ComparisonPage() {
                     label={DIMENSION_LABELS[d]}
                     question={DIMENSION_DESCRIPTIONS[d]}
                     value={v}
-                    onPickA={() => pick(-1)}
-                    onPickB={() => pick(1)}
+                    note={dimensionNotes[d] ?? ""}
+                    onPick={pick}
+                    onChangeNote={(text) =>
+                      setDimensionNotes((prev) => ({ ...prev, [d]: text }))
+                    }
                   />
                 );
               })}
@@ -342,7 +349,10 @@ export function ComparisonPage() {
             {refinedCount > 0 && (
               <button
                 type="button"
-                onClick={() => setDimensionValues({})}
+                onClick={() => {
+                  setDimensionValues({});
+                  setDimensionNotes({});
+                }}
                 className="mt-4 font-mono text-xs text-graphite underline-offset-4 hover:text-ink hover:underline"
               >
                 Clear all picks

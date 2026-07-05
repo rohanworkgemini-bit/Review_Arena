@@ -57,10 +57,6 @@ _SYSTEM_PROMPT = dedent("""
     ## Questions
     (Concise bullet list of questions for the authors, 2-5 items.)
 
-    The paper may be presented with a "[REVIEW SCOPE]" notice indicating
-    that only certain sections are in scope. If so, restrict your review
-    to those sections, do not speculate about omitted content, and do not
-    penalize the paper for material not shown.
 
     Plain markdown only — no preamble, no JSON, no extra commentary.
 """).strip()

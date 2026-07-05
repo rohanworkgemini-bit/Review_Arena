@@ -165,7 +165,6 @@ export class ReviewGenClient {
     config: object = {},
     pdfBytes?: Buffer,
     signal?: AbortSignal,
-    selectedSectionIds?: number[] | null,
   ): AsyncGenerator<StreamEvent, void, unknown> {
     const body: Record<string, unknown> = {
       adapter_key: adapterKey,
@@ -173,11 +172,6 @@ export class ReviewGenClient {
       config,
     };
     if (pdfBytes) body.pdf_b64 = pdfBytes.toString("base64");
-    // Only forward when the user actually picked a subset. NULL/empty =
-    // default full-paper behavior on the review-gen side.
-    if (selectedSectionIds && selectedSectionIds.length > 0) {
-      body.selected_section_ids = selectedSectionIds;
-    }
 
     const { statusCode, body: respBody } = await request(
       `${this.baseUrl}/stream-generate`,

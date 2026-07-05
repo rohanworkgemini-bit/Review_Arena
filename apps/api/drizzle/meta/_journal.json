@@ -8,6 +8,27 @@
       "when": 1783036330021,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783084659927,
+      "tag": "0001_drop_claim_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783263676288,
+      "tag": "0002_drop_selected_section_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783265996523,
+      "tag": "0003_dimension_vote_note",
+      "breakpoints": true
     }
   ]
 }

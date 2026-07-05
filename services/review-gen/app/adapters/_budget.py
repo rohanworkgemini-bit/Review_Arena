@@ -17,20 +17,21 @@ FAIRNESS CONTRACT (see docs/FAIRNESS.md, invariants A1 + A4):
   verbatim — adapters never re-render or re-truncate.
 
   FAIR_INPUT + FAIR_OUTPUT + overhead must fit inside the SMALLEST
-  system's context window so no system silently truncates further. Our
-  smallest enabled window is 16k (GPT/Gemini/SEA); 11000 + 3072 + ~1500
-  = ~15.6k < 16k. DeepReviewer's training cap is 14k input — 11k fits.
+  system's context window so no system silently truncates further. The
+  thesis runs commercial models only (GPT-5, Claude, Gemini, DeepSeek),
+  all ≥128k context, so 30000 + 8000 + overhead fits with huge headroom
+  and the vast majority of papers pass through untruncated.
 """
 from __future__ import annotations
 
 from math import ceil
 
-from app.paper_render import render_paper_text, render_paper_text_scoped
-from app.schemas import ParsedPaper, ReviewScope
+from app.paper_render import render_paper_text
+from app.schemas import ParsedPaper
 
 # ─── the fair budget (identical for every system) ──────────────────────────
-FAIR_INPUT_TOKENS = 11_000
-FAIR_OUTPUT_TOKENS = 3072
+FAIR_INPUT_TOKENS = 30_000
+FAIR_OUTPUT_TOKENS = 8_000
 
 # Conservative chars-per-token fallback when tiktoken is unavailable.
 _CHARS_PER_TOKEN = 3.6
@@ -85,39 +86,6 @@ def render_canonical(paper: ParsedPaper, *, max_input_tokens: int = FAIR_INPUT_T
     # right sections, then trim precisely by reference tokens.
     text = render_paper_text(paper, max_chars=_char_budget_for_tokens(max_input_tokens) * 2)
     return _trim_to_tokens(text, max_input_tokens)
-
-
-def render_canonical_scoped(
-    paper: ParsedPaper,
-    *,
-    selected_section_ids: list[int],
-    max_input_tokens: int = FAIR_INPUT_TOKENS,
-) -> tuple[str, ReviewScope]:
-    """Render canonical text restricted to user-selected sections.
-
-    Returns the canonical text AND a ReviewScope record describing what
-    was actually shared. The canonical text contains a [REVIEW SCOPE]
-    notice listing included/omitted sections, instructing the model to
-    review only the included content. Selected sections are emitted at
-    full fidelity (no per-section caps); if the total exceeds
-    FAIR_INPUT_TOKENS we still trim — but the upstream UI should prevent
-    that with a live budget meter.
-    """
-    text, included_headings, omitted_headings = render_paper_text_scoped(
-        paper, selected_section_ids
-    )
-    text = _trim_to_tokens(text, max_input_tokens)
-    # Normalize the IDs the same way render_paper_text_scoped did so the
-    # ReviewScope record matches what was rendered.
-    n_sections = len(paper.sections)
-    normalized_ids = sorted({i for i in selected_section_ids if 0 <= i < n_sections})
-    scope = ReviewScope(
-        included_section_ids=normalized_ids,
-        included_headings=included_headings,
-        omitted_headings=omitted_headings,
-        canonical_tokens=count_tokens(text),
-    )
-    return text, scope
 
 
 # Reserve tokens for the truncation marker so the final string (marker

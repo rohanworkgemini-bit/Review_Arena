@@ -1,11 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { claimChecks, metricScores, papers, reviews } from "../db/schema.js";
+import { metricScores, papers, reviews } from "../db/schema.js";
 import { DEFAULT_JUDGE_MODEL, JudgeClient } from "../clients/judge-client.js";
 import { logger } from "../logger.js";
 
-// Backfill ClaimCheck + MetricScore rows. Two entry points:
+// Backfill MetricScore rows (LLM-judge overall + per-dimension). Two entry
+// points:
 //
 //   scoreOneReview()  — called by the orchestrator the moment a single review
 //                       is marked COMPLETED, so judging runs concurrently with
@@ -13,12 +14,11 @@ import { logger } from "../logger.js";
 //   scorePaper()      — paper-wide re-score, used by the admin endpoint when
 //                       a manual re-judge is requested.
 //
-// Both write delete-then-insert ClaimChecks and upsert MetricScores; they're
-// safe to run repeatedly on the same review.
+// Both upsert MetricScores; they're safe to run repeatedly on the same review.
 
 /**
- * Judge one review and persist its ClaimChecks + MetricScores. Throws on
- * judge failure (after retry); callers decide whether to swallow + log.
+ * Judge one review and persist its MetricScores. Throws on judge failure
+ * (after retry); callers decide whether to swallow + log.
  */
 export async function scoreOneReview(
   reviewId: string,
@@ -31,25 +31,9 @@ export async function scoreOneReview(
   const judged = await judgeWithRetry(judge, text, paperText);
   const elapsed = Date.now() - start;
   logger.info(
-    { reviewId, claimCount: judged.claims.length, overallScore: judged.overall_score, elapsed_ms: elapsed },
+    { reviewId, overallScore: judged.overall_score, elapsed_ms: elapsed },
     "judge_scoring_complete",
   );
-
-  // ClaimChecks: clear and rewrite atomically.
-  await db.transaction(async (tx) => {
-    await tx.delete(claimChecks).where(eq(claimChecks.reviewId, reviewId));
-    if (judged.claims.length > 0) {
-      await tx.insert(claimChecks).values(
-        judged.claims.map((c) => ({
-          reviewId,
-          claimText: c.claim,
-          verdict: c.verdict,
-          evidence: c.evidence,
-          judgeModel: c.judge_model,
-        })),
-      );
-    }
-  });
 
   // Metrics upsert via insert + ON CONFLICT DO UPDATE. The 8 per-dimension
   // judge scores live in meta on the LLM_JUDGE_OVERALL row rather than as
@@ -62,50 +46,34 @@ export async function scoreOneReview(
   // dataset defensible against "did longer reviews win?" critique.
   const reviewChars = text.length;
   const reviewWords = text.split(/\s+/).filter((w) => w.length > 0).length;
-  const claimCount = judged.claims.length;
 
-  const metricRows: Array<{
-    kind: "LLM_JUDGE_OVERALL" | "LLM_JUDGE_VERIFIABILITY";
-    value: number;
-    meta: Record<string, unknown>;
-  }> = [
-    {
+  await db
+    .insert(metricScores)
+    .values({
+      reviewId,
       kind: "LLM_JUDGE_OVERALL",
+      referenceType: "NONE",
       value: judged.overall_score,
       meta: {
         judge_model: DEFAULT_JUDGE_MODEL,
         dimension_scores: judged.dimension_scores,
         review_chars: reviewChars,
         review_words: reviewWords,
-        claim_count: claimCount,
       },
-    },
-    {
-      kind: "LLM_JUDGE_VERIFIABILITY",
-      value: judged.verifiability_score,
-      meta: {
-        judge_model: DEFAULT_JUDGE_MODEL,
-        claim_count: claimCount,
-        review_chars: reviewChars,
-        review_words: reviewWords,
+    })
+    .onConflictDoUpdate({
+      target: [metricScores.reviewId, metricScores.kind, metricScores.referenceType],
+      set: {
+        value: judged.overall_score,
+        meta: {
+          judge_model: DEFAULT_JUDGE_MODEL,
+          dimension_scores: judged.dimension_scores,
+          review_chars: reviewChars,
+          review_words: reviewWords,
+        },
+        computedAt: new Date(),
       },
-    },
-  ];
-  for (const m of metricRows) {
-    await db
-      .insert(metricScores)
-      .values({
-        reviewId,
-        kind: m.kind,
-        referenceType: "NONE",
-        value: m.value,
-        meta: m.meta,
-      })
-      .onConflictDoUpdate({
-        target: [metricScores.reviewId, metricScores.kind, metricScores.referenceType],
-        set: { value: m.value, meta: m.meta, computedAt: new Date() },
-      });
-  }
+    });
 }
 
 /**
@@ -130,7 +98,7 @@ export async function scorePaper(paperId: string, judge: JudgeClient): Promise<v
     } catch (err) {
       logger.warn(
         { err, reviewId: review.id, paperId },
-        "judge failed after retry; review left without claim checks",
+        "judge failed after retry; review left without judge scores",
       );
     }
   }
@@ -138,7 +106,7 @@ export async function scorePaper(paperId: string, judge: JudgeClient): Promise<v
 
 // The judge is a remote LLM call; transient failures (rate limits, timeouts,
 // the occasional non-JSON response) are the common reason a single review
-// silently ends up with no claims. The Python side already retries OpenAI
+// silently ends up with no judge scores. The Python side already retries
 // itself JUDGE_RETRY_MAX times — this layer retries the *Python service*
 // for network-level failures (review-gen restart, bridge timeout, transient
 // 5xx). Exponential backoff: 500ms, 1s, 2s, 4s = ~7.5s total before giving up.

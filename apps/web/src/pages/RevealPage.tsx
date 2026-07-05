@@ -82,9 +82,8 @@ export function RevealPage() {
     }
   }, [params]);
 
-  // ClaimChecks + per-dimension judge scores are fetched by voteId. The
-  // score job may still be running when the user lands here. Each side's
-  // claims + judge scores commit in one transaction, but A and B are scored
+  // Per-dimension judge scores are fetched by voteId. The score job may
+  // still be running when the user lands here. A and B are scored
   // independently — so keep polling until BOTH sides have judgeDimensions
   // (previously we stopped on first partial data, forcing a manual refresh).
   // Cap at ~3 min of polling in case the judge failed and scores never land.
@@ -211,30 +210,6 @@ export function RevealPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Paper-grounded verifiability</CardTitle>
-          <CardDescription>
-            Each claim each review makes, checked by an LLM-as-judge against the
-            paper text.
-          </CardDescription>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 font-mono text-xs text-muted-foreground">
-            {(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"] as const).map((k) => (
-              <span key={k} className="inline-flex items-center gap-1.5">
-                <span className={`border px-1 ${VERDICT_STYLES[k]}`}>
-                  {VERDICT_SHORT[k]}
-                </span>
-                {VERDICT_LEGEND[k]}
-              </span>
-            ))}
-          </div>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          <ClaimList label="Review A" side={detail?.reviewA} pending={scoringPending} />
-          <ClaimList label="Review B" side={detail?.reviewB} pending={scoringPending} />
-        </CardContent>
-      </Card>
-
       <div className="flex justify-between gap-3 pt-2">
         <Button variant="outline" asChild>
           <Link to="/leaderboard">← Back to leaderboard</Link>
@@ -258,10 +233,6 @@ function RevealCard({
 }) {
   const delta = reveal.eloAfter - reveal.eloBefore;
   const positive = delta >= 0;
-  const verifPct =
-    detail?.verifiabilityFraction != null
-      ? Math.round(detail.verifiabilityFraction * 100)
-      : null;
   return (
     <Card>
       <CardHeader>
@@ -291,121 +262,15 @@ function RevealCard({
           </div>
         </div>
 
-        {(detail?.judgeOverall != null || verifPct != null) && (
-          <div className="grid grid-cols-2 gap-3 border-t border-dashed border-rule2 px-1 pt-3 text-sm">
-            <div>
-              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">Judge overall</div>
-              <div className="font-mono">
-                {detail?.judgeOverall != null
-                  ? `${detail.judgeOverall.toFixed(1)} / 10`
-                  : "—"}
-              </div>
+        {detail?.judgeOverall != null && (
+          <div className="border-t border-dashed border-rule2 px-1 pt-3 text-sm">
+            <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">
+              Judge overall
             </div>
-            <div>
-              <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">Verifiable claims</div>
-              <div className="font-mono">{verifPct != null ? `${verifPct}%` : "—"}</div>
-            </div>
+            <div className="font-mono">{detail.judgeOverall.toFixed(1)} / 10</div>
           </div>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-// Hairline chips, text color carries the verdict — no colored fills.
-const VERDICT_STYLES: Record<RevealSide["claims"][number]["verdict"], string> = {
-  SUPPORTED: "border-up/50 text-up",
-  CONTRADICTED: "border-red/50 text-red",
-  UNSUPPORTED: "border-rule2 text-graphite",
-};
-
-const VERDICT_SHORT: Record<RevealSide["claims"][number]["verdict"], string> = {
-  SUPPORTED: "✓",
-  CONTRADICTED: "✗",
-  UNSUPPORTED: "?",
-};
-
-// Short legend text (shown under the card title) and the fuller hover
-// tooltips on every ✓ / ✗ / ? marker.
-const VERDICT_LEGEND: Record<RevealSide["claims"][number]["verdict"], string> = {
-  SUPPORTED: "supported",
-  CONTRADICTED: "contradicted",
-  UNSUPPORTED: "unsupported",
-};
-
-const VERDICT_TOOLTIP: Record<RevealSide["claims"][number]["verdict"], string> = {
-  SUPPORTED: "✓ Supported — the paper's text backs this claim.",
-  CONTRADICTED: "✗ Contradicted — the paper's text conflicts with this claim.",
-  UNSUPPORTED: "? Unsupported — no evidence for this claim was found in the paper.",
-};
-
-function ClaimList({
-  label,
-  side,
-  pending,
-}: {
-  label: string;
-  side?: RevealSide;
-  pending: boolean;
-}) {
-  const counts =
-    side?.claims.reduce<Record<string, number>>(
-      (acc, c) => ({ ...acc, [c.verdict]: (acc[c.verdict] ?? 0) + 1 }),
-      {},
-    ) ?? {};
-  return (
-    <div>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold">{label}</div>
-        {side && side.claims.length > 0 && (
-          <div className="flex gap-1 text-xs">
-            {(["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"] as const).map((k) =>
-              counts[k] ? (
-                <span
-                  key={k}
-                  className={`cursor-help border px-1.5 py-0.5 font-mono ${VERDICT_STYLES[k]}`}
-                  title={VERDICT_TOOLTIP[k]}
-                >
-                  {VERDICT_SHORT[k]} {counts[k]}
-                </span>
-              ) : null,
-            )}
-          </div>
-        )}
-      </div>
-      {!side || side.claims.length === 0 ? (
-        <div className="border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-          {pending ? (
-            <span className="inline-flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              Judging claims — updates automatically…
-            </span>
-          ) : (
-            "No claims extracted."
-          )}
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {side.claims.map((c, i) => (
-            <li key={i} className="rounded-md border px-3 py-2 text-sm">
-              <div className="flex items-start gap-2">
-                <span
-                  className={`shrink-0 cursor-help border px-1.5 py-0.5 font-mono text-xs ${VERDICT_STYLES[c.verdict]}`}
-                  title={VERDICT_TOOLTIP[c.verdict]}
-                >
-                  {VERDICT_SHORT[c.verdict]}
-                </span>
-                <div className="flex-1">{c.claim}</div>
-              </div>
-              {c.evidence && (
-                <div className="mt-2 border-l-2 border-muted-foreground/20 pl-3 text-xs text-muted-foreground">
-                  {c.evidence}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }

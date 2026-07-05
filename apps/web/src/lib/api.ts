@@ -70,13 +70,6 @@ export async function uploadArxiv(
   return jsonOrThrow<UploadPaperResponse>(res);
 }
 
-export interface PaperSectionSummary {
-  id: number;          // index into the parsed paper's sections array
-  heading: string;
-  level: number;       // 1-6, markdown heading depth
-  approxTokens: number;  // rough cl100k estimate for the picker's budget meter
-}
-
 export interface PaperStatus {
   id: string;
   title: string | null;
@@ -90,10 +83,6 @@ export interface PaperStatus {
   // The chosen pair's review IDs + slugs. Browser uses these to open
   // SSE streams for token-level rendering. Empty until parsing finishes.
   reviewIds: Array<{ reviewId: string; slug: string }>;
-  // Parsed section metadata for the scope picker. Empty until status=PARSED.
-  sections: PaperSectionSummary[];
-  // Current scope set on the reviews for this paper, if any. null = full paper.
-  selectedSectionIds: number[] | null;
 }
 
 export async function getPaperStatus(paperId: string): Promise<PaperStatus> {
@@ -101,19 +90,6 @@ export async function getPaperStatus(paperId: string): Promise<PaperStatus> {
     credentials: "include",
   });
   return jsonOrThrow<PaperStatus>(res);
-}
-
-export async function setPaperScope(
-  paperId: string,
-  selectedSectionIds: number[] | null,
-): Promise<{ updatedReviewCount: number; selectedSectionIds: number[] | null }> {
-  const res = await fetch(`${BASE}/papers/${encodeURIComponent(paperId)}/scope`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ selectedSectionIds }),
-  });
-  return jsonOrThrow(res);
 }
 
 export async function getPair(

@@ -88,7 +88,6 @@ function TopNav() {
       <div className="mx-auto flex max-w-[1080px] items-baseline justify-between px-7 pb-[18px] pt-5">
         <Link to="/" className="font-serif text-[19px] font-semibold tracking-tight">
           ReviewArena
-          <sup className="font-mono text-[10px] font-medium text-red">β</sup>
         </Link>
         <div className="flex items-baseline gap-[26px]">
           <Link
@@ -124,9 +123,9 @@ function Hero() {
         <div className="md:pr-11">
           <div className="eyebrow mb-[22px]">Blind pairwise evaluation</div>
           <h1 className="mb-[22px] font-serif text-[clamp(34px,4.6vw,52px)] font-semibold leading-[1.03] tracking-[-0.02em]">
-            Peer review,
+           Automated peer reviewers,
             <br />
-            <em className="font-normal italic text-redink">under review.</em>
+            <em className="font-normal italic text-redink">ranked by human preference.</em>
           </h1>
           <p className="mb-3.5 max-w-[34ch] text-[16.5px] text-ink2">
             Read two blind reviews of the same paper. Vote on which is more
@@ -134,8 +133,7 @@ function Hero() {
             the systems behind them.
           </p>
           <p className="mt-[26px] max-w-[30ch] border-l-2 border-red pl-3.5 font-mono text-xs leading-normal text-graphite">
-            No names until you vote. No stars, no scores — just the two
-            reports and your judgment.
+            No names until you vote. 
           </p>
         </div>
 

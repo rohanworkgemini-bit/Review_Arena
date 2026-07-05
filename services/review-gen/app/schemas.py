@@ -64,22 +64,6 @@ class ParsedPaper(BaseModel):
 # ─── StructuredReview (output to Node) ─────────────────────────────────────
 
 
-class ReviewScope(BaseModel):
-    """Which sections of the paper were actually shared with the reviewer.
-
-    Stamped server-side after the canonical text is built, so even fine-tuned
-    specialist models (DeepReviewer, OpenReviewer, …) — which can't be asked
-    to emit a `scope` field — still have provenance on what they saw. The
-    judge uses this to scope claim verification: a claim referencing an
-    out-of-scope section gets verdict='out_of_scope', not 'unverifiable'.
-    """
-
-    included_section_ids: list[int]
-    included_headings: list[str]
-    omitted_headings: list[str]
-    canonical_tokens: int
-
-
 class StructuredReview(BaseModel):
     summary: str
     strengths: list[str]
@@ -90,7 +74,6 @@ class StructuredReview(BaseModel):
     contribution: float | None = Field(default=None, ge=1, le=10)
     overallRating: float | None = Field(default=None, ge=1, le=10)
     confidence: float | None = Field(default=None, ge=1, le=5)
-    review_scope: ReviewScope | None = None
 
 
 # ─── HTTP envelopes ────────────────────────────────────────────────────────
@@ -103,14 +86,6 @@ class GenerateRequest(BaseModel):
     # Original PDF bytes, base64-encoded. Forwarded only for adapters
     # that need raw PDF input (MARG). Optional — None for everything else.
     pdf_b64: str | None = None
-    # ─── Section selection (scoped review) ─────────────────────────────────
-    # When None, the model sees the canonicalText that was stamped at
-    # /parse time (default = full paper, prioritized + tail-truncated).
-    # When a list is given (e.g. [0, 2, 5]), canonicalText is re-rendered
-    # to include ONLY those sections at full fidelity, with a scope notice
-    # in the user message listing what was omitted. Indexes refer to
-    # paper.sections positions; title + abstract are always included.
-    selected_section_ids: list[int] | None = None
 
 
 class GenerationMetricsOut(BaseModel):

@@ -67,19 +67,12 @@ export const metricKindEnum = pgEnum("metric_kind", [
   "ROUGE_2",
   "ROUGE_L",
   "LLM_JUDGE_OVERALL",
-  "LLM_JUDGE_VERIFIABILITY",
 ]);
 
 export const metricReferenceTypeEnum = pgEnum("metric_reference_type", [
   "NONE",
   "HUMAN_REVIEW",
   "OTHER_SYSTEM",
-]);
-
-export const claimVerdictEnum = pgEnum("claim_verdict", [
-  "SUPPORTED",
-  "CONTRADICTED",
-  "UNSUPPORTED",
 ]);
 
 // ─── Papers ───────────────────────────────────────────────────────────────
@@ -211,12 +204,6 @@ export const reviews = pgTable(
     contextWindow: integer("context_window"),
     outputTokens: integer("output_tokens"),
     timeToFirstTokenMs: integer("time_to_first_token_ms"),
-    // ─── Scoped review (user-chosen sections) ─────────────────────────────
-    // Indexes into the paper's parsed sections array that the user picked
-    // before generation. NULL/empty = default full-paper view. When set,
-    // /reviews/stream/:id forwards this to review-gen so the model only
-    // sees the chosen sections (full fidelity) + a [REVIEW SCOPE] notice.
-    selectedSectionIds: jsonb("selected_section_ids").$type<number[]>(),
     // Judge execution status: COMPLETE if both passes succeeded,
     // PARTIAL if one pass succeeded, FAILED if all retries exhausted.
     // Defaults to COMPLETE for backwards compat with existing rows.
@@ -303,9 +290,11 @@ export const dimensionVotes = pgTable(
       .notNull()
       .references(() => votes.id, { onDelete: "cascade" }),
     dimension: voteDimensionEnum("dimension").notNull(),
-    // Slider value in [-2, +2]:
-    //   < 0 = A better, 0 = tie, > 0 = B better. Magnitude = strength.
+    // Preference on this dimension:
+    //   -1 = A better, 0 = tie, +1 = B better.
     value: integer("value").notNull(),
+    // Optional free-text rationale for this dimension's pick.
+    note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -370,27 +359,6 @@ export const metricScores = pgTable(
   }),
 );
 
-// ─── Paper-grounded reveal ────────────────────────────────────────────────
-
-export const claimChecks = pgTable(
-  "claim_checks",
-  {
-    id: cuid(),
-    reviewId: text("review_id")
-      .notNull()
-      .references(() => reviews.id, { onDelete: "cascade" }),
-    claimText: text("claim_text").notNull(),
-    verdict: claimVerdictEnum("verdict").notNull(),
-    evidence: text("evidence"),
-    judgeModel: text("judge_model").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    reviewIdx: index("claim_checks_review_idx").on(t.reviewId),
-    verdictIdx: index("claim_checks_verdict_idx").on(t.verdict),
-  }),
-);
-
 // ─── Relations (only the joins we actually traverse in code) ──────────────
 
 export const papersRelations = relations(papers, ({ many }) => ({
@@ -410,7 +378,6 @@ export const reviewsRelations = relations(reviews, ({ one, many }) => ({
     references: [reviewSystems.id],
   }),
   metricScores: many(metricScores),
-  claimChecks: many(claimChecks),
 }));
 
 export const votesRelations = relations(votes, ({ one, many }) => ({
@@ -447,10 +414,6 @@ export const metricScoresRelations = relations(metricScores, ({ one }) => ({
   review: one(reviews, { fields: [metricScores.reviewId], references: [reviews.id] }),
 }));
 
-export const claimChecksRelations = relations(claimChecks, ({ one }) => ({
-  review: one(reviews, { fields: [claimChecks.reviewId], references: [reviews.id] }),
-}));
-
 // ─── Type re-exports for convenience ──────────────────────────────────────
 
 export type Paper = typeof papers.$inferSelect;
@@ -464,4 +427,3 @@ export type NewVote = typeof votes.$inferInsert;
 export type DimensionVote = typeof dimensionVotes.$inferSelect;
 export type EloSnapshot = typeof eloSnapshots.$inferSelect;
 export type MetricScore = typeof metricScores.$inferSelect;
-export type ClaimCheck = typeof claimChecks.$inferSelect;

@@ -18,13 +18,8 @@ export function Header() {
     <header className="sticky top-0 z-20 border-b border-rule bg-paper lg:hidden">
       <div className="container flex h-14 items-center justify-between gap-4">
         <Link to="/" className="font-serif font-semibold tracking-tight">
-          <span className="hidden sm:inline">
-            ReviewArena
-            <sup className="font-mono text-[10px] font-medium text-red">β</sup>
-          </span>
-          <span className="sm:hidden">
-            R<sup className="font-mono text-[9px] font-medium text-red">β</sup>
-          </span>
+          <span className="hidden sm:inline">ReviewArena</span>
+          <span className="sm:hidden">R</span>
         </Link>
         <nav className="flex items-center gap-1">
           {navItems.map((item) => (

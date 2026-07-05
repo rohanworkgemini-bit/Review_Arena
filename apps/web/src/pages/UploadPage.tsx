@@ -54,10 +54,9 @@ export function UploadPage() {
         ? uploadPaper(file!, title || undefined)
         : uploadArxiv(arxivUrl.trim(), title || undefined),
     onSuccess: (data) => {
-      // Route through /scope so the user picks which sections each
-      // reviewer sees. ScopePage forwards to /compare after the selection
-      // is saved (or immediately if the user clicks "Review whole paper").
-      navigate(`/scope?paperId=${data.paperId}`);
+      // Straight to the comparison view — both reviewers see the full
+      // paper (trimmed to the fair input budget server-side).
+      navigate(`/compare?paperId=${data.paperId}`);
     },
   });
 

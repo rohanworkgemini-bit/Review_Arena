@@ -5,7 +5,7 @@ Endpoints:
   POST /parse-arxiv     — arXiv ID/URL → ParsedPaper via arxiv2md
   POST /generate        — produce a structured review
   POST /stream-generate — streaming variant: yields tokens then 'done'
-  POST /judge           — LLM-as-judge scoring + claim verdicts
+  POST /judge           — LLM-as-judge scoring (overall + per-dimension)
   POST /metrics/bleu    — sentence BLEU vs a reference review
   POST /metrics/rouge   — ROUGE-1/2/L F-scores
   POST /analytics/topics       — topic model over a review corpus
@@ -47,7 +47,6 @@ from app.adapters._budget import (
     FAIR_INPUT_TOKENS,
     count_tokens,
     render_canonical,
-    render_canonical_scoped,
 )
 from app.judge import DEFAULT_JUDGE_MODEL, judge_review
 from app.metrics import bleu, rouge
@@ -64,7 +63,6 @@ from app.schemas import (
     GenerateResponse,
     GenerationMetricsOut,
     ParsedPaper,
-    ReviewScope,
 )
 
 
@@ -79,29 +77,6 @@ def _attach_canonical(paper: ParsedPaper) -> ParsedPaper:
     paper.canonicalTokens = count_tokens(canonical)
     paper.fullTokens = count_tokens(full_text)
     return paper
-
-
-def _apply_scope(paper: ParsedPaper, selected_section_ids: list[int] | None) -> ReviewScope | None:
-    """If the caller picked a subset of sections, re-render canonicalText
-    to include only those (full fidelity, with a [REVIEW SCOPE] notice)
-    and return the matching ReviewScope. When None, leaves the paper as-is
-    and returns None — adapters see the default full-paper canonical.
-
-    The mutation is intentional: every adapter reads `paper.canonicalText`,
-    so swapping it here makes the change transparent to them. The
-    ReviewScope we return is stamped onto the StructuredReview by the
-    caller so the persisted review carries provenance of what was shared.
-    """
-    if not selected_section_ids:
-        return None
-    canonical, scope = render_canonical_scoped(
-        paper,
-        selected_section_ids=selected_section_ids,
-        max_input_tokens=FAIR_INPUT_TOKENS,
-    )
-    paper.canonicalText = canonical
-    paper.canonicalTokens = scope.canonical_tokens
-    return scope
 
 
 def _metrics_out(metrics) -> GenerationMetricsOut | None:
@@ -250,11 +225,6 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"bad pdf_b64: {e}") from e
 
-    # Apply user-selected section scope, if any. This mutates the
-    # paper's canonicalText so adapters (which read it verbatim) see
-    # only the chosen sections + a [REVIEW SCOPE] notice.
-    scope = _apply_scope(req.paper, req.selected_section_ids)
-
     start = time.perf_counter()
     try:
         result = instance.generate(req.paper, pdf_bytes=pdf_bytes)
@@ -262,9 +232,6 @@ def generate(req: GenerateRequest) -> GenerateResponse:
         logger.exception("adapter %s failed", req.adapter_key)
         raise HTTPException(status_code=502, detail=f"adapter failure: {e}") from e
     elapsed_ms = int((time.perf_counter() - start) * 1000)
-
-    if scope is not None and result.review is not None:
-        result.review.review_scope = scope
 
     return GenerateResponse(
         review=result.review,
@@ -315,10 +282,6 @@ async def stream_generate(req: GenerateRequest, request: Request):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"bad pdf_b64: {e}") from e
 
-    # Apply scope BEFORE the generator opens so the first token is
-    # already keyed off the scoped canonical text.
-    scope = _apply_scope(req.paper, req.selected_section_ids)
-
     async def event_source():
         import json as _json
         start = time.perf_counter()
@@ -352,9 +315,6 @@ async def stream_generate(req: GenerateRequest, request: Request):
                 elif evt.type == "done":
                     elapsed_ms = int((time.perf_counter() - start) * 1000)
                     m = _metrics_out(evt.metrics)
-                    # Stamp scope so the persisted review carries provenance.
-                    if scope is not None and evt.result is not None:
-                        evt.result.review_scope = scope
                     payload = _json.dumps(
                         {
                             "review": evt.result.model_dump() if evt.result else None,
@@ -401,9 +361,7 @@ def judge(req: JudgeRequest) -> dict:
     result = judge_review(req.review_text, req.paper_text, model=req.model)
     return {
         "overall_score": result.overall_score,
-        "verifiability_score": result.verifiability_score,
         "dimension_scores": result.dimension_scores,
-        "claims": [v.model_dump() for v in result.claim_verdicts],
     }
 
 

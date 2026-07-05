@@ -187,7 +187,6 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
           review.reviewSystem.config ?? {},
           undefined,
           abortController.signal,
-          review.selectedSectionIds ?? null,
         );
         for await (const evt of stream) {
           if (evt.kind === "token") {

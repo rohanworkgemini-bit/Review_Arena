@@ -37,7 +37,7 @@ app/
 - `POST /parse-arxiv` — arxiv2md pipeline (URL/ID → ParsedPaper)
 - `POST /generate` — non-streaming review (used by admin/re-score)
 - `POST /stream-generate` — **SSE**: yields token / done / error events
-- `POST /judge` — claim extraction + per-claim verdict
+- `POST /judge` — LLM-judge scoring (overall + per-dimension)
 - `POST /metrics/{bleu,rouge}` — pairwise metrics
 - `POST /analytics/{topics,wordfreq}` — corpus-level analytics
 - `GET /healthz` — readiness probe

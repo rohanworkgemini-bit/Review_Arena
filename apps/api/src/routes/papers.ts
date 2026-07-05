@@ -21,7 +21,6 @@ import {
 import {
   UploadPaperResponseSchema,
   PaperDetailResponseSchema,
-  PaperScopeResponseSchema,
 } from "./schemas.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -336,28 +335,6 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
       // streaming flow (their reviewIds row count differs).
       const expectedForPair = pairRows.length || expectedRow[0]?.c || 0;
 
-      // Pluck section metadata for the scope picker. We don't ship the
-      // full text to the browser (canonicalText alone can be 40+ KB) —
-      // just enough for the user to choose: heading, level, and a rough
-      // length so the picker can show a live token-budget meter.
-      const parsedStructure = (paper.parsedStructure ?? null) as
-        | { sections?: Array<{ heading?: string; level?: number; text?: string }> }
-        | null;
-      const sections = (parsedStructure?.sections ?? []).map((s, idx) => ({
-        id: idx,
-        heading: s.heading ?? "(untitled)",
-        level: s.level ?? 2,
-        // ~3.6 chars per cl100k_base token (matches review-gen's fallback).
-        // Rough but good enough for a live meter.
-        approxTokens: Math.ceil((s.text ?? "").length / 3.6),
-      }));
-
-      // Surface the chosen selection (if any). The picker can pre-populate
-      // from the first review's selection when re-opening the page.
-      const firstReviewWithScope = await db.query.reviews.findFirst({
-        where: eq(reviews.paperId, id),
-      });
-
       const payload = {
         id: paper.id,
         title: paper.userTitle ?? paper.extractedTitle,
@@ -369,70 +346,8 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         expectedReviewCount: expectedForPair,
         createdAt: paper.createdAt.toISOString(),
         reviewIds: pairRows,
-        sections,
-        selectedSectionIds: firstReviewWithScope?.selectedSectionIds ?? null,
       };
       const validated = PaperDetailResponseSchema.parse(payload);
-      res.json(validated);
-    } catch (e) {
-      next(e);
-    }
-  });
-
-  // POST /papers/:id/scope — set the user's chosen section subset on all
-  // reviews for this paper, before any of them have started generating.
-  // Body: { selectedSectionIds: number[] | null }. Null = full paper.
-  router.post("/papers/:id/scope", async (req, res, next) => {
-    try {
-      const { id } = req.params;
-      const body = (req.body ?? {}) as { selectedSectionIds?: number[] | null };
-      const rawIds = body.selectedSectionIds;
-      // Validate: array of nonneg ints OR null. Anything else → 400.
-      let normalized: number[] | null;
-      if (rawIds === null || rawIds === undefined) {
-        normalized = null;
-      } else if (Array.isArray(rawIds) && rawIds.every((n) => Number.isInteger(n) && n >= 0)) {
-        // Dedup + sort so the stored value is canonical (and matches what
-        // review-gen would compute server-side).
-        normalized = Array.from(new Set(rawIds)).sort((a, b) => a - b);
-      } else {
-        res.status(400).json({
-          error: "BadRequest",
-          message: "selectedSectionIds must be an array of nonneg ints or null",
-        });
-        return;
-      }
-
-      // Refuse to set scope only if a review has actually COMPLETED — at
-      // that point the model already saw whatever scope was in effect, and
-      // changing it now would silently invalidate the result.
-      //
-      // Note: precreateReviews() inserts rows as GENERATING even before
-      // any stream fires (it's the "row exists, awaiting EventSource"
-      // marker). We DO allow scope changes during that window, since the
-      // model hasn't actually been called yet. The stream-generate
-      // endpoint reads `review.selectedSectionIds` at the moment it
-      // fires, so whatever scope is in the DB then is what gets used.
-      const completedCount = await db
-        .select({ c: sql<number>`count(*)::int` })
-        .from(reviews)
-        .where(and(eq(reviews.paperId, id), eq(reviews.status, "COMPLETED")));
-      if ((completedCount[0]?.c ?? 0) > 0) {
-        res.status(409).json({
-          error: "Conflict",
-          message: "Reviews for this paper have already completed; scope is locked.",
-        });
-        return;
-      }
-
-      const updated = await db
-        .update(reviews)
-        .set({ selectedSectionIds: normalized, updatedAt: new Date() })
-        .where(eq(reviews.paperId, id))
-        .returning({ id: reviews.id });
-
-      const payload = { updatedReviewCount: updated.length, selectedSectionIds: normalized };
-      const validated = PaperScopeResponseSchema.parse(payload);
       res.json(validated);
     } catch (e) {
       next(e);

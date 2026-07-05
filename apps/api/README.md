@@ -18,7 +18,7 @@ src/
 │   ├── pair.ts          GET /pair, pairToken signing
 │   ├── votes.ts         POST /votes (writes Elo snapshot)
 │   ├── leaderboard.ts   GET /leaderboard (with bootstrap CI)
-│   ├── reveal.ts        GET /reveal/:voteId (claim verdicts)
+│   ├── reveal.ts        GET /reveal/:voteId (judge scores)
 │   └── admin.ts         /admin/export.json + system management
 ├── elo/                 FastChat-port Elo + bootstrap CI
 ├── pair/                LMArena-style pair selection (upload + post-vote)

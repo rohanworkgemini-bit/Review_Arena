@@ -163,8 +163,9 @@ export function LeaderboardPage() {
                   </tbody>
                 </table>
                 <p className="mt-4 font-mono text-[11px] text-graphite">
-                  Elo initialised at 1000 · Bradley–Terry MLE · intervals from 100
-                  bootstrap resamples · overlapping intervals widen the rank spread
+                  Elo initialised at 1000 · online Elo (K=4, full-history replay) ·
+                  intervals from 100 bootstrap resamples · overlapping intervals
+                  widen the rank spread
                 </p>
               </>
             )}

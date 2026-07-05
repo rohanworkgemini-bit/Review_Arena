@@ -129,7 +129,6 @@ def correlate_judge_vs_human(export: dict, out_dir: Path) -> None:
     )
 
     judge_overall = metrics[metrics["kind"] == "LLM_JUDGE_OVERALL"].groupby("system")["value"].mean()
-    verifiability = metrics[metrics["kind"] == "LLM_JUDGE_VERIFIABILITY"].groupby("system")["value"].mean()
 
     # Human winrate (overall): wins / (wins + losses), ties ignored.
     votes = pd.json_normalize(export["votes"])
@@ -151,7 +150,6 @@ def correlate_judge_vs_human(export: dict, out_dir: Path) -> None:
             "system": s,
             "human_winrate": wins[s] / n if n else None,
             "llm_judge_overall_mean": judge_overall.get(s),
-            "llm_judge_verifiability_mean": verifiability.get(s),
             "n_votes": n,
         })
     pd.DataFrame(rows).to_csv(out_dir / "human_vs_judge.csv", index=False)

@@ -260,12 +260,11 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   router.get("/admin/export.json", async (_req, res, next) => {
     try {
-      const [systems, paperRows, voteRows, metricRows, claimRows, snapshotRows] = await Promise.all([
+      const [systems, paperRows, voteRows, metricRows, snapshotRows] = await Promise.all([
         db.query.reviewSystems.findMany(),
         db.query.papers.findMany({ with: { reviews: true } }),
         db.query.votes.findMany({ with: { dimensions: true } }),
         db.query.metricScores.findMany(),
-        db.query.claimChecks.findMany(),
         db.query.eloSnapshots.findMany(),
       ]);
       const payload = {
@@ -274,7 +273,6 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         papers: paperRows,
         votes: voteRows,
         metrics: metricRows,
-        claims: claimRows,
         snapshots: snapshotRows,
       };
       const validated = AdminExportResponseSchema.parse(payload);

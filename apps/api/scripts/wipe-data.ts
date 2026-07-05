@@ -1,9 +1,9 @@
 // One-shot: TRUNCATE the data tables, keep schema + review_systems intact.
 //
 // Use when you want a "clean slate" for a study run — wipes papers,
-// reviews, votes, dimension_votes, elo_snapshots, metric_scores,
-// claim_checks. Leaves review_systems (reviewer registry) so the app
-// is immediately functional — no db:seed needed afterwards.
+// reviews, votes, dimension_votes, elo_snapshots, metric_scores.
+// Leaves review_systems (reviewer registry) so the app is immediately
+// functional — no db:seed needed afterwards.
 //
 // SAFER than db:nuke because the schema, enums, indexes, and the 10
 // reviewer-system rows survive. RESTART IDENTITY resets any sequence
@@ -20,7 +20,6 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 import { Pool } from "pg";
 
 const DATA_TABLES = [
-  "claim_checks",
   "metric_scores",
   "elo_snapshots",
   "dimension_votes",

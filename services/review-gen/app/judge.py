@@ -1,4 +1,4 @@
-"""LLM-as-judge utilities used by the metrics + paper-grounded reveal pipeline.
+"""LLM-as-judge utilities used by the metrics pipeline.
 
 API-based. Dispatches on model name:
   - "gemini-*"  →  Google GenAI (requires GEMINI_API_KEY).
@@ -25,9 +25,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Literal
-
-from pydantic import BaseModel
+from typing import Any
 
 logger = logging.getLogger("review-gen.judge")
 
@@ -43,21 +41,12 @@ JUDGE_RETRY_MAX = 5
 JUDGE_RETRY_BASE_SEC = 1.0
 
 
-class ClaimVerdict(BaseModel):
-    claim: str
-    verdict: Literal["SUPPORTED", "CONTRADICTED", "UNSUPPORTED"]
-    evidence: str | None
-    judge_model: str
-
-
 @dataclass
 class JudgeResult:
     """Bundle returned by the judge for a single review."""
 
     overall_score: float            # 1-10
-    verifiability_score: float       # fraction of SUPPORTED claims
     dimension_scores: dict[str, float]
-    claim_verdicts: list[ClaimVerdict]
 
 
 _DIMENSIONS = (
@@ -87,10 +76,7 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         '  "dimension_scores": {DIM: float in [1,10] for DIM in ['
         f'{",".join(repr(d) for d in _DIMENSIONS)}'
         "]},\n"
-        '  "overall_score": float in [1,10],\n'
-        '  "claims": [\n'
-        '    {"claim": str, "verdict": "SUPPORTED"|"CONTRADICTED"|"UNSUPPORTED", "evidence": str|null}\n'
-        "  ]\n"
+        '  "overall_score": float in [1,10]\n'
         "}\n\n"
         "Methodology — follow in order:\n"
         "1. For each dimension, write 1-2 sentences of reasoning grounded in "
@@ -101,11 +87,7 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         "reasoning. 1=very poor, 5=adequate, 8=strong, 10=exemplary.\n"
         "3. Set `overall_score` as a holistic 1-10 judgment of the review's "
         "value to a paper author (NOT a mean of the dimensions).\n"
-        "4. Extract every factual claim the review makes about the paper "
-        "(5-15 typically) and verdict each against the paper text. "
-        "Evidence should cite a section or quote when SUPPORTED/"
-        "CONTRADICTED, else null.\n"
-        "5. Do NOT reward verbose or padded reviews. Length without "
+        "4. Do NOT reward verbose or padded reviews. Length without "
         "substance should LOWER the COMPREHENSIVENESS and CLARITY scores."
     )
     user_prompt = (
@@ -225,16 +207,13 @@ def judge_review(
 ) -> JudgeResult:
     """Score a review against the paper.
 
-    Returns overall + per-dimension scores plus claim-level verdicts for
-    the paper-grounded reveal screen. Raises RuntimeError if the
+    Returns overall + per-dimension scores. Raises RuntimeError if the
     relevant API key (GEMINI_API_KEY for gemini-*, OPENAI_API_KEY
     otherwise) is missing — no fake-data fallback.
 
     Runs the judge JUDGE_PASSES times and averages numeric scores to
     reduce stochasticity (even at temperature=0 the model is not
-    perfectly deterministic, ~±0.5 variance observed). Claim verdicts
-    are taken from the first pass — they're qualitative and majority
-    voting across passes would require extra alignment logic.
+    perfectly deterministic, ~±0.5 variance observed).
     """
     using_gemini = _is_gemini(model)
     if using_gemini:
@@ -271,21 +250,6 @@ def judge_review(
     if not pass_data:
         raise RuntimeError(f"all {JUDGE_PASSES} judge passes failed")
 
-    # Take claim verdicts from the first successful pass (claims are
-    # qualitative — averaging doesn't apply; we'd need alignment).
-    first = pass_data[0]
-    verdicts = [
-        ClaimVerdict(
-            claim=c["claim"],
-            verdict=c["verdict"],
-            evidence=c.get("evidence"),
-            judge_model=model,
-        )
-        for c in first.get("claims", [])
-    ]
-    supported = sum(1 for v in verdicts if v.verdict == "SUPPORTED")
-    verifiability = (supported / len(verdicts)) if verdicts else 0.0
-
     # Average numeric scores across successful passes.
     def _avg(values: list[float]) -> float:
         return sum(values) / len(values) if values else 5.0
@@ -300,7 +264,5 @@ def judge_review(
 
     return JudgeResult(
         overall_score=overall,
-        verifiability_score=verifiability,
         dimension_scores=dimension_scores,
-        claim_verdicts=verdicts,
     )

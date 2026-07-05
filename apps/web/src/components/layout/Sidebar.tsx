@@ -44,14 +44,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="flex h-14 items-center justify-between border-b border-rule px-3">
         <Link to="/" className="flex min-w-0 items-baseline font-serif font-semibold">
           {collapsed ? (
-            <span className="mx-auto text-lg">
-              R<sup className="font-mono text-[9px] font-medium text-red">β</sup>
-            </span>
+            <span className="mx-auto text-lg">R</span>
           ) : (
-            <span className="truncate tracking-tight">
-              ReviewArena
-              <sup className="font-mono text-[10px] font-medium text-red">β</sup>
-            </span>
+            <span className="truncate tracking-tight">ReviewArena</span>
           )}
         </Link>
         {!collapsed && (

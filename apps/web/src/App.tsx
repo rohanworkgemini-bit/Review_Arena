@@ -20,9 +20,6 @@ const LeaderboardPage = lazy(() =>
 const UploadPage = lazy(() =>
   import("@/pages/UploadPage").then((m) => ({ default: m.UploadPage })),
 );
-const ScopePage = lazy(() =>
-  import("@/pages/ScopePage").then((m) => ({ default: m.ScopePage })),
-);
 const ComparisonPage = lazy(() =>
   import("@/pages/ComparisonPage").then((m) => ({ default: m.ComparisonPage })),
 );
@@ -114,14 +111,6 @@ export function App() {
                 element={
                   <AppShell>
                     <UploadPage />
-                  </AppShell>
-                }
-              />
-              <Route
-                path="/scope"
-                element={
-                  <AppShell>
-                    <ScopePage />
                   </AppShell>
                 }
               />
