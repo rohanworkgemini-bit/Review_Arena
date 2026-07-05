@@ -71,6 +71,7 @@ export function LandingPage() {
       <TopNav />
       <main>
         <Hero />
+        <About />
         <HowItWorks />
         <Standings />
         <Closing />
@@ -347,28 +348,61 @@ function DemoCol({
   );
 }
 
+// ─── What it is — a short statement of the project ─────────────────────────
+
+function About() {
+  return (
+    <section className="border-t border-rule" id="about">
+      <div className="mx-auto max-w-[1080px] px-7">
+        <div className="eyebrow mb-[34px] pt-[52px]">
+          <b className="font-medium text-red">01</b> What it is
+        </div>
+        <div className="grid grid-cols-1 items-start pb-[60px] md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)]">
+          <div className="md:pr-11">
+            <p className="font-serif text-[26px] leading-[1.32] tracking-[-0.01em] text-ink">
+              ReviewArena is a Web platform for{" "}
+              <em className="italic text-redink">Benchmarking automated peer-review systems</em>{" "}
+              under a shared human evaluation.
+            </p>
+          </div>
+
+          <div className="hidden self-stretch bg-rule md:block" aria-hidden />
+
+          <div className="mt-6 md:mt-0 md:pl-11">
+            <p className="text-[15.5px] leading-relaxed text-graphite">
+              Every system reviews the same paper under identical conditions.
+              Human raters read the two reviews blind, votes on which is more
+              useful. The verdicts accumulate into an Elo ranking .
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ─── How it works — a genuine sequence, so the numerals earn their place ───
 
 const STEPS: { n: string; title: string; body: string }[] = [
   {
     n: "i.",
     title: "Submit a manuscript",
-    body: "Upload a paper or paste an arXiv link. The same paper goes to two review systems chosen by exposure-weighted sampling.",
+    body: "Upload a paper or paste an arXiv link. The same paper goes to two review systems .",
   },
   {
     n: "ii.",
-    title: "Read two reports, blind",
-    body: "Two reviews arrive with their authoring systems hidden. You see only the prose — the argument, the evidence, the ask.",
+    title: "Read the pair of generated reviews",
+    body: "Two reviews arrive with their generating systems hidden.",
   },
   {
     n: "iii.",
-    title: "Cast a verdict",
-    body: "Pick the more useful report, and weigh eight dimensions — comprehensiveness, clarity, actionability, and the rest.",
+    title: "Vote on which is more useful",
+    body: "Vote for the review that which you find more overall helpful as well as across multiple dimensions .",
   },
   {
     n: "iv.",
-    title: "The ladder updates",
-    body: "Your vote feeds a bootstrapped Elo model. Rankings shift only as fast as the evidence allows; confidence intervals stay visible.",
+    title: "See the results ",
+    body: "Your vote feeds a Elo-based leaderboard. See the updated ratings and confidence intervals for the two systems you just compared.",
   },
 ];
 
@@ -377,7 +411,7 @@ function HowItWorks() {
     <section className="border-t border-rule" id="how">
       <div className="mx-auto max-w-[1080px] px-7">
         <div className="eyebrow mb-[34px] pt-[52px]">
-          <b className="font-medium text-red">01</b> How it works
+          <b className="font-medium text-red">02</b> How it works
         </div>
         <div className="pb-[60px]">
           {STEPS.map((step, i) => (
@@ -424,7 +458,7 @@ function Standings() {
     <section className="border-t border-rule" id="leaderboard">
       <div className="mx-auto max-w-[1080px] px-7 pb-16">
         <div className="eyebrow mb-[34px] pt-[52px]">
-          <b className="font-medium text-red">02</b> Standings
+          <b className="font-medium text-red">03</b> Standings
           <span className="ml-auto font-mono text-[11px] normal-case tracking-[0.1em] text-graphite">
             {isLive
               ? `live · ${data?.totalVotes ?? 0} votes · ${data?.totalPapers ?? 0} papers`
@@ -501,10 +535,10 @@ function Closing() {
     <section className="border-t-[3px] border-red">
       <div className="mx-auto max-w-[1080px] px-7 pb-[70px] pt-14 text-center">
         <h2 className="mb-2 font-serif text-[clamp(26px,3.4vw,36px)] font-semibold tracking-[-0.02em]">
-          Stop trusting the <em className="font-normal italic text-redink">score.</em>
+          Make your first <em className="font-normal italic text-redink">vote.</em>
         </h2>
         <p className="mb-[26px] text-graphite">
-          Read the reports. Make the call. Let the ladder settle.
+          Read the reviews and vote the better one.
         </p>
         <Link
           to="/upload"

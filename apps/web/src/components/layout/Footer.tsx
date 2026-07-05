@@ -11,7 +11,7 @@ export function Footer() {
   return (
     <footer className="border-t border-rule">
       <div className="mx-auto flex max-w-[1080px] flex-col items-start justify-between gap-3 px-7 pb-10 pt-[22px] font-mono text-[11.5px] text-graphite md:flex-row md:items-baseline">
-        <span>ReviewArena · benchmarking peer-review systems at thesis scale</span>
+        <span>ReviewArena · benchmarking automated peer-review systems under a shared human evaluation</span>
         <div className="flex items-baseline gap-5">
           <Link to="/leaderboard" className="transition-colors hover:text-ink">
             Leaderboard
@@ -24,7 +24,7 @@ export function Footer() {
           >
             GitHub
           </a>
-          <span className="text-red">§ built for reviewers of reviewers</span>
+        
         </div>
       </div>
     </footer>
