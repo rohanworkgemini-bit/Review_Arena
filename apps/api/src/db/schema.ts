@@ -241,6 +241,9 @@ export const votes = pgTable(
     reviewAId: text("review_a_id").notNull().references(() => reviews.id),
     reviewBId: text("review_b_id").notNull().references(() => reviews.id),
     winner: voteWinnerEnum("winner").notNull(),
+    // Optional free-text rationale for the overall verdict (mirrors the
+    // per-dimension note; qualitative signal for thesis analysis).
+    note: text("note"),
     // Anonymous session cookie. No PII column anywhere on this table by design.
     sessionId: text("session_id").notNull(),
     userAgent: text("user_agent"),

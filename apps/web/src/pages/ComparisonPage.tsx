@@ -85,6 +85,8 @@ export function ComparisonPage() {
   const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>({});
   // Optional free-text rationale per dimension, keyed the same way.
   const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>({});
+  // Optional free-text rationale for the overall verdict.
+  const [overallNote, setOverallNote] = useState("");
   // Per-dimension picks are REQUIRED — open by default so the rater
   // sees right away that 8 picks are needed before they can submit.
   const [refineOpen, setRefineOpen] = useState(true);
@@ -153,6 +155,7 @@ export function ComparisonPage() {
       submitVote({
         pairToken: pair.pairToken,
         winner,
+        note: overallNote.trim() || undefined,
         decisionMs: Date.now() - startedAt,
         dimensions: Object.entries(dimensionValues).map(([dimension, value]) => ({
           dimension: dimension as VoteDimension,
@@ -360,6 +363,28 @@ export function ComparisonPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Optional overall rationale — free-text for the final A/Tie/B
+          verdict, mirroring the per-dimension notes. Never gates the vote. */}
+      <div className="border border-rule2 bg-card">
+        <div className="flex items-baseline gap-2 bg-paper2 px-4 py-3">
+          <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
+            Overall note
+          </span>
+          <span className="font-mono text-[11px] text-graphite">optional</span>
+        </div>
+        <div className="border-t border-rule px-4 py-4">
+          <textarea
+            value={overallNote}
+            onChange={(e) => setOverallNote(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="Why is this review more useful? (optional)"
+            aria-label="Overall verdict note"
+            className="w-full resize-y border border-rule2 bg-paper px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-ink placeholder:text-graphite"
+          />
+        </div>
       </div>
 
       {voteMutation.isError && (

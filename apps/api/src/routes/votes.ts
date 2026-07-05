@@ -146,6 +146,7 @@ export function votesRouter(config: Config): Router {
               reviewAId: payload.reviewAId,
               reviewBId: payload.reviewBId,
               winner: body.winner,
+              note: body.note?.trim() ? body.note.trim() : null,
               sessionId: req.sessionId,
               userAgent: req.headers["user-agent"] ?? null,
               decisionMs: body.decisionMs ?? null,

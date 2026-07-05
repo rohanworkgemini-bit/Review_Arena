@@ -65,6 +65,9 @@ export type PairResponse = z.infer<typeof PairResponseSchema>;
 export const SubmitVoteRequestSchema = z.object({
   pairToken: z.string(),
   winner: z.enum(["A", "B", "TIE"]),
+  // Optional free-text rationale for the overall verdict — the same
+  // qualitative signal the per-dimension notes carry, one level up.
+  note: z.string().max(1000).optional(),
   decisionMs: z.number().int().nonnegative().optional(),
   // All 8 dimensions are now required (one pick per dimension, no
   // duplicates). The UI gates the submit button on this; the server
