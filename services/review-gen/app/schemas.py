@@ -72,7 +72,8 @@ class StructuredReview(BaseModel):
     soundness: float | None = Field(default=None, ge=1, le=10)
     presentation: float | None = Field(default=None, ge=1, le=10)
     contribution: float | None = Field(default=None, ge=1, le=10)
-    overallRating: float | None = Field(default=None, ge=1, le=10)
+    # ge=0: the ICLR 2026 overall scale includes 0 (Strong reject).
+    overallRating: float | None = Field(default=None, ge=0, le=10)
     confidence: float | None = Field(default=None, ge=1, le=5)
 
 
@@ -83,6 +84,10 @@ class GenerateRequest(BaseModel):
     adapter_key: str
     paper: ParsedPaper
     config: dict = Field(default_factory=dict)
+    # Venue whose review form / rating scale the review should follow
+    # (see conference_scales.py). Chosen by the uploader; identical for
+    # both systems in a battle.
+    conference: str = "iclr"
     # Original PDF bytes, base64-encoded. Forwarded only for adapters
     # that need raw PDF input (MARG). Optional — None for everything else.
     pdf_b64: str | None = None

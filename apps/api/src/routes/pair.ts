@@ -169,6 +169,7 @@ export function pairRouter(config: Config): Router {
               paper: {
                 id: paper.id,
                 title: paper.userTitle ?? paper.extractedTitle,
+                conference: paper.conference,
               },
               reviewA: { reviewId: reviewA.id, structured: reviewA.structured },
               reviewB: { reviewId: reviewB.id, structured: reviewB.structured },
@@ -226,6 +227,7 @@ export function pairRouter(config: Config): Router {
         paper: {
           id: paper.id,
           title: paper.userTitle ?? paper.extractedTitle,
+          conference: paper.conference,
         },
         reviewA: {
           reviewId: reviewA.id,

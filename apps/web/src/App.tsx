@@ -29,6 +29,9 @@ const RevealPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("@/pages/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
+const ConsentPage = lazy(() =>
+  import("@/pages/ConsentPage").then((m) => ({ default: m.ConsentPage })),
+);
 
 function RouteFallback() {
   // Page-level Suspense fallback. Single muted card so the layout
@@ -135,6 +138,14 @@ export function App() {
                 element={
                   <AppShell>
                     <AdminPage />
+                  </AppShell>
+                }
+              />
+              <Route
+                path="/consent"
+                element={
+                  <AppShell>
+                    <ConsentPage />
                   </AppShell>
                 }
               />

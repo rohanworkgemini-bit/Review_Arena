@@ -156,7 +156,9 @@ def normalize_dim(value: float | None, scale: ScoreScale) -> float | None:
 
 
 def _rating(text: str) -> float | None:
-    return _clamp(_first_number(text), 1.0, 10.0)
+    # Lower bound 0: the ICLR 2026 overall scale includes 0 (Strong
+    # reject). Other venues' minima (1) are enforced by the prompt.
+    return _clamp(_first_number(text), 0.0, 10.0)
 
 
 def _confidence(text: str) -> float | None:

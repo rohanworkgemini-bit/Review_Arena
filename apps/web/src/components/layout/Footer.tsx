@@ -16,6 +16,9 @@ export function Footer() {
           <Link to="/leaderboard" className="transition-colors hover:text-ink">
             Leaderboard
           </Link>
+          <Link to="/consent" className="transition-colors hover:text-ink">
+            Data processing
+          </Link>
           <a
             href="https://github.com/rohanworkgemini/review-arena"
             target="_blank"

@@ -45,7 +45,9 @@ interface PlaygroundResponse {
   metrics: { input_tokens?: number; output_tokens?: number; context_window?: number } | null;
 }
 
-export function ReviewerPlayground() {
+// token: the admin bearer token — /reviews/playground is admin-gated on
+// the API, so every submit must carry it.
+export function ReviewerPlayground({ token }: { token: string }) {
   const [source, setSource] = useState<Source>("pdf");
   const [file, setFile] = useState<File | null>(null);
   const [arxivUrl, setArxivUrl] = useState("");
@@ -98,6 +100,7 @@ export function ReviewerPlayground() {
         method: "POST",
         body: fd,
         credentials: "include",
+        headers: { authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
@@ -237,7 +240,7 @@ export function ReviewerPlayground() {
           <div className="text-xs text-muted-foreground">
             {mutation.isPending
               ? "Working… (parse 5-30s + generation 5-90s)"
-              : "Submission flows through full canonical-input + 3,072 token cap."}
+              : "Submission sends the complete parsed paper — no output cap for commercial models."}
           </div>
           <Button onClick={() => mutation.mutate()} disabled={!canSubmit}>
             {mutation.isPending ? (

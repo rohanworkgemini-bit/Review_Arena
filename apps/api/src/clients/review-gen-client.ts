@@ -165,12 +165,16 @@ export class ReviewGenClient {
     config: object = {},
     pdfBytes?: Buffer,
     signal?: AbortSignal,
+    conference?: string,
   ): AsyncGenerator<StreamEvent, void, unknown> {
     const body: Record<string, unknown> = {
       adapter_key: adapterKey,
       paper,
       config,
     };
+    // Venue whose review form the adapter prompt follows (GenerateRequest
+    // .conference on the Python side; defaults to iclr there).
+    if (conference) body.conference = conference;
     if (pdfBytes) body.pdf_b64 = pdfBytes.toString("base64");
 
     const { statusCode, body: respBody } = await request(
@@ -225,6 +229,7 @@ export class ReviewGenClient {
     paper: ParsedPaper,
     config: object = {},
     pdfBytes?: Buffer,
+    conference?: string,
   ): Promise<GenerateResult> {
     // Only attach the PDF if the caller explicitly passed it through —
     // the Python side only decodes it when the chosen adapter has
@@ -235,6 +240,7 @@ export class ReviewGenClient {
       paper,
       config,
     };
+    if (conference) body.conference = conference;
     if (pdfBytes) {
       body.pdf_b64 = pdfBytes.toString("base64");
     }

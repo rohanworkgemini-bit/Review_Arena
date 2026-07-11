@@ -34,7 +34,7 @@ class GenerationMetrics:
     """Fairness accounting for one generation (docs/FAIRNESS.md A4).
 
     input_tokens:   reference-tokenizer count of the canonical text the
-                    system was handed (= FAIR_INPUT_TOKENS or fewer).
+                    system was handed (the full canonical text for commercial adapters).
     output_tokens:  reference-tokenizer count of the produced review.
     context_window: the system's native window (logged for transparency;
                     NOT used to size the input — that is equalized).

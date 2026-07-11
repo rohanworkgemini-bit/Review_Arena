@@ -61,13 +61,10 @@ export const voteDimensionEnum = pgEnum("vote_dimension", [
   "TECHNICAL_TERMS",
 ]);
 
-export const metricKindEnum = pgEnum("metric_kind", [
-  "BLEU",
-  "ROUGE_1",
-  "ROUGE_2",
-  "ROUGE_L",
-  "LLM_JUDGE_OVERALL",
-]);
+// LLM-as-judge is the single automatic quality metric. BLEU/ROUGE were
+// removed — reference-overlap metrics are a poor fit for peer reviews
+// (a review isn't a translation of the paper).
+export const metricKindEnum = pgEnum("metric_kind", ["LLM_JUDGE_OVERALL"]);
 
 export const metricReferenceTypeEnum = pgEnum("metric_reference_type", [
   "NONE",
@@ -102,10 +99,11 @@ export const papers = pgTable(
     parserRawXml: text("parser_raw_xml"),
     // ─── Fairness: canonical input (docs/FAIRNESS.md A1/C1) ───────────────
     // The ONE canonical paper string handed byte-identically to every
-    // system, rendered once at parse time. canonicalTokens = its
-    // reference-token count (capped at the fair input budget); fullTokens
-    // = the untruncated paper's token count. lengthBand buckets fullTokens
-    // (short/medium/long) for length-as-covariate analysis.
+    // system, rendered once at parse time — the COMPLETE paper (input
+    // caps removed by design; commercial models fit whole papers).
+    // canonicalTokens = its reference-token count; fullTokens = the
+    // untruncated paper's token count (now equal for new rows).
+    // lengthBand buckets fullTokens for length-as-covariate analysis.
     canonicalText: text("canonical_text"),
     canonicalTokens: integer("canonical_tokens"),
     fullTokens: integer("full_tokens"),
@@ -115,6 +113,18 @@ export const papers = pgTable(
     // can trigger the (billable) model call. Nullable for legacy rows
     // uploaded before this column existed.
     uploadedBySessionId: text("uploaded_by_session_id"),
+    // When the uploader accepted the data-processing notice (/consent):
+    // paper content is sent to commercial AI APIs (OpenAI, Google,
+    // Anthropic, DeepSeek), the Datalab Marker parsing API, and
+    // self-hosted specialist models; infrastructure runs on Vercel,
+    // Google Cloud and Modal. Required for new uploads (the API rejects
+    // uploads without consent). Nullable for legacy rows only.
+    consentAcceptedAt: timestamp("consent_accepted_at", { withTimezone: true }),
+    // Which venue's review form / rating scale the generated reviews
+    // follow (iclr | icml | neurips | acl | emnlp). Chosen at upload;
+    // both systems in a battle inherit it. Scales defined in
+    // services/review-gen/app/conference_scales.py.
+    conference: text("conference").notNull().default("iclr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -193,8 +203,7 @@ export const reviews = pgTable(
     // ─── Fairness: per-generation token accounting (docs/FAIRNESS.md A4) ───
     // Proves no silent truncation and feeds verbosity analysis.
     //   inputTokensSent     — canonical tokens handed to the system
-    //   inputTokensConsumed — tokens the model actually saw (= sent here,
-    //                         since the canonical text fits the fair window)
+    //   inputTokensConsumed — tokens the model actually saw
     //   contextWindow       — the system's native window (logged, not used
     //                         to size input — that is equalized)
     //   outputTokens        — reference-token count of the produced review

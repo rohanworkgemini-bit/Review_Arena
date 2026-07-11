@@ -1,26 +1,22 @@
-"""Shared INPUT/OUTPUT budget — the fairness core.
+"""Canonical paper text + token accounting.
 
-FAIRNESS CONTRACT (see docs/FAIRNESS.md, invariants A1 + A4):
+DESIGN DECISION (2026-07-11): the fairness input/output caps were
+REMOVED. Every commercial system now receives the COMPLETE canonical
+paper text and no output-token cap (except provider-mandated ceilings,
+e.g. Anthropic requires an explicit max_tokens). The thesis runs
+commercial models only (GPT-5, Claude, Gemini, DeepSeek), all with
+>=128k-token context windows, so full papers fit natively.
 
-  Every system reviewing a paper receives the BYTE-IDENTICAL canonical
-  text and the SAME output-token cap. Context-window size and verbosity
-  allowance are equalized away so the only variable is the reviewing
-  itself. This is the controlled-experiment design: "review quality given
-  equal resources", not "systems as they happen to be configured".
+What remains shared:
+  - The canonical text itself: rendered ONCE per paper, byte-identical
+    for every system (adapters never re-render).
+  - ONE reference tokenizer (tiktoken cl100k_base) for all token
+    accounting, so recorded counts are comparable across systems.
+  - Specialist (vLLM) adapters still trim input to fit their own
+    context window — a hardware limit, not a fairness policy.
 
-  - FAIR_INPUT_TOKENS:  the paper-text budget handed to EVERY system.
-  - FAIR_OUTPUT_TOKENS: the max output tokens EVERY system may produce.
-
-  Both are measured with ONE reference tokenizer (tiktoken cl100k_base)
-  so the unit is identical across systems regardless of each model's own
-  tokenizer. The canonical text is rendered ONCE per paper and reused
-  verbatim — adapters never re-render or re-truncate.
-
-  FAIR_INPUT + FAIR_OUTPUT + overhead must fit inside the SMALLEST
-  system's context window so no system silently truncates further. The
-  thesis runs commercial models only (GPT-5, Claude, Gemini, DeepSeek),
-  all ≥128k context, so 30000 + 8000 + overhead fits with huge headroom
-  and the vast majority of papers pass through untruncated.
+FAIR_INPUT_TOKENS / FAIR_OUTPUT_TOKENS survive only as legacy metric
+labels; they no longer gate anything for commercial adapters.
 """
 from __future__ import annotations
 
@@ -29,7 +25,7 @@ from math import ceil
 from app.paper_render import render_paper_text
 from app.schemas import ParsedPaper
 
-# ─── the fair budget (identical for every system) ──────────────────────────
+# Legacy labels only — no longer enforced (see module docstring).
 FAIR_INPUT_TOKENS = 30_000
 FAIR_OUTPUT_TOKENS = 8_000
 
@@ -77,24 +73,23 @@ def render_canonical(paper: ParsedPaper, *, max_input_tokens: int = FAIR_INPUT_T
     """Render the ONE canonical paper string handed to every system.
 
     Deterministic from the parsed structure: same paper → same string.
-    Section-aware truncation (title/abstract/conclusion preserved) is done
-    by render_paper_text; we trim to the fair token budget using the
-    reference tokenizer so the result is exactly FAIR_INPUT_TOKENS or
-    fewer, measured identically for all systems.
+    The FULL paper is rendered — no fairness truncation (removed by
+    design decision; commercial models all fit whole papers natively).
     """
-    # First pass: a generous char budget so render_paper_text keeps the
-    # right sections, then trim precisely by reference tokens.
-    text = render_paper_text(paper, max_chars=_char_budget_for_tokens(max_input_tokens) * 2)
-    return _trim_to_tokens(text, max_input_tokens)
+    # No truncation: the complete paper, linearized deterministically.
+    # (max_input_tokens is accepted for backwards compatibility but
+    # ignored — trimming now happens only in specialist adapters that
+    # must fit a hardware context window; see trim_to_tokens.)
+    return render_paper_text(paper, max_chars=100_000_000)
 
 
 # Reserve tokens for the truncation marker so the final string (marker
 # included) still fits within the budget.
-_TRUNCATION_MARKER = "\n\n[… truncated to fair input budget]"
+_TRUNCATION_MARKER = "\n\n[… truncated to fit this model's context window]"
 _MARKER_TOKENS = 16
 
 
-def _trim_to_tokens(text: str, max_tokens: int) -> str:
+def trim_to_tokens(text: str, max_tokens: int) -> str:
     """Trim text to at most max_tokens reference tokens (marker included),
     on a paragraph boundary where possible so we never cut mid-word."""
     if count_tokens(text) <= max_tokens:

@@ -20,60 +20,22 @@ fake votes against missing data.
 from __future__ import annotations
 
 import os
-from textwrap import dedent
 from typing import Iterator
 
 from app.adapters._budget import (
-    FAIR_OUTPUT_TOKENS,
     count_tokens,
     render_canonical,
 )
+from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
 from app.schemas import ParsedPaper
 
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
-_SYSTEM_PROMPT = dedent("""
-    You are an experienced peer reviewer for a top-tier ML/NLP conference
-    (NeurIPS, ICLR, ACL). Read the paper below and write a structured peer
-    review using markdown headers, in the EXACT order shown.
-
-    For each numeric section (Soundness, Presentation, Contribution, Rating,
-    Confidence), begin with a SINGLE INTEGER on its own line, then one
-    brief sentence explaining the score.
-
-    ## Summary
-    (2-4 sentences describing what the paper does and your overall impression.)
-
-    ## Soundness
-    (Integer 1-4 — 1=poor, 2=fair, 3=good, 4=excellent. Methodology + logical
-    consistency.)
-
-    ## Presentation
-    (Integer 1-4. Clarity, structure, writing quality.)
-
-    ## Contribution
-    (Integer 1-4. Novelty and significance.)
-
-    ## Rating
-    (Integer 1-10. 1=strong reject, 5=marginal, 8=accept, 10=strong accept.)
-
-    ## Confidence
-    (Integer 1-5. How confident you are in this assessment.)
-
-    ## Strengths
-    (Concise bullet list, 3-5 items.)
-
-    ## Weaknesses
-    (Concise bullet list, 3-6 items.)
-
-    ## Questions
-    (Concise bullet list of questions for the authors, 2-5 items.)
-
-
-    Plain markdown only — no preamble, no JSON, no extra commentary.
-""").strip()
+# The review-form system prompt is built per selected conference in
+# __init__ — see app/conference_scales.py (single source for the form
+# shared by all commercial adapters; only ## Rating varies by venue).
 
 
 class DeepSeekAdapter(Adapter):
@@ -81,6 +43,9 @@ class DeepSeekAdapter(Adapter):
 
     def __init__(self, config: dict | None = None) -> None:
         super().__init__(config)
+        self._system_prompt = build_system_prompt(
+            self.config.get('conference', DEFAULT_CONFERENCE)
+        )
         api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
             raise RuntimeError(
@@ -104,10 +69,12 @@ class DeepSeekAdapter(Adapter):
         return {
             "model": self._model,
             "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            "max_tokens": FAIR_OUTPUT_TOKENS,
+            # DeepSeek defaults max_tokens to 4k when omitted — sending
+            # the provider maximum so the model is effectively uncapped.
+            "max_tokens": 8_192,
             "temperature": self._temperature,
             "stream": stream,
         }
@@ -118,7 +85,7 @@ class DeepSeekAdapter(Adapter):
             output_tokens=count_tokens(raw),
             context_window=self._context_window,
             fair_input_tokens=count_tokens(prompt),
-            fair_output_tokens=FAIR_OUTPUT_TOKENS,
+            fair_output_tokens=0,  # 0 = uncapped (8192 = provider max)
         )
 
     def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:

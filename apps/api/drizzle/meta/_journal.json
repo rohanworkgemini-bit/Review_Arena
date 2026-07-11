@@ -36,6 +36,27 @@
       "when": 1783272934030,
       "tag": "0004_tricky_anita_blake",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783782730124,
+      "tag": "0005_optimal_silver_sable",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783783344372,
+      "tag": "0006_bitter_shooting_star",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1783785555754,
+      "tag": "0007_sweet_veda",
+      "breakpoints": true
     }
   ]
 }

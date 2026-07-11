@@ -22,6 +22,7 @@ import {
   UploadPaperResponseSchema,
   PaperDetailResponseSchema,
 } from "./schemas.js";
+import { ConferenceSchema } from "@reviewarena/shared-types";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -87,7 +88,26 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         return;
       }
 
+      // Data-processing consent (see web /consent). Multipart fields are
+      // strings, so the checkbox arrives as "true". Enforced server-side
+      // so a non-UI client can't submit papers into the commercial-API
+      // pipeline without the notice being accepted.
+      if (req.body.consent !== "true") {
+        logger.warn({ sessionId: req.sessionId }, "upload_missing_consent");
+        res.status(400).json({
+          error: "ConsentRequired",
+          message:
+            "Uploading requires accepting the data-processing notice (see /consent).",
+        });
+        return;
+      }
+
       const userTitle = typeof req.body.title === "string" ? req.body.title : null;
+      // Venue whose review form the generated reviews follow. Validated
+      // against the shared enum; malformed values fall back to iclr
+      // rather than 400 — the scale choice must never lose an upload.
+      const confParse = ConferenceSchema.safeParse(req.body.conference);
+      const conference = confParse.success ? confParse.data : "iclr";
       const pdfBuffer = req.file.buffer;
       const filename = req.file.originalname || "paper.pdf";
       const hash = createHash("sha256").update(pdfBuffer).digest("hex");
@@ -106,6 +126,8 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
           userTitle,
           status: "PARSING",
           uploadedBySessionId: req.sessionId,
+          consentAcceptedAt: new Date(),
+          conference,
         })
         .returning();
       const paper = created!;
@@ -133,6 +155,16 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         });
         return;
       }
+      // Data-processing consent — JSON body, so a real boolean here.
+      if (req.body?.consent !== true) {
+        logger.warn({ sessionId: req.sessionId }, "upload_missing_consent");
+        res.status(400).json({
+          error: "ConsentRequired",
+          message:
+            "Uploading requires accepting the data-processing notice (see /consent).",
+        });
+        return;
+      }
       const raw = typeof req.body?.url === "string" ? req.body.url : "";
       const arxivId = normalizeArxivId(raw);
       if (!arxivId) {
@@ -143,6 +175,8 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         return;
       }
       const userTitle = typeof req.body.title === "string" ? req.body.title : null;
+      const confParse = ConferenceSchema.safeParse(req.body.conference);
+      const conference = confParse.success ? confParse.data : "iclr";
 
       // No dedup — every arxiv upload creates a fresh paper row + review
       // pair, matching the PDF route. Use a session-scoped hash so the
@@ -159,6 +193,8 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
           userTitle,
           status: "PARSING",
           uploadedBySessionId: req.sessionId,
+          consentAcceptedAt: new Date(),
+          conference,
         })
         .returning();
       const paper = created!;

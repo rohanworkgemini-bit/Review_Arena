@@ -247,8 +247,8 @@ converges cleanly.
 - [x] **Checkpoint 5** — FastAPI review-gen + 4 live adapters
 - [x] **Checkpoint 6** — Upload → parse → pair-select → generate →
        vote → Elo → snapshot → reveal, with SSE streaming end-to-end
-- [x] **Checkpoint 7** — BLEU/ROUGE/judge scoring,
-       BERTopic / word-frequency analytics
+- [x] **Checkpoint 7** — LLM-as-judge scoring (sole automatic metric;
+       BLEU/ROUGE later removed), BERTopic / word-frequency analytics
 - [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Modal deploys,
        [thesis evaluation script](scripts/thesis_eval.py)
 

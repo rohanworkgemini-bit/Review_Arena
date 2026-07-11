@@ -233,6 +233,56 @@ describe("selectPair", () => {
       expect(counts.ab).toBeGreaterThan(counts.ad);
     });
 
+    it("boost is stage-1-only: a boosted rival gets no ×5 in stage 2 (FastChat parity)", () => {
+      // b is boosted. When a is chosen first, b and c compete as rivals at
+      // equal ratings — FastChat withholds sampling_boost_models in the
+      // rival loop, so b must NOT be favoured over c. Give a overwhelming
+      // stage-1 weight so it is picked first almost always.
+      const candidates = [
+        sys("a", 1000, { sampleWeight: 1000 }),
+        sys("b", 1000, { boost: true }),
+        sys("c", 1000),
+      ];
+      const rng = seededRng(77);
+      let bRival = 0;
+      let cRival = 0;
+      const N = 6000;
+      for (let i = 0; i < N; i++) {
+        const r = selectPair(candidates, { rng })!;
+        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
+        if (!slugs.has("a")) continue;
+        if (slugs.has("b")) bRival++;
+        if (slugs.has("c")) cRival++;
+      }
+      // Equal weights → roughly 50/50; a 5× boost leaking into stage 2
+      // would push b past ~83%. Allow generous sampling noise.
+      const bShare = bRival / (bRival + cRival);
+      expect(bShare).toBeGreaterThan(0.45);
+      expect(bShare).toBeLessThan(0.55);
+    });
+
+    it("strict-target patterns are start-anchored like Python re.match (FastChat parity)", () => {
+      // FastChat's is_model_match_pattern uses re.match with no trailing $,
+      // so the pattern "gpt" matches the slug "gpt-4".
+      const candidates = [
+        sys("a", 1000, { battleStrictTargets: ["gpt"] }),
+        sys("gpt-4", 1000),
+        sys("gemini-pro", 1000),
+      ];
+      const rng = seededRng(88);
+      let aSeen = 0;
+      for (let i = 0; i < 2000; i++) {
+        const r = selectPair(candidates, { rng })!;
+        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
+        if (slugs.has("a")) {
+          aSeen++;
+          expect(slugs.has("gpt-4")).toBe(true);
+          expect(slugs.has("gemini-pro")).toBe(false);
+        }
+      }
+      expect(aSeen).toBeGreaterThan(0);
+    });
+
     it("sampleWeight=0 effectively disables a system", () => {
       const candidates = [
         sys("a", 1000),

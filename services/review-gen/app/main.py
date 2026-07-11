@@ -5,9 +5,8 @@ Endpoints:
   POST /parse-arxiv     — arXiv ID/URL → ParsedPaper via arxiv2md
   POST /generate        — produce a structured review
   POST /stream-generate — streaming variant: yields tokens then 'done'
-  POST /judge           — LLM-as-judge scoring (overall + per-dimension)
-  POST /metrics/bleu    — sentence BLEU vs a reference review
-  POST /metrics/rouge   — ROUGE-1/2/L F-scores
+  POST /judge           — LLM-as-judge scoring (overall + per-dimension),
+                          the single automatic quality metric
   POST /analytics/topics       — topic model over a review corpus
   POST /analytics/wordfreq     — per-system word frequencies
   GET  /health
@@ -44,12 +43,10 @@ from starlette.concurrency import run_in_threadpool
 
 from app import adapters
 from app.adapters._budget import (
-    FAIR_INPUT_TOKENS,
     count_tokens,
     render_canonical,
 )
 from app.judge import DEFAULT_JUDGE_MODEL, judge_review
-from app.metrics import bleu, rouge
 from app.analytics import topic_model, word_frequencies
 from app.parsing import (
     Arxiv2MdError,
@@ -72,7 +69,7 @@ def _attach_canonical(paper: ParsedPaper) -> ParsedPaper:
     the byte-identical text. Also records the full (untruncated) token
     count for fraction-of-paper-used accounting."""
     full_text = render_paper_text(paper, max_chars=10_000_000)  # effectively untruncated
-    canonical = render_canonical(paper, max_input_tokens=FAIR_INPUT_TOKENS)
+    canonical = render_canonical(paper)  # full paper — no input cap
     paper.canonicalText = canonical
     paper.canonicalTokens = count_tokens(canonical)
     paper.fullTokens = count_tokens(full_text)
@@ -205,11 +202,15 @@ def _cache_key(adapter_key: str, config: dict) -> tuple:
 
 @app.post("/generate", response_model=GenerateResponse, dependencies=[Depends(verify_api_key)])
 def generate(req: GenerateRequest) -> GenerateResponse:
-    key = _cache_key(req.adapter_key, req.config)
+    # Fold the venue into the adapter config: prompt-based adapters read
+    # config["conference"] to build their review-form prompt, and the
+    # cache key then keeps one instance per (adapter, config, venue).
+    cfg = {**req.config, "conference": req.conference}
+    key = _cache_key(req.adapter_key, cfg)
     instance = _INSTANCE_CACHE.get(key)
     if instance is None:
         try:
-            instance = adapters.get(req.adapter_key, req.config)
+            instance = adapters.get(req.adapter_key, cfg)
         except KeyError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except RuntimeError as e:
@@ -263,11 +264,15 @@ async def stream_generate(req: GenerateRequest, request: Request):
     """
     from fastapi.responses import StreamingResponse
 
-    key = _cache_key(req.adapter_key, req.config)
+    # Fold the venue into the adapter config: prompt-based adapters read
+    # config["conference"] to build their review-form prompt, and the
+    # cache key then keeps one instance per (adapter, config, venue).
+    cfg = {**req.config, "conference": req.conference}
+    key = _cache_key(req.adapter_key, cfg)
     instance = _INSTANCE_CACHE.get(key)
     if instance is None:
         try:
-            instance = adapters.get(req.adapter_key, req.config)
+            instance = adapters.get(req.adapter_key, cfg)
         except KeyError as e:
             raise HTTPException(status_code=404, detail=str(e))
         except RuntimeError as e:
@@ -363,30 +368,6 @@ def judge(req: JudgeRequest) -> dict:
         "overall_score": result.overall_score,
         "dimension_scores": result.dimension_scores,
     }
-
-
-# ─── /metrics ──────────────────────────────────────────────────────────────
-
-
-class PairwiseTextRequest(BaseModel):
-    candidate: str
-    reference: str
-
-
-@app.post("/metrics/bleu", dependencies=[Depends(verify_api_key)])
-def metrics_bleu(req: PairwiseTextRequest) -> dict:
-    try:
-        return {"BLEU": bleu(req.candidate, req.reference)}
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-
-
-@app.post("/metrics/rouge", dependencies=[Depends(verify_api_key)])
-def metrics_rouge(req: PairwiseTextRequest) -> dict:
-    try:
-        return rouge(req.candidate, req.reference)
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
 
 
 # ─── /analytics ────────────────────────────────────────────────────────────

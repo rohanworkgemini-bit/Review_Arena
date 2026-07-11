@@ -7,6 +7,23 @@ import { StructuredReviewSchema } from "./structured-review.js";
 export const CuidSchema = z.string().min(20).max(40);
 export const SessionIdSchema = z.string().min(16).max(64);
 
+// ─── Conference (review-form scale) ─────────────────────────────────────────
+// The uploader picks which venue's review form / rating scale the generated
+// reviews follow. Both systems in a battle always share the same conference.
+// Scales live in services/review-gen/app/conference_scales.py.
+
+export const CONFERENCES = ["iclr", "icml", "neurips", "acl", "emnlp"] as const;
+export const ConferenceSchema = z.enum(CONFERENCES);
+export type Conference = z.infer<typeof ConferenceSchema>;
+
+export const CONFERENCE_NAMES: Record<Conference, string> = {
+  iclr: "ICLR 2026",
+  icml: "ICML 2026",
+  neurips: "NeurIPS 2026",
+  acl: "ACL (ARR)",
+  emnlp: "EMNLP (ARR)",
+};
+
 // ─── POST /papers (upload) ──────────────────────────────────────────────────
 
 export const UploadPaperResponseSchema = z.object({
@@ -52,6 +69,9 @@ export const PairResponseSchema = z.object({
   paper: z.object({
     id: CuidSchema,
     title: z.string().nullable(),
+    // Which venue's review form both reviews follow. Optional for
+    // backwards compatibility with pre-conference rows (treated as iclr).
+    conference: ConferenceSchema.optional(),
   }),
   reviewA: ComparisonReviewSchema,
   reviewB: ComparisonReviewSchema,

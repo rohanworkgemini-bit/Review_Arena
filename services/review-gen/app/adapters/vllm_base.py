@@ -42,10 +42,9 @@ from typing import Iterator
 import httpx
 
 from app.adapters._budget import (
-    FAIR_INPUT_TOKENS,
-    FAIR_OUTPUT_TOKENS,
     count_tokens,
     render_canonical,
+    trim_to_tokens,
 )
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
@@ -120,14 +119,15 @@ class VLLMChatAdapter(Adapter):
         )
 
     def _canonical_text(self, paper: ParsedPaper) -> str:
-        """The byte-identical input handed to every system (FAIRNESS A1).
+        """Canonical paper text, trimmed to THIS model's context window.
 
-        Uses the canonical text rendered once at parse time when present
-        (so it is provably identical across systems); otherwise renders it
-        here to the SAME fair budget — deterministic, so still identical."""
-        if paper.canonicalText:
-            return paper.canonicalText
-        return render_canonical(paper)
+        The shared canonical text is now the full paper (caps removed).
+        Specialist models have small context windows (16-32k), so we trim
+        to window − output reservation — a hardware constraint, not a
+        fairness policy. Commercial adapters receive the untrimmed text."""
+        text = paper.canonicalText or render_canonical(paper)
+        input_budget = max(1_024, self.context_window - self.max_output_tokens - 512)
+        return trim_to_tokens(text, input_budget)
 
     def _payload(self, paper_text: str) -> dict:
         if not paper_text.strip():
@@ -142,9 +142,9 @@ class VLLMChatAdapter(Adapter):
             "top_p": self.top_p,
             "repetition_penalty": self.repetition_penalty,
             "frequency_penalty": self.frequency_penalty,
-            # Equalized output budget — identical cap for every system so
-            # verbosity allowance is not a confound (FAIRNESS A1/A4).
-            "max_tokens": FAIR_OUTPUT_TOKENS,
+            # This model's own output reservation (hardware/window limit;
+            # the shared fairness cap was removed by design).
+            "max_tokens": self.max_output_tokens,
             "stream": True,
         }
 
@@ -153,8 +153,8 @@ class VLLMChatAdapter(Adapter):
             input_tokens=count_tokens(input_text),
             output_tokens=count_tokens(output_text),
             context_window=self.context_window,
-            fair_input_tokens=FAIR_INPUT_TOKENS,
-            fair_output_tokens=FAIR_OUTPUT_TOKENS,
+            fair_input_tokens=max(1_024, self.context_window - self.max_output_tokens - 512),
+            fair_output_tokens=self.max_output_tokens,
         )
 
     def _parse(self, markdown: str) -> StructuredReview:

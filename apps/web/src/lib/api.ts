@@ -1,4 +1,5 @@
 import type {
+  Conference,
   PairResponse,
   RevealDetailResponse,
   SubmitVoteRequest,
@@ -42,10 +43,15 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
 export async function uploadPaper(
   file: File,
   title?: string,
+  conference?: Conference,
 ): Promise<UploadPaperResponse> {
   const fd = new FormData();
   fd.append("file", file);
   if (title) fd.append("title", title);
+  if (conference) fd.append("conference", conference);
+  // Data-processing consent — the upload UI gates submission on the
+  // checkbox, and the server rejects uploads without this field.
+  fd.append("consent", "true");
   const res = await fetch(`${BASE}/papers`, {
     method: "POST",
     body: fd,
@@ -60,12 +66,13 @@ export async function uploadPaper(
 export async function uploadArxiv(
   url: string,
   title?: string,
+  conference?: Conference,
 ): Promise<UploadPaperResponse> {
   const res = await fetch(`${BASE}/papers/arxiv`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ url, title: title || undefined }),
+    body: JSON.stringify({ url, title: title || undefined, conference, consent: true }),
   });
   return jsonOrThrow<UploadPaperResponse>(res);
 }

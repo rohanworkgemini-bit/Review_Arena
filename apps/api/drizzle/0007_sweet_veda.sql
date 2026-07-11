@@ -1,0 +1,1 @@
+ALTER TABLE "papers" ADD COLUMN "conference" text DEFAULT 'iclr' NOT NULL;

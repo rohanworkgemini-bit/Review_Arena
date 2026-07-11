@@ -98,7 +98,7 @@ export function AdminPage() {
       <TabStrip current={tab} onChange={setTab} />
 
       <div>
-        {tab === "playground" && <ReviewerPlayground />}
+        {tab === "playground" && <ReviewerPlayground token={token} />}
         {tab === "parse" && <ParseTab />}
         {tab === "systems" && <SystemsTab token={token} />}
         {tab === "settings" && (
@@ -127,9 +127,7 @@ function TokenGate({ onSubmit }: { onSubmit: (token: string) => void }) {
           <CardTitle>Admin sign-in</CardTitle>
           <CardDescription>
             Paste the <code className="font-mono text-xs">ADMIN_TOKEN</code>{" "}
-            from <code className="font-mono text-xs">.env</code>. It's
-            stored in this browser's localStorage and only sent to
-            ReviewArena's own API.
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>

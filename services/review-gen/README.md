@@ -11,7 +11,6 @@ app/
 ├── schemas.py           Pydantic mirrors of packages/shared-types
 ├── paper_render.py      Canonical paper→prompt rendering (FAIRNESS A1)
 ├── judge.py             LLM-as-judge: claim extraction + verification
-├── metrics.py           BLEU / ROUGE (out of scope for thesis, kept)
 ├── analytics.py         Topic model + word freq (admin endpoints)
 ├── parsing/
 │   ├── arxiv2md.py     arXiv URL/ID → ParsedPaper (timf34's hosted service)
@@ -38,7 +37,6 @@ app/
 - `POST /generate` — non-streaming review (used by admin/re-score)
 - `POST /stream-generate` — **SSE**: yields token / done / error events
 - `POST /judge` — LLM-judge scoring (overall + per-dimension)
-- `POST /metrics/{bleu,rouge}` — pairwise metrics
 - `POST /analytics/{topics,wordfreq}` — corpus-level analytics
 - `GET /healthz` — readiness probe
 

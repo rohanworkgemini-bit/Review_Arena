@@ -125,6 +125,7 @@ async function generateOne(
       parsed,
       system.config ?? {},
       pdfBytes,
+      paper.conference,
     );
     await db
       .update(reviews)

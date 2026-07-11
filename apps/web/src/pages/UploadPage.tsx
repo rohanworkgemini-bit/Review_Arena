@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { UploadCloud, FileText, Loader2, Link2, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { uploadArxiv, uploadPaper } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import {
+  CONFERENCES,
+  CONFERENCE_NAMES,
+  type Conference,
+} from "@reviewarena/shared-types";
 
 const MAX_SIZE = 10 * 1024 * 1024;
 
@@ -26,6 +31,11 @@ export function UploadPage() {
   const [arxivUrl, setArxivUrl] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Data-processing consent — required before any upload. The API also
+  // enforces this server-side; see /consent for the full notice.
+  const [consented, setConsented] = useState(false);
+  // Which venue's review form / rating scale the generated reviews follow.
+  const [conference, setConference] = useState<Conference>("iclr");
 
   const onDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
     setError(null);
@@ -51,11 +61,11 @@ export function UploadPage() {
   const mutation = useMutation({
     mutationFn: () =>
       source === "pdf"
-        ? uploadPaper(file!, title || undefined)
-        : uploadArxiv(arxivUrl.trim(), title || undefined),
+        ? uploadPaper(file!, title || undefined, conference)
+        : uploadArxiv(arxivUrl.trim(), title || undefined, conference),
     onSuccess: (data) => {
-      // Straight to the comparison view — both reviewers see the full
-      // paper (trimmed to the fair input budget server-side).
+      // Straight to the comparison view — both reviewers see the
+      // complete paper (no input cap).
       navigate(`/compare?paperId=${data.paperId}`);
     },
   });
@@ -63,7 +73,7 @@ export function UploadPage() {
   const submitting = mutation.isPending;
   const arxivLooksValid = ARXIV_HINT_RE.test(arxivUrl.trim());
   const canSubmit =
-    !submitting && (source === "pdf" ? !!file : arxivLooksValid);
+    !submitting && consented && (source === "pdf" ? !!file : arxivLooksValid);
 
   return (
     <div className="container max-w-2xl py-10 pb-32 space-y-6">
@@ -76,6 +86,32 @@ export function UploadPage() {
           PDF, max 10 MB. Both reviewing systems get the same section
           selection; you then compare the two reviews blinded and vote.
         </p>
+      </div>
+
+      {/* Conference format — chosen up front; every generated review for
+          this paper follows the selected venue's review form and overall
+          rating scale (both blind reviews always share the same scale). */}
+      <div>
+        <label className="text-sm font-medium" htmlFor="conference">
+          Review format
+        </label>
+        <div className="mt-1 flex flex-wrap items-baseline gap-3">
+          <select
+            id="conference"
+            value={conference}
+            onChange={(e) => setConference(e.target.value as Conference)}
+            className="border border-rule2 bg-card px-3 py-2 font-mono text-[13px] font-medium"
+          >
+            {CONFERENCES.map((c) => (
+              <option key={c} value={c}>
+                {CONFERENCE_NAMES[c]}
+              </option>
+            ))}
+          </select>
+          <span className="font-mono text-xs text-graphite">
+            Both reviews follow this venue&rsquo;s form and rating scale.
+          </span>
+        </div>
       </div>
 
       <SourceDropdown value={source} onChange={setSource} />
@@ -146,6 +182,32 @@ export function UploadPage() {
               className="mt-1 w-full border border-rule2 bg-paper px-3 py-2 text-sm"
             />
           </div>
+
+          {/* Data-processing consent — required. The server rejects
+              uploads without it, so this is UX, not the enforcement. */}
+          <label className="flex cursor-pointer items-start gap-2.5 border-t border-rule pt-4">
+            <input
+              type="checkbox"
+              checked={consented}
+              onChange={(e) => setConsented(e.target.checked)}
+              className="mt-[3px] h-4 w-4 shrink-0 cursor-pointer accent-[#9d2b22]"
+              aria-describedby="consent-hint"
+            />
+            <span id="consent-hint" className="text-[13px] leading-relaxed text-graphite">
+              I understand that this paper will be processed by{" "}
+              <span className="text-ink">commercial AI model APIs</span>{" "}
+              (OpenAI, Google Gemini, Anthropic, DeepSeek), parsed via the
+              Datalab Marker API, and handled on infrastructure hosted by
+              Vercel and Google Cloud —{" "}
+              <Link
+                to="/consent"
+                className="text-red underline underline-offset-4 hover:text-redink"
+              >
+                full data-processing notice
+              </Link>
+              .
+            </span>
+          </label>
         </div>
       </div>
 
@@ -164,13 +226,13 @@ export function UploadPage() {
             </div>
           ) : (
             <div className="flex-1 font-mono text-xs text-graphite">
-              {source === "pdf"
-                ? file
-                  ? `Ready: ${file.name}`
-                  : "Select a PDF to continue."
-                : arxivLooksValid
-                ? `Ready: ${arxivUrl.trim()}`
-                : "Paste an arXiv URL or ID to continue."}
+              {source === "pdf" && !file
+                ? "Select a PDF to continue."
+                : source === "arxiv" && !arxivLooksValid
+                ? "Paste an arXiv URL or ID to continue."
+                : !consented
+                ? "Accept the data-processing notice to continue."
+                : `Ready: ${source === "pdf" ? file!.name : arxivUrl.trim()}`}
             </div>
           )}
           <Button

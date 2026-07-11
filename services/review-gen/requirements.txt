@@ -16,9 +16,7 @@ anthropic>=0.40.0
 # torch==2.4.0
 # accelerate==0.33.0
 
-# Metrics & analytics (added in Checkpoint 7)
-# nltk==3.9.1
-# rouge-score==0.1.2
+# Analytics (added in Checkpoint 7)
 # bertopic==0.16.3
 # scikit-learn==1.5.1
 tiktoken~=0.8.0

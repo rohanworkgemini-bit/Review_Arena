@@ -14,7 +14,9 @@ export const StructuredReviewSchema = z.object({
   soundness: z.number().min(1).max(10).optional(),
   presentation: z.number().min(1).max(10).optional(),
   contribution: z.number().min(1).max(10).optional(),
-  overallRating: z.number().min(1).max(10).optional(),
+  // min 0: the ICLR 2026 overall scale includes 0 (Strong reject); the
+  // other venues' scales (1-6, 1-5 with halves) fit inside [0, 10] as-is.
+  overallRating: z.number().min(0).max(10).optional(),
   confidence: z.number().min(1).max(5).optional(),
 });
 

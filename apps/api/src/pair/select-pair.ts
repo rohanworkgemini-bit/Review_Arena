@@ -14,10 +14,15 @@
  *      b) both stage-1 and rival in anon mode → drop (anon-vs-anon banned)
  *      c) stage-1 has strict targets and rival doesn't match any → drop
  *      d) rival has strict targets and stage-1 doesn't match any → drop
- *      e) if stage-1 has rival in battleTargets → override weight to
+ *      e) rival base weight = sampleWeight (outage → 0). NO boost here —
+ *         FastChat passes sampling_boost_models to get_sample_weight only
+ *         in stage 1, so boost raises first-pick odds without distorting
+ *         rival pools. Our under-exposure floor is stage-1-only for the
+ *         same reason.
+ *      f) if stage-1 has rival in battleTargets → override weight to
  *           0.5 * total_weight / len(battleTargets)
  *         (LMArena's directed-attention boost)
- *      f) sample by remaining weight.
+ *      g) sample by remaining weight.
  *
  *   Then a coin-flip swaps A/B for blinding.
  *
@@ -98,11 +103,13 @@ function stageOneWeight(
   return w;
 }
 
-/** Convert an LMArena pattern ("*-mini", "gpt-*") to a regex. */
+/** Convert an LMArena pattern ("*-mini", "gpt-*") to a regex. Matches
+ *  FastChat's is_model_match_pattern exactly: Python re.match anchors at
+ *  the START only (no trailing $), so pattern "gpt" matches "gpt-4". */
 function patternMatch(slug: string, patterns: readonly string[]): boolean {
   if (patterns.length === 0) return false;
   for (const p of patterns) {
-    const rx = new RegExp("^" + p.replace(/\*/g, ".*") + "$");
+    const rx = new RegExp("^" + p.replace(/\*/g, ".*"));
     if (rx.test(slug)) return true;
   }
   return false;
@@ -164,12 +171,13 @@ export function selectPair(
       continue;
     }
 
-    // Rival base weight reuses the stage-1 outage/boost rule but not the
-    // chosen system's boost.
-    let weight = weightOf(rival);
+    // (e) FastChat-exact rival base: get_sample_weight WITHOUT
+    // sampling_boost_models — boost and the exposure floor are stage-1-only
+    // levers (raise first-pick odds, leave rival pools undistorted).
+    let weight = rival.outage ? 0 : rival.sampleWeight;
     if (weight === 0) continue;
 
-    // (e) battleTargets override — directs attention to specific rivals.
+    // (f) battleTargets override — directs attention to specific rivals.
     if (chosen.battleTargets.includes(rival.slug)) {
       weight = (0.5 * totalStageOne) / chosen.battleTargets.length;
     }

@@ -17,6 +17,7 @@ import {
   VOTE_DIMENSIONS,
   DIMENSION_LABELS,
   DIMENSION_DESCRIPTIONS,
+  CONFERENCE_NAMES,
   type VoteDimension,
   type PairResponse,
   type StructuredReview,
@@ -263,6 +264,11 @@ export function ComparisonPage() {
           <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
               Pair / blind
+              {pair.paper.conference && (
+                <span className="ml-2 border border-rule2 px-1.5 py-0.5 normal-case tracking-[0.04em]">
+                  {CONFERENCE_NAMES[pair.paper.conference]} form
+                </span>
+              )}
             </span>
             <span className="min-w-0 text-right font-serif text-sm italic">
               <span className="block font-mono text-[10.5px] not-italic tracking-[0.1em] text-graphite">
