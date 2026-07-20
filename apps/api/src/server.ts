@@ -182,6 +182,15 @@ app.get("/health", async (_req, res) => {
   }
 });
 
+// /session — returns the caller's anonymous session id so the UI can
+// display it. The session cookie is httpOnly (unreadable from JS by
+// design), but participants need to see this value to quote it in a
+// GDPR data-access / deletion request. sessionMiddleware has already
+// set req.sessionId (and the Set-Cookie) by the time we get here. No PII.
+app.get("/session", (req, res) => {
+  res.json({ sessionId: req.sessionId });
+});
+
 app.use(papersRouter(config, { reviewGen, judge, orchestrator }));
 app.use(reviewsStreamRouter({ reviewGen, judge }));
 app.use(pairRouter(config));

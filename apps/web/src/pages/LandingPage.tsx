@@ -123,10 +123,10 @@ function Hero() {
       <div className="grid grid-cols-1 items-start py-10 md:grid-cols-[minmax(0,4.3fr)_1px_minmax(0,6.7fr)] md:py-16 md:pb-[72px]">
         <div className="md:pr-11">
           <div className="eyebrow mb-[22px]">Blind pairwise evaluation</div>
-          <h1 className="mb-[22px] font-serif text-[clamp(34px,4.6vw,52px)] font-semibold leading-[1.03] tracking-[-0.02em]">
-           Automated peer reviewers,
+          <h1 className="mb-[22px] font-serif text-[clamp(30px,4.2vw,46px)] font-semibold leading-[1.05] tracking-[-0.02em]">
+            Which AI reviewer writes the best peer reviews?
             <br />
-            <em className="font-normal italic text-redink">ranked by human preference.</em>
+            <em className="font-normal italic text-redink">Ranked by humans.</em>
           </h1>
           <p className="mb-3.5 max-w-[34ch] text-[16.5px] text-ink2">
             Read two blind reviews of the same paper. Vote on which is more

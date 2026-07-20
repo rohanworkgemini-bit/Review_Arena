@@ -62,6 +62,9 @@ export const ComparisonReviewSchema = z.object({
   // stream to /reviews/stream/:reviewId for token-level rendering and
   // gets the final structured form via the stream's 'done' event.
   structured: StructuredReviewSchema.nullable(),
+  // The model's verbatim markdown output, for the "Raw" view toggle.
+  // null while generating (the SSE stream accumulates it client-side).
+  rawOutput: z.string().nullable().optional(),
   status: z.enum(["PENDING", "GENERATING", "COMPLETED", "FAILED"]).optional(),
 });
 

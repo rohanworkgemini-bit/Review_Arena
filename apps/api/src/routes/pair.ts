@@ -171,8 +171,8 @@ export function pairRouter(config: Config): Router {
                 title: paper.userTitle ?? paper.extractedTitle,
                 conference: paper.conference,
               },
-              reviewA: { reviewId: reviewA.id, structured: reviewA.structured },
-              reviewB: { reviewId: reviewB.id, structured: reviewB.structured },
+              reviewA: { reviewId: reviewA.id, structured: reviewA.structured, rawOutput: reviewA.rawOutput ?? null },
+              reviewB: { reviewId: reviewB.id, structured: reviewB.structured, rawOutput: reviewB.rawOutput ?? null },
               pairToken: resumeTokenRaw,
             });
             return;
@@ -232,11 +232,13 @@ export function pairRouter(config: Config): Router {
         reviewA: {
           reviewId: reviewA.id,
           structured: reviewA.structured ?? null,
+          rawOutput: reviewA.rawOutput ?? null,
           status: reviewA.status,
         },
         reviewB: {
           reviewId: reviewB.id,
           structured: reviewB.structured ?? null,
+          rawOutput: reviewB.rawOutput ?? null,
           status: reviewB.status,
         },
         pairToken: token,

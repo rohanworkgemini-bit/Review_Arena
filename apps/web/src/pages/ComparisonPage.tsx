@@ -281,6 +281,7 @@ export function ComparisonPage() {
             <StreamingReviewPanel
               label="Review A"
               structured={pair.reviewA.structured ?? null}
+              rawOutput={pair.reviewA.rawOutput ?? null}
               stream={streamA}
             />
             <div className="hidden bg-rule lg:block" aria-hidden />
@@ -288,6 +289,7 @@ export function ComparisonPage() {
             <StreamingReviewPanel
               label="Review B"
               structured={pair.reviewB.structured ?? null}
+              rawOutput={pair.reviewB.rawOutput ?? null}
               stream={streamB}
             />
           </div>

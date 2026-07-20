@@ -131,6 +131,15 @@ export async function submitVote(body: SubmitVoteRequest): Promise<SubmitVoteRes
   return jsonOrThrow<SubmitVoteResponse>(res);
 }
 
+// The caller's anonymous session id. The cookie is httpOnly so JS can't
+// read it directly; this round-trips through the API, which also ensures
+// the session cookie gets set on first visit. Used to show participants
+// the identifier they must quote for a data-deletion request.
+export async function getSession(): Promise<{ sessionId: string }> {
+  const res = await fetch(`${BASE}/session`, { credentials: "include" });
+  return jsonOrThrow<{ sessionId: string }>(res);
+}
+
 export async function getLeaderboard(dimension?: string): Promise<LeaderboardResponse> {
   const url = new URL(`${BASE}/leaderboard`, window.location.origin);
   if (dimension) url.searchParams.set("dimension", dimension);

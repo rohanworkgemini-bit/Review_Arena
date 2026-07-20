@@ -19,13 +19,18 @@ import { LiveStreamingPanel } from "@/components/comparison/LiveStreamingPanel";
 export function StreamingReviewPanel({
   label,
   structured,
+  rawOutput,
   stream,
 }: {
   label: string;
   structured: StructuredReview | null;
+  /** Verbatim model output for already-completed reviews (from /pair).
+   *  Streams accumulate their own raw text in stream.text. */
+  rawOutput?: string | null;
   stream: ReviewStreamState;
 }) {
-  if (structured) return <ReviewPanel label={label} review={structured} />;
-  if (stream.structured) return <ReviewPanel label={label} review={stream.structured} />;
+  if (structured) return <ReviewPanel label={label} review={structured} raw={rawOutput} />;
+  if (stream.structured)
+    return <ReviewPanel label={label} review={stream.structured} raw={stream.text} />;
   return <LiveStreamingPanel label={label} stream={stream} />;
 }
