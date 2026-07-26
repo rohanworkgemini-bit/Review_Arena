@@ -6,13 +6,17 @@ paper → API → GenerateRequest.conference → adapter config → this prompt,
 so BOTH systems in a battle review under the same venue's scale (fairness:
 an ICLR-style review is never compared against an ARR-style one).
 
-Scales verified against the live venue guidelines (July 2026):
+Four venue editions, matching the exposé (ARR 2025; ICML 2026;
+NeurIPS 2025; ICLR 2026). Scales verified against the live venue
+guidelines (July 2026):
   - ICLR 2026 Reviewer Guide — overall rating mapped to {0,2,4,6,8,10}
     (changed from 2025's {1,3,5,6,8,10}).
-  - NeurIPS 2025/2026 Reviewer Guidelines — 6-point scale (1-6).
+  - NeurIPS 2025 Reviewer Guidelines — 6-point scale (1-6).
   - ICML 2026 Reviewer Instructions — 6-point scale (1-6).
-  - ACL Rolling Review (ARR) review form — Overall Assessment 1-5,
-    half points allowed. EMNLP reviews through the same ARR form.
+  - ACL Rolling Review (ARR) 2025 review form — Overall Assessment 1-5,
+    half points allowed. This is the only *ACL entry: EMNLP, ACL and
+    NAACL all review through the same ARR form, so one "arr" key covers
+    them rather than duplicating the scale per conference.
 
 Only the ## Rating section varies by venue. The rest of the form
 (Soundness/Presentation/Contribution 1-4, Confidence 1-5, the section
@@ -58,7 +62,7 @@ CONFERENCE_SCALES: Dict[str, Dict] = {
         },
     },
     "neurips": {
-        "name": "NeurIPS 2026",
+        "name": "NeurIPS 2025",
         "scores": [1, 2, 3, 4, 5, 6],
         "labels": {
             6: "Strong Accept — technically flawless, groundbreaking impact",
@@ -69,23 +73,8 @@ CONFERENCE_SCALES: Dict[str, Dict] = {
             1: "Strong Reject — well-known results or unaddressed ethical considerations",
         },
     },
-    "acl": {
-        "name": "ACL (ARR)",
-        "scores": [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5],
-        "labels": {
-            5:   "Consider for Award",
-            4.5: "Borderline Award",
-            4:   "Conference — could be accepted to an *ACL conference",
-            3.5: "Borderline Conference",
-            3:   "Findings — could be accepted to Findings of ACL",
-            2.5: "Borderline Findings",
-            2:   "Resubmit next cycle — needs substantial revisions",
-            1.5: "Resubmit after next cycle — revisions cannot be completed in one cycle",
-            1:   "Do not resubmit — paper has to be fully redone",
-        },
-    },
-    "emnlp": {
-        "name": "EMNLP (ARR)",
+    "arr": {
+        "name": "ARR 2025",
         "scores": [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5],
         "labels": {
             5:   "Consider for Award",

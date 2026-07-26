@@ -12,16 +12,18 @@ export const SessionIdSchema = z.string().min(16).max(64);
 // reviews follow. Both systems in a battle always share the same conference.
 // Scales live in services/review-gen/app/conference_scales.py.
 
-export const CONFERENCES = ["iclr", "icml", "neurips", "acl", "emnlp"] as const;
+// Exactly the four venue editions the thesis studies. EMNLP was dropped
+// because it reviews through the same ARR form — a separate entry would
+// have split one scale across two labels for no methodological gain.
+export const CONFERENCES = ["iclr", "icml", "neurips", "arr"] as const;
 export const ConferenceSchema = z.enum(CONFERENCES);
 export type Conference = z.infer<typeof ConferenceSchema>;
 
 export const CONFERENCE_NAMES: Record<Conference, string> = {
   iclr: "ICLR 2026",
   icml: "ICML 2026",
-  neurips: "NeurIPS 2026",
-  acl: "ACL (ARR)",
-  emnlp: "EMNLP (ARR)",
+  neurips: "NeurIPS 2025",
+  arr: "ARR 2025",
 };
 
 // ─── POST /papers (upload) ──────────────────────────────────────────────────

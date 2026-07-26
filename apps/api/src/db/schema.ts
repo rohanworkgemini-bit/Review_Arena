@@ -126,8 +126,10 @@ export const papers = pgTable(
     // rejects uploads without consent). Nullable for legacy rows only.
     consentAcceptedAt: timestamp("consent_accepted_at", { withTimezone: true }),
     // Which venue's review form / rating scale the generated reviews
-    // follow (iclr | icml | neurips | acl | emnlp). Chosen at upload;
-    // both systems in a battle inherit it. Scales defined in
+    // follow (iclr | icml | neurips | arr). Chosen at upload; both
+    // systems in a battle inherit it. Kept as text, not a pgEnum, so
+    // adding a venue needs no migration — the allowed set is enforced by
+    // ConferenceSchema in packages/shared-types. Scales defined in
     // services/review-gen/app/conference_scales.py.
     conference: text("conference").notNull().default("iclr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
