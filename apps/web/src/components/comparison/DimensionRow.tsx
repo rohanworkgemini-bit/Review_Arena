@@ -14,6 +14,7 @@ export function DimensionRow({
   note,
   onPick,
   onChangeNote,
+  readOnly = false,
 }: {
   label: string;
   question: string;
@@ -21,6 +22,8 @@ export function DimensionRow({
   note: string;
   onPick: (v: -1 | 0 | 1) => void;
   onChangeNote: (text: string) => void;
+  /** Vote already cast — show the pick, refuse to change it. */
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -33,16 +36,17 @@ export function DimensionRow({
         role="radiogroup"
         aria-label={`${label} preference`}
       >
-        <SegButton active={value === -1} onClick={() => onPick(-1)} divider label="A better" />
-        <SegButton active={value === 0} onClick={() => onPick(0)} divider label="Tie" />
-        <SegButton active={value === 1} onClick={() => onPick(1)} label="B better" />
+        <SegButton active={value === -1} onClick={() => onPick(-1)} divider label="A better" readOnly={readOnly} />
+        <SegButton active={value === 0} onClick={() => onPick(0)} divider label="Tie" readOnly={readOnly} />
+        <SegButton active={value === 1} onClick={() => onPick(1)} label="B better" readOnly={readOnly} />
       </div>
       <input
         type="text"
         value={note}
         onChange={(e) => onChangeNote(e.target.value)}
+        readOnly={readOnly}
         maxLength={1000}
-        placeholder="Why? (optional)"
+        placeholder={readOnly ? "No note given." : "Why? (optional)"}
         aria-label={`${label} note`}
         className="mt-1.5 w-full border border-rule2 bg-paper px-2.5 py-1.5 font-mono text-[12px] text-ink placeholder:text-graphite"
       />
@@ -55,23 +59,31 @@ function SegButton({
   onClick,
   divider,
   label,
+  readOnly = false,
 }: {
   active: boolean;
   onClick: () => void;
   divider?: boolean;
   label: string;
+  readOnly?: boolean;
 }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={active}
+      aria-disabled={readOnly || undefined}
+      disabled={readOnly}
       onClick={onClick}
       className={cn(
         "flex items-center justify-center px-2 py-2 font-mono text-[12.5px] transition-colors",
         divider && "border-r border-ink",
         active
           ? "bg-red font-medium text-paper"
+          // Unpicked options fade out once the vote is locked, so the
+          // chosen side still reads clearly without hover affordances.
+          : readOnly
+          ? "text-graphite/50"
           : "text-graphite hover:bg-paper2 hover:text-ink",
       )}
     >

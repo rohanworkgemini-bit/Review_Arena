@@ -66,6 +66,11 @@ const ERROR_HEADER: RevealHeader = {
 export function RevealPage() {
   const [params] = useSearchParams();
   const voteId = params.get("voteId");
+  // Set by ComparisonPage on submit. Lets us link back to the comparison
+  // the user just voted on — /compare bounces to /upload without it, so
+  // the button is only rendered when we actually have the id (e.g. a
+  // reveal link opened cold won't show it).
+  const paperId = params.get("paperId");
 
   const header = useMemo<RevealHeader>(() => {
     const raw = params.get("state");
@@ -210,10 +215,19 @@ export function RevealPage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-between gap-3 pt-2">
-        <Button variant="outline" asChild>
-          <Link to="/leaderboard">← Back to leaderboard</Link>
-        </Button>
+      <div className="flex flex-wrap justify-between gap-3 pt-2">
+        <div className="flex flex-wrap gap-3">
+          {paperId && (
+            <Button variant="outline" asChild>
+              <Link to={`/compare?paperId=${encodeURIComponent(paperId)}`}>
+                ← Back to the reviews
+              </Link>
+            </Button>
+          )}
+          <Button variant="outline" asChild>
+            <Link to="/leaderboard">Leaderboard</Link>
+          </Button>
+        </div>
         <Button asChild>
           <Link to="/compare">Next comparison →</Link>
         </Button>

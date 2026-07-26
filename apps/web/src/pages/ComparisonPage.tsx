@@ -71,6 +71,19 @@ const PLACEHOLDER_PAIR: PairResponse = {
   pairToken: "placeholder",
 };
 
+/** What we stash in sessionStorage after a successful vote, so returning
+ *  to this page from the reveal screen can render it read-only. */
+interface CastVote {
+  voteId: string;
+  winner: "A" | "B" | "TIE";
+  dimensionValues: Partial<Record<VoteDimension, number>>;
+  dimensionNotes: Partial<Record<VoteDimension, string>>;
+  overallNote: string;
+  /** URL-encoded reveal header. /reveal renders a placeholder (dev) or an
+   *  error header (prod) without it, so going back must carry it along. */
+  revealState: string;
+}
+
 export function ComparisonPage() {
   const [params] = useSearchParams();
   const paperId = params.get("paperId") ?? "";
@@ -83,11 +96,35 @@ export function ComparisonPage() {
   }, [paperId, navigate]);
 
   const startedAt = useMemo(() => Date.now(), [paperId]);
-  const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>({});
+
+  // Record of the vote already cast for this paper in this tab, if any.
+  // Written on submit, read back when the user walks in from the reveal
+  // screen's "Back to the reviews" link. Its presence flips the whole page
+  // to read-only: the reviews and the choices stay visible, but nothing is
+  // editable and no second vote can be sent (the API would 409 anyway —
+  // one vote per session per pair).
+  const castVote = useMemo<CastVote | null>(() => {
+    if (typeof window === "undefined" || !paperId) return null;
+    try {
+      const raw = window.sessionStorage.getItem(`vote-cast:${paperId}`);
+      return raw ? (JSON.parse(raw) as CastVote) : null;
+    } catch {
+      return null;
+    }
+  }, [paperId]);
+  const readOnly = castVote !== null;
+
+  // Seeded from the stored vote when revisiting, so the read-only view
+  // shows exactly what was submitted rather than an empty survey.
+  const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>(
+    () => castVote?.dimensionValues ?? {},
+  );
   // Optional free-text rationale per dimension, keyed the same way.
-  const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>({});
+  const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>(
+    () => castVote?.dimensionNotes ?? {},
+  );
   // Optional free-text rationale for the overall verdict.
-  const [overallNote, setOverallNote] = useState("");
+  const [overallNote, setOverallNote] = useState(() => castVote?.overallNote ?? "");
   // Per-dimension picks are REQUIRED — open by default so the rater
   // sees right away that 8 picks are needed before they can submit.
   const [refineOpen, setRefineOpen] = useState(true);
@@ -164,15 +201,32 @@ export function ComparisonPage() {
           note: dimensionNotes[dimension as VoteDimension]?.trim() || undefined,
         })),
       }),
-    onSuccess: (data) => {
+    onSuccess: (data, winner) => {
       // Vote landed — release the stored pair so the next /compare visit
       // (from the reveal screen's "Next comparison" button) gets a fresh
       // sample instead of trying to resume this now-spent round.
+      const state = encodeURIComponent(JSON.stringify(data.reveal));
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem(PAIR_STORAGE_KEY);
+        // Remember what was submitted so returning here renders read-only
+        // with the original choices intact.
+        const record: CastVote = {
+          voteId: data.voteId,
+          winner,
+          dimensionValues,
+          dimensionNotes,
+          overallNote,
+          revealState: state,
+        };
+        try {
+          window.sessionStorage.setItem(`vote-cast:${paperId}`, JSON.stringify(record));
+        } catch {
+          /* storage full / disabled — read-only view just won't rehydrate */
+        }
       }
-      const state = encodeURIComponent(JSON.stringify(data.reveal));
-      navigate(`/reveal?voteId=${data.voteId}&state=${state}`);
+      navigate(
+        `/reveal?voteId=${data.voteId}&paperId=${encodeURIComponent(paperId)}&state=${state}`,
+      );
     },
   });
 
@@ -213,6 +267,8 @@ export function ComparisonPage() {
   // Only fires when both reviews are ready and no input is focused.
   // ArrowLeft/Right as an alternate for muscle memory.
   useEffect(() => {
+    // No shortcuts once the vote is in — the page is a record, not a form.
+    if (readOnly) return;
     if (!bothReady || submitting || isGenerating || !allDimensionsFilled) return;
     const cast = (winner: "A" | "B" | "TIE") => voteMutation.mutate(winner);
     const onKey = (e: KeyboardEvent) => {
@@ -233,7 +289,7 @@ export function ComparisonPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [bothReady, submitting, isGenerating, allDimensionsFilled, voteMutation]);
+  }, [readOnly, bothReady, submitting, isGenerating, allDimensionsFilled, voteMutation]);
 
   // Prod-only: pair is missing AND we're not actively generating →
   // something went wrong (stale link, pair API failed silently).
@@ -334,7 +390,8 @@ export function ComparisonPage() {
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
               {VOTE_DIMENSIONS.map((d) => {
                 const v = dimensionValues[d];
-                const pick = (next: -1 | 0 | 1) =>
+                const pick = (next: -1 | 0 | 1) => {
+                  if (readOnly) return;
                   setDimensionValues((prev) => {
                     const copy = { ...prev };
                     // Click the already-selected side to deselect.
@@ -342,6 +399,7 @@ export function ComparisonPage() {
                     else copy[d] = next;
                     return copy;
                   });
+                };
                 return (
                   <DimensionRow
                     key={d}
@@ -350,14 +408,16 @@ export function ComparisonPage() {
                     value={v}
                     note={dimensionNotes[d] ?? ""}
                     onPick={pick}
-                    onChangeNote={(text) =>
-                      setDimensionNotes((prev) => ({ ...prev, [d]: text }))
-                    }
+                    readOnly={readOnly}
+                    onChangeNote={(text) => {
+                      if (readOnly) return;
+                      setDimensionNotes((prev) => ({ ...prev, [d]: text }));
+                    }}
                   />
                 );
               })}
             </div>
-            {refinedCount > 0 && (
+            {refinedCount > 0 && !readOnly && (
               <button
                 type="button"
                 onClick={() => {
@@ -386,9 +446,10 @@ export function ComparisonPage() {
           <textarea
             value={overallNote}
             onChange={(e) => setOverallNote(e.target.value)}
+            readOnly={readOnly}
             maxLength={1000}
             rows={3}
-            placeholder="Why is this review more useful? (optional)"
+            placeholder={readOnly ? "No note given." : "Why is this review more useful? (optional)"}
             aria-label="Overall verdict note"
             className="w-full resize-y border border-rule2 bg-paper px-2.5 py-2 font-mono text-[12.5px] leading-relaxed text-ink placeholder:text-graphite"
           />
@@ -396,7 +457,18 @@ export function ComparisonPage() {
       </div>
 
       {voteMutation.isError && (
-        <p className="font-mono text-sm text-red">{(voteMutation.error as Error).message}</p>
+        // A 409 is the expected outcome when someone walks back here from
+        // the reveal screen: the pair is already spent for this session
+        // (votes_session_pair_sig_uk). That is not a failure, so say so in
+        // plain language instead of showing a raw error string.
+        voteMutation.error instanceof ApiError && voteMutation.error.status === 409 ? (
+          <p className="text-sm text-graphite">
+            You have already voted on this pair — your original vote still
+            stands. Upload another paper to keep comparing.
+          </p>
+        ) : (
+          <p className="font-mono text-sm text-red">{(voteMutation.error as Error).message}</p>
+        )
       )}
 
       {/* Sticky vote strip — the single primary action on the page. */}
@@ -404,7 +476,41 @@ export function ComparisonPage() {
         className="fixed bottom-0 right-0 z-30 border-t border-rule bg-paper left-0 lg:[left:var(--sidebar-w)]"
       >
         <div className="container max-w-[1080px] flex flex-col gap-2 py-3 md:flex-row md:items-center">
-          {bothReady && !allDimensionsFilled ? (
+          {readOnly ? (
+            // Already voted: the strip becomes a record of the verdict plus
+            // a way back to the reveal, instead of a second chance to vote.
+            <>
+              <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-graphite md:whitespace-nowrap">
+                Vote recorded
+              </span>
+              <div className="flex flex-1 flex-wrap items-center gap-2.5">
+                <span className="text-sm text-ink">
+                  You chose{" "}
+                  <strong className="font-semibold">
+                    {castVote.winner === "TIE"
+                      ? "Tie"
+                      : castVote.winner === "A"
+                      ? "Review A"
+                      : "Review B"}
+                  </strong>
+                  . This page is read-only.
+                </span>
+                <Button
+                  size="lg"
+                  className="ml-auto"
+                  onClick={() =>
+                    navigate(
+                      `/reveal?voteId=${castVote.voteId}` +
+                        `&paperId=${encodeURIComponent(paperId)}` +
+                        `&state=${castVote.revealState}`,
+                    )
+                  }
+                >
+                  Back to results →
+                </Button>
+              </div>
+            </>
+          ) : bothReady && !allDimensionsFilled ? (
             <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-red md:whitespace-nowrap">
               Rate all {VOTE_DIMENSIONS.length} dimensions to vote ·{" "}
               {refinedCount}/{VOTE_DIMENSIONS.length}
@@ -414,6 +520,7 @@ export function ComparisonPage() {
               Which review is more useful?
             </span>
           )}
+          {!readOnly && (
           <div className="flex flex-1 gap-2.5">
             {(
               [
@@ -442,6 +549,7 @@ export function ComparisonPage() {
               </Button>
             ))}
           </div>
+          )}
         </div>
       </div>
     </div>
