@@ -27,7 +27,14 @@ from app.adapters._budget import (
 )
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
-from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
+from app.adapters.base import (
+    Adapter,
+    GenerationMetrics,
+    GenerationResult,
+    PROVIDER_MAX_RETRIES,
+    StreamEvent,
+    friendly_error,
+)
 from app.schemas import ParsedPaper
 
 # The review-form system prompt is built per selected conference in
@@ -53,7 +60,7 @@ class GPTAdapter(Adapter):
         # client installed.
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(api_key=api_key, max_retries=PROVIDER_MAX_RETRIES)
         self._model = self.config.get("model", "gpt-4o-mini")
         # GPT-5 reasoning models reject any temperature != 1; keep it optional
         # so the seed config can omit it for those models.
@@ -168,7 +175,7 @@ class GPTAdapter(Adapter):
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)
             )
         except Exception as e:  # noqa: BLE001
-            yield StreamEvent(type="error", error=str(e))
+            yield StreamEvent(type="error", error=friendly_error(e))
 
     def _render_prompt(self, paper: ParsedPaper) -> str:
         # FAIRNESS A1: identical canonical input across every system.

@@ -30,7 +30,14 @@ from app.adapters._budget import (
 )
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
-from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
+from app.adapters.base import (
+    Adapter,
+    GenerationMetrics,
+    GenerationResult,
+    PROVIDER_MAX_RETRIES,
+    StreamEvent,
+    friendly_error,
+)
 from app.schemas import ParsedPaper
 
 # The review-form system prompt is built per selected conference in
@@ -56,7 +63,7 @@ class ClaudeAdapter(Adapter):
         # anthropic SDK installed.
         from anthropic import Anthropic
 
-        self._client = Anthropic(api_key=api_key)
+        self._client = Anthropic(api_key=api_key, max_retries=PROVIDER_MAX_RETRIES)
         self._model = self.config.get("model", "claude-opus-5")
         # Opus 4.6+ supports adaptive thinking; pre-4.6 models don't.
         # Allow the seed to opt out via thinking=False if pointing at an
@@ -140,7 +147,7 @@ class ClaudeAdapter(Adapter):
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)
             )
         except Exception as e:  # noqa: BLE001
-            yield StreamEvent(type="error", error=str(e))
+            yield StreamEvent(type="error", error=friendly_error(e))
 
     def _render_prompt(self, paper: ParsedPaper) -> str:
         # FAIRNESS A1: identical canonical input across every system.

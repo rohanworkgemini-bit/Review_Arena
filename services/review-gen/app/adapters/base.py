@@ -22,11 +22,49 @@ override generate_stream() for true token-level deltas.
 """
 from __future__ import annotations
 
+import os
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Iterator, Literal
 
 from app.schemas import ParsedPaper, StructuredReview
+
+# How many times a provider SDK retries a failed call before giving up.
+#
+# Both the OpenAI and Anthropic SDKs default to 2, which is too few here.
+# A battle streams TWO systems concurrently, so when both are from the
+# same provider their prompts land in the same tokens-per-minute window
+# at the same instant — a full paper is ~25k tokens, and an org on the
+# 50k TPM tier is then at the ceiling from a single pairing. The provider
+# answers 429 with a retry-after of ~10s; two short retries expire before
+# the window rolls over and the participant sees "generation failed".
+#
+# Both SDKs honour the retry-after header and back off exponentially, so
+# raising this simply waits the rate limit out instead of failing the
+# round. It costs nothing when there is no contention. Retries happen
+# before the first token is emitted, so the streaming path is safe — no
+# duplicated output.
+PROVIDER_MAX_RETRIES = int(os.environ.get("PROVIDER_MAX_RETRIES", "6"))
+
+_RATE_LIMIT_RX = re.compile(r"rate.?limit|429|tokens per min|TPM", re.I)
+
+
+def friendly_error(exc: Exception) -> str:
+    """Message shown in the UI when a generation fails.
+
+    Rate limits are an operational condition, not a bug in the review, so
+    they get a plain explanation instead of the provider's raw string
+    (which quotes internal org ids and token counters at the participant).
+    """
+    status = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    text = str(exc)
+    if status == 429 or _RATE_LIMIT_RX.search(text):
+        return (
+            "This model is rate-limited right now and did not respond in time. "
+            "Press Retry in a moment — the other review is unaffected."
+        )
+    return text
 
 
 @dataclass

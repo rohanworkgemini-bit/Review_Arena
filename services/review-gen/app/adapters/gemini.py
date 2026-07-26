@@ -16,7 +16,13 @@ from app.adapters._budget import (
 )
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
-from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
+from app.adapters.base import (
+    Adapter,
+    GenerationMetrics,
+    GenerationResult,
+    StreamEvent,
+    friendly_error,
+)
 from app.schemas import ParsedPaper
 
 # The review-form system prompt is built per selected conference in
@@ -102,7 +108,7 @@ class GeminiAdapter(Adapter):
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)
             )
         except Exception as e:  # noqa: BLE001
-            yield StreamEvent(type="error", error=str(e))
+            yield StreamEvent(type="error", error=friendly_error(e))
 
     def _render_prompt(self, paper: ParsedPaper) -> str:
         # FAIRNESS A1: identical canonical input across every system.

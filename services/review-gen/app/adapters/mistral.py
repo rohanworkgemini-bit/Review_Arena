@@ -24,7 +24,14 @@ from app.adapters._budget import (
 )
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
-from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
+from app.adapters.base import (
+    Adapter,
+    GenerationMetrics,
+    GenerationResult,
+    PROVIDER_MAX_RETRIES,
+    StreamEvent,
+    friendly_error,
+)
 from app.schemas import ParsedPaper
 
 _MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
@@ -52,7 +59,11 @@ class MistralAdapter(Adapter):
         # openai SDK installed.
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key, base_url=_MISTRAL_BASE_URL)
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url=_MISTRAL_BASE_URL,
+            max_retries=PROVIDER_MAX_RETRIES,
+        )
         self._model = self.config.get("model", "mistral-large-2512")
         self._temperature = self.config.get("temperature", 0.2)
         # Both seeded Mistral models report a 262144-token window via
@@ -114,7 +125,7 @@ class MistralAdapter(Adapter):
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)
             )
         except Exception as e:  # noqa: BLE001
-            yield StreamEvent(type="error", error=str(e))
+            yield StreamEvent(type="error", error=friendly_error(e))
 
     def _render_prompt(self, paper: ParsedPaper) -> str:
         # FAIRNESS A1: identical canonical input across every system.

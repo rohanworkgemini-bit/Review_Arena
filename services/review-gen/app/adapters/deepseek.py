@@ -32,7 +32,14 @@ from app.adapters._budget import (
 )
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
-from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
+from app.adapters.base import (
+    Adapter,
+    GenerationMetrics,
+    GenerationResult,
+    PROVIDER_MAX_RETRIES,
+    StreamEvent,
+    friendly_error,
+)
 from app.schemas import ParsedPaper
 
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
@@ -63,7 +70,11 @@ class DeepSeekAdapter(Adapter):
         # DeepSeek exposes an OpenAI-compatible endpoint at api.deepseek.com/v1.
         # Same chat-completions schema, same auth shape — we just point the
         # client at their base URL instead of OpenAI's.
-        self._client = OpenAI(api_key=api_key, base_url=_DEEPSEEK_BASE_URL)
+        self._client = OpenAI(
+            api_key=api_key,
+            base_url=_DEEPSEEK_BASE_URL,
+            max_retries=PROVIDER_MAX_RETRIES,
+        )
         self._model = self.config.get("model", "deepseek-v4-pro")
         self._temperature = self.config.get("temperature", 0.2)
         # DeepSeek V4 has a 128k context window per their docs.
@@ -124,7 +135,7 @@ class DeepSeekAdapter(Adapter):
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)
             )
         except Exception as e:  # noqa: BLE001
-            yield StreamEvent(type="error", error=str(e))
+            yield StreamEvent(type="error", error=friendly_error(e))
 
     def _render_prompt(self, paper: ParsedPaper) -> str:
         # FAIRNESS A1: identical canonical input across every system.
