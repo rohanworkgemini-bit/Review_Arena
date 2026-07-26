@@ -2,7 +2,7 @@
 // Run: pnpm --filter @reviewarena/api db:seed
 //
 // Live lineup — 10 frontier commercial reviewers, 5 providers x 2 tiers:
-//     - GPT-5.5 Pro / GPT-5.5              (OpenAI)
+//     - GPT-5.5 / GPT-5.4-mini             (OpenAI)
 //     - Claude Opus 5 / Claude Sonnet 5    (Anthropic, native SDK)
 //     - Gemini 3.1 Pro / Gemini 3.6 Flash  (Google)
 //     - DeepSeek V4 Pro / V4 Flash         (DeepSeek OpenAI-compat API)
@@ -39,7 +39,10 @@ import { reviewSystems } from "../src/db/schema.js";
 // reviews / votes / Elo snapshots remain in the DB for thesis analysis.
 const RETIRED_SLUGS = [
   // Superseded by the 2026-07 lineup refresh (5 providers x 2 tiers).
-  "gpt-5",                  // → gpt-5.5-pro / gpt-5.5
+  "gpt-5.5-pro",            // → gpt-5.4-mini. 50k TPM (10x below every other
+                            // OpenAI model), 100-150s buffered TTFT, and
+                            // $30/$180 per 1M = 74% of total lineup cost.
+  "gpt-5",                  // → gpt-5.5
   "gpt-5-mini",             // → gpt-5.5
   "claude-opus-4-8",        // → claude-opus-5 / claude-sonnet-5
   "gemini-3-pro",           // → gemini-3.1-pro
@@ -89,24 +92,19 @@ async function main() {
   }> = [
     // ─── OpenAI ────────────────────────────────────────────────────────
     {
-      slug: "gpt-5.5-pro",
-      name: "GPT-5.5 Pro (zero-shot)",
-      description:
-        "OpenAI GPT-5.5 Pro (top tier) with our zero-shot reviewer prompt. " +
-        "Reasoning-class model; uses adaptive thinking by default.",
-      adapterKey: "gpt-5.5-pro",
-      // The "pro" tier is Responses-API only — /v1/chat/completions 404s
-      // with "This is not a chat model". use_responses_api routes it to
-      // /v1/responses in GPTAdapter.
-      config: { model: "gpt-5.5-pro", use_responses_api: true },
+      slug: "gpt-5.5",
+      name: "GPT-5.5 (zero-shot)",
+      description: "OpenAI GPT-5.5 (top tier) with our zero-shot reviewer prompt.",
+      adapterKey: "gpt-5.5",
+      config: { model: "gpt-5.5", use_max_completion_tokens: true },
       enabled: !!process.env.OPENAI_API_KEY,
     },
     {
-      slug: "gpt-5.5",
-      name: "GPT-5.5 (zero-shot)",
-      description: "OpenAI GPT-5.5 (standard tier) with our zero-shot reviewer prompt.",
-      adapterKey: "gpt-5.5",
-      config: { model: "gpt-5.5", use_max_completion_tokens: true },
+      slug: "gpt-5.4-mini",
+      name: "GPT-5.4-mini (zero-shot)",
+      description: "OpenAI GPT-5.4-mini (small tier) with our zero-shot reviewer prompt.",
+      adapterKey: "gpt-5.4-mini",
+      config: { model: "gpt-5.4-mini", use_max_completion_tokens: true },
       enabled: !!process.env.OPENAI_API_KEY,
     },
     // ─── Anthropic (native SDK, adaptive thinking) ─────────────────────

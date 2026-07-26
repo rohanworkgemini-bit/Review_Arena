@@ -24,8 +24,8 @@ app/
     ├── gemini.py           Google base
     ├── deepseek.py         DeepSeek base (OpenAI-compatible)
     ├── mistral.py          Mistral base (OpenAI-compatible)
-    ├── gpt55pro.py         GPT-5.5 Pro      (Responses API only)
     ├── gpt55.py            GPT-5.5
+    ├── gpt54mini.py        GPT-5.4-mini
     ├── claudeopus5.py      Claude Opus 5
     ├── claudesonnet5.py    Claude Sonnet 5
     ├── gemini31pro.py      Gemini 3.1 Pro

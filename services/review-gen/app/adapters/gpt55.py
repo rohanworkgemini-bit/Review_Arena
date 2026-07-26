@@ -1,8 +1,8 @@
 """GPT-5.5 reviewer (OpenAI standard tier).
 
-Thin subclass of GPTAdapter — see gpt55pro.py for the rationale on
-per-system files. Same reasoning-family quirks as the Pro tier (no
-temperature, `max_completion_tokens` required).
+Thin subclass of GPTAdapter — per-system files give the thesis a clean
+1:1 mapping between DB review_systems rows and Python source. Reasoning-
+family model: rejects a non-default temperature, so we omit it.
 """
 from __future__ import annotations
 

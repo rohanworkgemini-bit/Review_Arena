@@ -2,8 +2,8 @@
 
 Live adapter keys (must match `review_systems.adapter_key` in the DB) —
 ten systems across five providers, two tiers each:
-  gpt-5.5-pro        — OpenAI GPT-5.5 Pro
   gpt-5.5            — OpenAI GPT-5.5
+  gpt-5.4-mini       — OpenAI GPT-5.4-mini
   claude-opus-5      — Anthropic Claude Opus 5 (native SDK)
   claude-sonnet-5    — Anthropic Claude Sonnet 5 (native SDK)
   gemini-3.1-pro     — Google Gemini 3.1 Pro
@@ -34,7 +34,7 @@ To add a provider, copy the closest base adapter: deepseek.py or
 mistral.py for anything with an OpenAI-compatible /chat/completions
 endpoint (both are the openai SDK pointed at a different base_url),
 claude.py or gemini.py for a native SDK. Then add a thin per-system
-subclass that pins the model id, following gpt55pro.py.
+subclass that pins the model id, following gpt55.py.
 """
 from __future__ import annotations
 
@@ -65,15 +65,15 @@ def _bootstrap() -> None:
     # adapter, not at process startup. Each commercial reviewer system
     # has its own file so the thesis has a clean 1:1 mapping between DB
     # review_systems rows and Python source.
-    def _gpt55pro_factory(cfg: dict) -> Adapter:
-        from app.adapters.gpt55pro import GPT55ProAdapter
-
-        return GPT55ProAdapter(cfg)
-
     def _gpt55_factory(cfg: dict) -> Adapter:
         from app.adapters.gpt55 import GPT55Adapter
 
         return GPT55Adapter(cfg)
+
+    def _gpt54mini_factory(cfg: dict) -> Adapter:
+        from app.adapters.gpt54mini import GPT54MiniAdapter
+
+        return GPT54MiniAdapter(cfg)
 
     def _claude_opus5_factory(cfg: dict) -> Adapter:
         from app.adapters.claudeopus5 import ClaudeOpus5Adapter
@@ -115,8 +115,8 @@ def _bootstrap() -> None:
 
         return MistralMedium35Adapter(cfg)
 
-    register("gpt-5.5-pro", _gpt55pro_factory)
     register("gpt-5.5", _gpt55_factory)
+    register("gpt-5.4-mini", _gpt54mini_factory)
     register("claude-opus-5", _claude_opus5_factory)
     register("claude-sonnet-5", _claude_sonnet5_factory)
     register("gemini-3.1-pro", _gemini31pro_factory)

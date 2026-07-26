@@ -7,8 +7,8 @@ python-multipart==0.0.9
 python-dotenv==1.0.1
 
 # Review systems / model serving
-# >=2.x required: client.responses (gpt-5.5-pro is Responses-API only).
-# 1.40.0 has no `responses` attribute at all.
+# >=2.x required: client.responses, used by GPTAdapter's Responses-API
+# branch (pro-tier models are not chat models). 1.40.0 lacks it entirely.
 openai==2.48.0
 google-generativeai==0.8.3
 # Anthropic SDK for Claude (Opus 4.8 reviewer). Native SDK is cheaper and

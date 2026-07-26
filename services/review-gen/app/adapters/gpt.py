@@ -1,15 +1,17 @@
 """OpenAI base adapter.
 
-Provider-level base class; the per-system subclasses (gpt55pro.py,
-gpt55.py) only pin a model string and an adapter_key.
+Provider-level base class; the per-system subclasses (gpt55.py,
+gpt54mini.py) only pin a model string and an adapter_key.
 
 TWO OpenAI endpoints are supported, selected by the `use_responses_api`
 config flag:
   - /v1/chat/completions — the default, used by ordinary chat models.
-  - /v1/responses        — required by the "pro" reasoning tier.
-    gpt-5.5-pro is NOT a chat model: chat/completions returns
-    404 "This is not a chat model and thus not supported in the
-    v1/chat/completions endpoint". Verified 2026-07-26.
+  - /v1/responses        — required by the "pro" reasoning tier, which
+    is NOT a chat model: chat/completions answers 404 "This is not a
+    chat model and thus not supported in the v1/chat/completions
+    endpoint" (verified 2026-07-26). NOTE: no seeded system currently
+    sets use_responses_api — gpt-5.5-pro was withdrawn from the lineup
+    (see gpt54mini.py) — so this branch is retained but unexercised.
 
 Requires OPENAI_API_KEY in the environment. Raises at generate() time
 (via a runtime exception caller can catch) if missing — we don't want to
