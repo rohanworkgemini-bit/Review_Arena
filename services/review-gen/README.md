@@ -24,7 +24,8 @@ app/
     ├── gemini.py           Google base
     ├── deepseek.py         DeepSeek base (OpenAI-compatible)
     ├── mistral.py          Mistral base (OpenAI-compatible)
-    ├── gpt55.py            GPT-5.5
+    ├── gpt52.py            GPT-5.2
+    ├── gpt55.py            GPT-5.5 (registered, disabled in seed)
     ├── gpt54mini.py        GPT-5.4-mini
     ├── claudeopus5.py      Claude Opus 5
     ├── claudesonnet5.py    Claude Sonnet 5

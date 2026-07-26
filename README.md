@@ -37,7 +37,7 @@ Ten systems: five providers x two tiers, so the leaderboard can separate
 
 | Slug                 | Backing model id          | Hosting                      | Streams?  |
 |----------------------|---------------------------|------------------------------|-----------|
-| `gpt-5.5`            | `gpt-5.5`                 | OpenAI API                   | yes (SDK) |
+| `gpt-5.2`            | `gpt-5.2`                 | OpenAI API                   | yes (SDK) |
 | `gpt-5.4-mini`       | `gpt-5.4-mini`            | OpenAI API                   | yes (SDK) |
 | `claude-opus-5`      | `claude-opus-5`           | Anthropic API (native SDK)   | yes (SDK) |
 | `claude-sonnet-5`    | `claude-sonnet-5`         | Anthropic API (native SDK)   | yes (SDK) |
@@ -81,7 +81,7 @@ so their historical reviews, votes and Elo snapshots remain queryable.
                     ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌──────▼───────┐
                     │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  DeepSeek  │ │ Mistral API  │
                     │              │ │  Studio    │ │    API     │ │    API     │ │              │
-                    │  gpt-5.5     │ │ gemini 3.1 │ │  opus-5    │ │ v4-pro     │ │ large-3      │
+                    │  gpt-5.2     │ │ gemini 3.1 │ │  opus-5    │ │ v4-pro     │ │ large-3      │
                     │  gpt-5.4-mini│ │ /3.6-flash │ │  sonnet-5  │ │ v4-flash   │ │ medium-3.5   │
                     └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────────┘
                                             (+ Datalab Chandra API for PDF → markdown)
@@ -163,7 +163,7 @@ pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
 pnpm --filter @reviewarena/api db:seed     # insert review systems
 
 # 3. Provider keys — nothing to deploy, all ten systems are hosted APIs
-#   OPENAI_API_KEY    → gpt-5.5, gpt-5.4-mini
+#   OPENAI_API_KEY    → gpt-5.2, gpt-5.4-mini
 #   ANTHROPIC_API_KEY → claude-opus-5, claude-sonnet-5
 #   GEMINI_API_KEY    → gemini-3.1-pro, gemini-3.6-flash (+ the LLM judge)
 #   DEEPSEEK_API_KEY  → deepseek-v4-pro, deepseek-v4-flash

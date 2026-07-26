@@ -1,6 +1,6 @@
 """OpenAI base adapter.
 
-Provider-level base class; the per-system subclasses (gpt55.py,
+Provider-level base class; the per-system subclasses (gpt52.py,
 gpt54mini.py) only pin a model string and an adapter_key.
 
 TWO OpenAI endpoints are supported, selected by the `use_responses_api`

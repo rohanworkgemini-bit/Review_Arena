@@ -2,7 +2,7 @@
 // Run: pnpm --filter @reviewarena/api db:seed
 //
 // Live lineup — 10 frontier commercial reviewers, 5 providers x 2 tiers:
-//     - GPT-5.5 / GPT-5.4-mini             (OpenAI)
+//     - GPT-5.2 / GPT-5.4-mini             (OpenAI)
 //     - Claude Opus 5 / Claude Sonnet 5    (Anthropic, native SDK)
 //     - Gemini 3.1 Pro / Gemini 3.6 Flash  (Google)
 //     - DeepSeek V4 Pro / V4 Flash         (DeepSeek OpenAI-compat API)
@@ -42,8 +42,11 @@ const RETIRED_SLUGS = [
   "gpt-5.5-pro",            // → gpt-5.4-mini. 50k TPM (10x below every other
                             // OpenAI model), 100-150s buffered TTFT, and
                             // $30/$180 per 1M = 74% of total lineup cost.
-  "gpt-5",                  // → gpt-5.5
-  "gpt-5-mini",             // → gpt-5.5
+  // Disabled, NOT removed: the adapter stays registered so the row and
+  // its reviews/Elo history remain usable and re-enabling is one line.
+  "gpt-5.5",                // → gpt-5.2 ($5/$30 vs $1.75/$14 per 1M)
+  "gpt-5",                  // → gpt-5.2
+  "gpt-5-mini",             // → gpt-5.4-mini
   "claude-opus-4-8",        // → claude-opus-5 / claude-sonnet-5
   "gemini-3-pro",           // → gemini-3.1-pro
   "gemini-2.5-flash",       // → gemini-3.6-flash
@@ -92,11 +95,13 @@ async function main() {
   }> = [
     // ─── OpenAI ────────────────────────────────────────────────────────
     {
-      slug: "gpt-5.5",
-      name: "GPT-5.5 (zero-shot)",
-      description: "OpenAI GPT-5.5 (top tier) with our zero-shot reviewer prompt.",
-      adapterKey: "gpt-5.5",
-      config: { model: "gpt-5.5", use_max_completion_tokens: true },
+      slug: "gpt-5.2",
+      name: "GPT-5.2 (zero-shot)",
+      description:
+        "OpenAI GPT-5.2 (previous-frontier tier) with our zero-shot reviewer " +
+        "prompt. Chosen over GPT-5.5 on cost: $1.75/$14.00 vs $5.00/$30.00 per 1M.",
+      adapterKey: "gpt-5.2",
+      config: { model: "gpt-5.2", use_max_completion_tokens: true },
       enabled: !!process.env.OPENAI_API_KEY,
     },
     {
