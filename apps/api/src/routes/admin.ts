@@ -1,6 +1,8 @@
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { normalizeArxivId } from "./papers-helpers.js";
 import {
   CreateReviewSystemRequestSchema,
   VOTE_DIMENSIONS,
@@ -37,11 +39,18 @@ export interface AdminDeps {
   orchestrator: Orchestrator;
 }
 
+// Same in-memory multipart handling as the public upload route — the PDF
+// is forwarded to review-gen and never written to disk.
+const ADMIN_MAX_PDF_BYTES = 10 * 1024 * 1024;
+const adminUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: ADMIN_MAX_PDF_BYTES },
+});
+
 export function adminRouter(config: Config, deps: AdminDeps): Router {
   const router = Router();
   const guard = requireAdmin(config.ADMIN_TOKEN);
-  const { judge, orchestrator: orch } = deps;
-  void deps.reviewGen;
+  const { judge, orchestrator: orch, reviewGen } = deps;
 
   // All admin routes require the bearer token.
   router.use("/admin", guard);
@@ -194,6 +203,67 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         },
       });
       res.json(rows);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  // ─── Parse passthrough ─────────────────────────────────────────────
+
+  // The admin Parse tab used to call review-gen directly from the browser
+  // via the /py-api Vercel rewrite. That only ever worked in local dev,
+  // where the Vite proxy injects X-API-Key: a Vercel rewrite is a plain
+  // proxy and cannot add headers, so in production review-gen answered
+  // 401 "invalid or missing X-API-Key" for every request. The shared
+  // secret must not be shipped to the browser to fix that, so these two
+  // routes proxy through the API, which already holds it server-side.
+  // Both are bearer-guarded by the router-level `guard` above and neither
+  // touches the DB — same contract the tab documents.
+
+  router.post(
+    "/admin/parse",
+    adminUpload.single("file"),
+    async (req, res, next) => {
+      try {
+        if (!req.file) {
+          res.status(400).json({ error: "BadRequest", message: "No `file` provided." });
+          return;
+        }
+        if (req.file.mimetype !== "application/pdf") {
+          res
+            .status(400)
+            .json({ error: "BadRequest", message: "Only application/pdf accepted." });
+          return;
+        }
+        const parsed = await reviewGen.parsePdf(
+          req.file.buffer,
+          req.file.originalname || "paper.pdf",
+        );
+        res.json(parsed);
+      } catch (e) {
+        next(e);
+      }
+    },
+  );
+
+  router.post("/admin/parse-arxiv", async (req, res, next) => {
+    try {
+      const raw = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+      if (!raw) {
+        res
+          .status(400)
+          .json({ error: "BadRequest", message: "Provide `url` (arXiv URL or bare ID)." });
+        return;
+      }
+      const arxivId = normalizeArxivId(raw);
+      if (!arxivId) {
+        res
+          .status(400)
+          .json({ error: "BadRequest", message: "url must be a valid arXiv URL/ID" });
+        return;
+      }
+      const parsed = await reviewGen.parseArxiv(arxivId);
+      res.json(parsed);
     } catch (e) {
       next(e);
     }

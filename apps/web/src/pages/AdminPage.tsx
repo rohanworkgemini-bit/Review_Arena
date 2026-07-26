@@ -99,7 +99,7 @@ export function AdminPage() {
 
       <div>
         {tab === "playground" && <ReviewerPlayground token={token} />}
-        {tab === "parse" && <ParseTab />}
+        {tab === "parse" && <ParseTab token={token} />}
         {tab === "systems" && <SystemsTab token={token} />}
         {tab === "settings" && (
           <SettingsTab
@@ -198,22 +198,29 @@ function TabStrip({
 
 // ─── Parse tab ─────────────────────────────────────────────────────────────
 // Two thin interactive forms over the review-gen Python service: parse a
-// PDF (multipart) or parse an arXiv URL/ID. The browser proxies via
-// /py-api (Vite dev proxy injects X-API-Key; Vercel rewrite in prod hits
-// review-gen Cloud Run directly with the proxy injecting auth headers).
+// PDF (multipart) or parse an arXiv URL/ID.
+//
+// These go through /api/admin/parse* — NOT the /py-api rewrite. review-gen
+// requires an X-API-Key that the browser must never hold, and a Vercel
+// rewrite cannot inject headers, so calling it directly 401s in prod (it
+// only appeared to work locally because the Vite dev proxy adds the
+// header). The API holds the shared secret server-side and is guarded by
+// the same admin bearer token as every other tab.
 
-function ParseTab() {
+function ParseTab({ token }: { token: string }) {
   return (
     <div className="space-y-4">
       <ParseForm
         title="Parse PDF"
         description="Multipart upload. Returns canonical ParsedPaper without touching the DB."
         mode="pdf"
+        token={token}
       />
       <ParseForm
         title="Parse arXiv"
         description="Pass an arXiv URL or bare ID (e.g. 2310.06825). Returns canonical ParsedPaper."
         mode="arxiv"
+        token={token}
       />
     </div>
   );
@@ -223,10 +230,12 @@ function ParseForm({
   title,
   description,
   mode,
+  token,
 }: {
   title: string;
   description: string;
   mode: "pdf" | "arxiv";
+  token: string;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [arxiv, setArxiv] = useState("");
@@ -246,21 +255,27 @@ function ParseForm({
         }
         const fd = new FormData();
         fd.append("file", file);
-        url = "/py-api/parse";
+        url = "/api/admin/parse";
+        // No content-type header: the browser must set the multipart
+        // boundary itself.
         init = { method: "POST", body: fd };
       } else {
         if (!arxiv.trim()) {
           setResp({ status: 0, body: "Enter an arXiv URL or ID." });
           return;
         }
-        url = "/py-api/parse-arxiv";
+        url = "/api/admin/parse-arxiv";
         init = {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ url: arxiv.trim() }),
         };
       }
-      const r = await fetch(url, init);
+      const r = await fetch(url, {
+        ...init,
+        headers: { ...(init.headers ?? {}), authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
       const text = await r.text();
       let pretty = text;
       try {
@@ -304,7 +319,7 @@ function ParseForm({
             {loading ? "Parsing…" : "Parse"}
           </Button>
           <code className="font-mono text-xs text-muted-foreground">
-            POST {mode === "pdf" ? "/py-api/parse" : "/py-api/parse-arxiv"}
+            POST {mode === "pdf" ? "/api/admin/parse" : "/api/admin/parse-arxiv"}
           </code>
         </div>
         {resp && (
