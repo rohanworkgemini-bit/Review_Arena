@@ -27,7 +27,8 @@ app/
     ├── gpt52.py            GPT-5.2
     ├── gpt55.py            GPT-5.5 (registered, disabled in seed)
     ├── gpt54mini.py        GPT-5.4-mini
-    ├── claudeopus5.py      Claude Opus 5
+    ├── claudeopus48.py     Claude Opus 4.8
+    ├── claudeopus5.py      Claude Opus 5 (registered, disabled in seed)
     ├── claudesonnet5.py    Claude Sonnet 5
     ├── gemini31pro.py      Gemini 3.1 Pro
     ├── gemini36flash.py    Gemini 3.6 Flash

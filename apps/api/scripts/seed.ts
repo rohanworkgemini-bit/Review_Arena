@@ -3,7 +3,7 @@
 //
 // Live lineup — 10 frontier commercial reviewers, 5 providers x 2 tiers:
 //     - GPT-5.2 / GPT-5.4-mini             (OpenAI)
-//     - Claude Opus 5 / Claude Sonnet 5    (Anthropic, native SDK)
+//     - Claude Opus 4.8 / Sonnet 5         (Anthropic, native SDK)
 //     - Gemini 3.1 Pro / Gemini 3.6 Flash  (Google)
 //     - DeepSeek V4 Pro / V4 Flash         (DeepSeek OpenAI-compat API)
 //     - Mistral Large 3 / Medium 3.5       (Mistral OpenAI-compat API)
@@ -45,9 +45,10 @@ const RETIRED_SLUGS = [
   // Disabled, NOT removed: the adapter stays registered so the row and
   // its reviews/Elo history remain usable and re-enabling is one line.
   "gpt-5.5",                // → gpt-5.2 ($5/$30 vs $1.75/$14 per 1M)
+  "claude-opus-5",          // → claude-opus-4-8 (identical pricing;
+                            // a model choice, not a cost one)
   "gpt-5",                  // → gpt-5.2
   "gpt-5-mini",             // → gpt-5.4-mini
-  "claude-opus-4-8",        // → claude-opus-5 / claude-sonnet-5
   "gemini-3-pro",           // → gemini-3.1-pro
   "gemini-2.5-flash",       // → gemini-3.6-flash
   "deepseek-v3-2",          // → deepseek-v4-pro / deepseek-v4-flash
@@ -114,14 +115,16 @@ async function main() {
     },
     // ─── Anthropic (native SDK, adaptive thinking) ─────────────────────
     {
-      slug: "claude-opus-5",
-      name: "Claude Opus 5 (zero-shot)",
+      slug: "claude-opus-4-8",
+      name: "Claude Opus 4.8 (zero-shot)",
       description:
-        "Anthropic Claude Opus 5 (top tier) via the native Anthropic SDK. " +
+        "Anthropic Claude Opus 4.8 (top tier) via the native Anthropic SDK. " +
         "Adaptive thinking (effort=high) — auto-tuned reasoning depth for " +
         "peer-review judgment.",
-      adapterKey: "claude-opus-5",
-      config: { model: "claude-opus-5", thinking: true },
+      adapterKey: "claude-opus-4-8",
+      // Same $5/$25 per 1M as Opus 5 and the same post-4.7 tokenizer, so
+      // this swap changes the model under test, not the cost.
+      config: { model: "claude-opus-4-8", thinking: true },
       enabled: !!process.env.ANTHROPIC_API_KEY,
     },
     {

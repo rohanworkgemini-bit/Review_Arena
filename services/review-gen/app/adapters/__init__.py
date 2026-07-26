@@ -4,7 +4,7 @@ Live adapter keys (must match `review_systems.adapter_key` in the DB) —
 ten systems across five providers, two tiers each:
   gpt-5.2            — OpenAI GPT-5.2
   gpt-5.4-mini       — OpenAI GPT-5.4-mini
-  claude-opus-5      — Anthropic Claude Opus 5 (native SDK)
+  claude-opus-4-8    — Anthropic Claude Opus 4.8 (native SDK)
   claude-sonnet-5    — Anthropic Claude Sonnet 5 (native SDK)
   gemini-3.1-pro     — Google Gemini 3.1 Pro
   gemini-3.6-flash   — Google Gemini 3.6 Flash
@@ -15,7 +15,7 @@ ten systems across five providers, two tiers each:
 
 Also registered but DISABLED in the seed (enabled=false), so their DB
 rows, reviews and Elo history stay intact and re-enabling is a one-line
-change: gpt-5.5, gpt-5.5-pro.
+change: gpt-5.5, gpt-5.5-pro, claude-opus-5.
 
 Every model id above was verified callable against the provider's live
 model-list endpoint on 2026-07-26; the exact ids live in each per-system
@@ -85,6 +85,12 @@ def _bootstrap() -> None:
 
         return GPT54MiniAdapter(cfg)
 
+    def _claude_opus48_factory(cfg: dict) -> Adapter:
+        from app.adapters.claudeopus48 import ClaudeOpus48Adapter
+
+        return ClaudeOpus48Adapter(cfg)
+
+    # Disabled in the seed but kept registered — see module docstring.
     def _claude_opus5_factory(cfg: dict) -> Adapter:
         from app.adapters.claudeopus5 import ClaudeOpus5Adapter
 
@@ -128,7 +134,8 @@ def _bootstrap() -> None:
     register("gpt-5.2", _gpt52_factory)
     register("gpt-5.5", _gpt55_factory)  # disabled in seed, kept resolvable
     register("gpt-5.4-mini", _gpt54mini_factory)
-    register("claude-opus-5", _claude_opus5_factory)
+    register("claude-opus-4-8", _claude_opus48_factory)
+    register("claude-opus-5", _claude_opus5_factory)  # disabled in seed, kept resolvable
     register("claude-sonnet-5", _claude_sonnet5_factory)
     register("gemini-3.1-pro", _gemini31pro_factory)
     register("gemini-3.6-flash", _gemini36flash_factory)
