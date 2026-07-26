@@ -80,6 +80,11 @@ def _bootstrap() -> None:
 
         return GPT55Adapter(cfg)
 
+    def _gpt55pro_factory(cfg: dict) -> Adapter:
+        from app.adapters.gpt55pro import GPT55ProAdapter
+
+        return GPT55ProAdapter(cfg)
+
     def _gpt54mini_factory(cfg: dict) -> Adapter:
         from app.adapters.gpt54mini import GPT54MiniAdapter
 
@@ -132,7 +137,8 @@ def _bootstrap() -> None:
         return MistralMedium35Adapter(cfg)
 
     register("gpt-5.2", _gpt52_factory)
-    register("gpt-5.5", _gpt55_factory)  # disabled in seed, kept resolvable
+    register("gpt-5.5", _gpt55_factory)        # disabled in seed, kept resolvable
+    register("gpt-5.5-pro", _gpt55pro_factory)  # disabled in seed, kept resolvable
     register("gpt-5.4-mini", _gpt54mini_factory)
     register("claude-opus-4-8", _claude_opus48_factory)
     register("claude-opus-5", _claude_opus5_factory)  # disabled in seed, kept resolvable

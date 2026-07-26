@@ -26,6 +26,7 @@ app/
     ├── mistral.py          Mistral base (OpenAI-compatible)
     ├── gpt52.py            GPT-5.2
     ├── gpt55.py            GPT-5.5 (registered, disabled in seed)
+    ├── gpt55pro.py         GPT-5.5 Pro (registered, disabled; Responses API)
     ├── gpt54mini.py        GPT-5.4-mini
     ├── claudeopus48.py     Claude Opus 4.8
     ├── claudeopus5.py      Claude Opus 5 (registered, disabled in seed)

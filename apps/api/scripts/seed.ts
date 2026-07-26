@@ -97,7 +97,7 @@ async function main() {
     // ─── OpenAI ────────────────────────────────────────────────────────
     {
       slug: "gpt-5.2",
-      name: "GPT-5.2 (zero-shot)",
+      name: "GPT-5.2",
       description:
         "OpenAI GPT-5.2 (previous-frontier tier) with our zero-shot reviewer " +
         "prompt. Chosen over GPT-5.5 on cost: $1.75/$14.00 vs $5.00/$30.00 per 1M.",
@@ -107,7 +107,7 @@ async function main() {
     },
     {
       slug: "gpt-5.4-mini",
-      name: "GPT-5.4-mini (zero-shot)",
+      name: "GPT-5.4-mini",
       description: "OpenAI GPT-5.4-mini (small tier) with our zero-shot reviewer prompt.",
       adapterKey: "gpt-5.4-mini",
       config: { model: "gpt-5.4-mini", use_max_completion_tokens: true },
@@ -116,7 +116,7 @@ async function main() {
     // ─── Anthropic (native SDK, adaptive thinking) ─────────────────────
     {
       slug: "claude-opus-4-8",
-      name: "Claude Opus 4.8 (zero-shot)",
+      name: "Claude Opus 4.8",
       description:
         "Anthropic Claude Opus 4.8 (top tier) via the native Anthropic SDK. " +
         "Adaptive thinking (effort=high) — auto-tuned reasoning depth for " +
@@ -129,7 +129,7 @@ async function main() {
     },
     {
       slug: "claude-sonnet-5",
-      name: "Claude Sonnet 5 (zero-shot)",
+      name: "Claude Sonnet 5",
       description:
         "Anthropic Claude Sonnet 5 (mid tier) via the native Anthropic SDK, " +
         "adaptive thinking enabled.",
@@ -140,7 +140,7 @@ async function main() {
     // ─── Google ────────────────────────────────────────────────────────
     {
       slug: "gemini-3.1-pro",
-      name: "Gemini 3.1 Pro (zero-shot)",
+      name: "Gemini 3.1 Pro",
       description:
         "Google Gemini 3.1 Pro (top tier) with our zero-shot reviewer prompt.",
       adapterKey: "gemini-3.1-pro",
@@ -155,7 +155,7 @@ async function main() {
     },
     {
       slug: "gemini-3.6-flash",
-      name: "Gemini 3.6 Flash (zero-shot)",
+      name: "Gemini 3.6 Flash",
       description: "Google Gemini 3.6 Flash (fast tier) with our zero-shot reviewer prompt.",
       adapterKey: "gemini-3.6-flash",
       config: { model: "gemini-3.6-flash", temperature: 0.2 },
@@ -164,7 +164,7 @@ async function main() {
     // ─── DeepSeek (native OpenAI-compatible endpoint) ──────────────────
     {
       slug: "deepseek-v4-pro",
-      name: "DeepSeek V4 Pro (zero-shot)",
+      name: "DeepSeek V4 Pro",
       description:
         "DeepSeek V4 Pro zero-shot reviewer via DeepSeek's native " +
         "OpenAI-compatible endpoint. Strong, low-cost frontier baseline.",
@@ -174,7 +174,7 @@ async function main() {
     },
     {
       slug: "deepseek-v4-flash",
-      name: "DeepSeek V4 Flash (zero-shot)",
+      name: "DeepSeek V4 Flash",
       description:
         "DeepSeek V4 Flash (fast tier) zero-shot reviewer via DeepSeek's " +
         "OpenAI-compatible endpoint.",
@@ -185,7 +185,7 @@ async function main() {
     // ─── Mistral (native OpenAI-compatible endpoint) ───────────────────
     {
       slug: "mistral-large-3",
-      name: "Mistral Large 3 (zero-shot)",
+      name: "Mistral Large 3",
       description:
         "Mistral Large 3 (top tier) zero-shot reviewer via Mistral's " +
         "OpenAI-compatible endpoint.",
@@ -199,7 +199,7 @@ async function main() {
     },
     {
       slug: "mistral-medium-3.5",
-      name: "Mistral Medium 3.5 (zero-shot)",
+      name: "Mistral Medium 3.5",
       description:
         "Mistral Medium 3.5 (mid tier) zero-shot reviewer via Mistral's " +
         "OpenAI-compatible endpoint.",

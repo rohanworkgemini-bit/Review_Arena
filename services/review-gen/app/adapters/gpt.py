@@ -9,9 +9,9 @@ config flag:
   - /v1/responses        — required by the "pro" reasoning tier, which
     is NOT a chat model: chat/completions answers 404 "This is not a
     chat model and thus not supported in the v1/chat/completions
-    endpoint" (verified 2026-07-26). NOTE: no seeded system currently
-    sets use_responses_api — gpt-5.5-pro was withdrawn from the lineup
-    (see gpt54mini.py) — so this branch is retained but unexercised.
+    endpoint" (verified 2026-07-26). gpt55pro.py is the only adapter
+    that sets use_responses_api; it is registered but disabled in the
+    seed, so this branch is reachable only if that system is re-enabled.
 
 Requires OPENAI_API_KEY in the environment. Raises at generate() time
 (via a runtime exception caller can catch) if missing — we don't want to
