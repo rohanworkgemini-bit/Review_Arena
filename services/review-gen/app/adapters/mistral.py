@@ -1,25 +1,17 @@
-"""DeepSeek base adapter.
+"""Mistral base adapter.
 
-Native DeepSeek API access via DeepSeek's OpenAI-compatible endpoint.
-We use the openai SDK pointed at https://api.deepseek.com/v1 — the
-DeepSeek docs explicitly recommend this and their schema matches.
+Native Mistral API access via Mistral's OpenAI-compatible endpoint. We
+use the openai SDK pointed at https://api.mistral.ai/v1 — same
+chat-completions schema, same auth shape, so no extra SDK dependency.
 
 This is the provider-level base class; the per-system subclasses
-(deepseekv4pro.py, deepseekv4flash.py) only pin a model string and an
-adapter_key.
+(mistrallarge3.py, mistralmedium35.py) only pin a model string and an
+adapter_key, matching the 1:1 review_systems ↔ source mapping the other
+providers use.
 
-A dedicated adapter (vs one config-driven generic adapter shared by
-every provider) gives the thesis a clean 1:1 mapping between
-review_systems rows and adapter source, and leaves room for
-DeepSeek-specific behaviour without touching anyone else:
-  - cache-hit pricing (DeepSeek bills cached prefix tokens at a steep
-    discount; logging both separately matters for the cost chapter)
-  - reasoning-mode support when we switch to deepseek-reasoner
-  - any future API quirks specific to DeepSeek
-
-Requires DEEPSEEK_API_KEY in the environment. Falls back loudly if
-missing — no silent mock so a stale leaderboard doesn't accumulate
-fake votes against missing data.
+Requires MISTRAL_API_KEY in the environment. Raises loudly if missing —
+no silent mock, so a stale leaderboard can't accumulate votes against
+missing data.
 """
 from __future__ import annotations
 
@@ -35,39 +27,37 @@ from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, StreamEvent
 from app.schemas import ParsedPaper
 
-_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
+_MISTRAL_BASE_URL = "https://api.mistral.ai/v1"
 
 # The review-form system prompt is built per selected conference in
 # __init__ — see app/conference_scales.py (single source for the form
 # shared by all commercial adapters; only ## Rating varies by venue).
 
 
-class DeepSeekAdapter(Adapter):
-    adapter_key = "deepseek"
+class MistralAdapter(Adapter):
+    adapter_key = "mistral"
 
     def __init__(self, config: dict | None = None) -> None:
         super().__init__(config)
         self._system_prompt = build_system_prompt(
             self.config.get('conference', DEFAULT_CONFERENCE)
         )
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        api_key = os.environ.get("MISTRAL_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "DeepSeekAdapter requires DEEPSEEK_API_KEY. "
-                "Get one at https://platform.deepseek.com/ and add it to .env."
+                "MistralAdapter requires MISTRAL_API_KEY. "
+                "Get one at https://console.mistral.ai/ and add it to .env."
             )
         # Lazy import so the rest of the service starts without the
         # openai SDK installed.
         from openai import OpenAI
 
-        # DeepSeek exposes an OpenAI-compatible endpoint at api.deepseek.com/v1.
-        # Same chat-completions schema, same auth shape — we just point the
-        # client at their base URL instead of OpenAI's.
-        self._client = OpenAI(api_key=api_key, base_url=_DEEPSEEK_BASE_URL)
-        self._model = self.config.get("model", "deepseek-v4-pro")
+        self._client = OpenAI(api_key=api_key, base_url=_MISTRAL_BASE_URL)
+        self._model = self.config.get("model", "mistral-large-2512")
         self._temperature = self.config.get("temperature", 0.2)
-        # DeepSeek V4 has a 128k context window per their docs.
-        self._context_window = int(self.config.get("context_window", 128_000))
+        # Both seeded Mistral models report a 262144-token window via
+        # GET /v1/models; logged for transparency, not used to size input.
+        self._context_window = int(self.config.get("context_window", 262_144))
 
     def _kwargs(self, prompt: str, *, stream: bool) -> dict:
         return {
@@ -76,9 +66,9 @@ class DeepSeekAdapter(Adapter):
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            # DeepSeek defaults max_tokens to 4k when omitted — sending
-            # the provider maximum so the model is effectively uncapped.
-            "max_tokens": 8_192,
+            # Mistral defaults max_tokens to the model ceiling when
+            # omitted; we leave it out so the response is uncapped
+            # (fairness: caps removed by design).
             "temperature": self._temperature,
             "stream": stream,
         }
@@ -89,7 +79,7 @@ class DeepSeekAdapter(Adapter):
             output_tokens=count_tokens(raw),
             context_window=self._context_window,
             fair_input_tokens=count_tokens(prompt),
-            fair_output_tokens=0,  # 0 = uncapped (8192 = provider max)
+            fair_output_tokens=0,  # 0 = uncapped
         )
 
     def generate(self, paper: ParsedPaper) -> GenerationResult:

@@ -244,11 +244,23 @@ def _one_judge_pass(
     raise RuntimeError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
 
 
-# Default judge model. Gemini 3.1 Pro is the top-tier Google model and
-# is independent from any of our currently-deployed reviewer systems
-# (we don't ship a Gemini reviewer that uses gemini-3.1-pro-preview as
-# its underlying model directly in production — kept separate to avoid
-# obvious self-grading bias).
+# Default judge model — Gemini 3.1 Pro, chosen deliberately (2026-07).
+#
+# KNOWN, ACCEPTED CONFLICT: this is the SAME model id the `gemini-3.1-pro`
+# leaderboard system is pinned to (see apps/api/scripts/seed.ts), and a
+# same-family sibling of `gemini-3.6-flash`. The judge therefore grades
+# its own output for 1 of the 10 systems.
+#
+# This is not an oversight. Since the 2026-07 lineup refresh the board
+# spans five vendors (OpenAI, Anthropic, Google, DeepSeek, Mistral), so
+# no frontier judge is free of vendor overlap — moving the judge would
+# relocate the conflict, not remove it. The thesis's primary claim rests
+# on *human* Elo; the judge is a secondary correlate for RQ1.
+#
+# Required mitigation (docs/FAIRNESS.md B3): report judge scores for the
+# two Google systems separately and check whether judge-human correlation
+# differs for them. Do NOT change this model mid-study — that would make
+# the RQ1 correlation incomparable across collected data.
 DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview"
 
 

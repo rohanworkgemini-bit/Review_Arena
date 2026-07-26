@@ -32,14 +32,26 @@ The thesis benchmarks **frontier commercial LLMs only** — every system is
 reached over its provider's API, so there is no GPU hosting anywhere in
 the stack.
 
-| Slug              | Backing model                    | Hosting                    | Streams?     |
-|-------------------|----------------------------------|----------------------------|--------------|
-| `gpt-5`           | OpenAI GPT-5                     | OpenAI API                 | yes (SDK)    |
-| `gpt-5-mini`      | OpenAI GPT-5-mini                | OpenAI API                 | yes (SDK)    |
-| `gemini-3-pro`    | Google `gemini-3.1-pro-preview`  | Google AI Studio API       | yes (SDK)    |
-| `gemini-2.5-flash`| Google Gemini 2.5 Flash          | Google AI Studio API       | yes (SDK)    |
-| `claude-opus-4-8` | Anthropic Claude Opus 4.8        | Anthropic API (native SDK) | yes (SDK)    |
-| `deepseek-v3-2`   | DeepSeek V3.2 (`deepseek-chat`)  | DeepSeek API (OpenAI-compat)| yes (SDK)   |
+Ten systems: five providers x two tiers, so the leaderboard can separate
+"which lab" from "how much compute".
+
+| Slug                 | Backing model id          | Hosting                      | Streams?  |
+|----------------------|---------------------------|------------------------------|-----------|
+| `gpt-5.5-pro`        | `gpt-5.5-pro`             | OpenAI API                   | yes (SDK) |
+| `gpt-5.5`            | `gpt-5.5`                 | OpenAI API                   | yes (SDK) |
+| `claude-opus-5`      | `claude-opus-5`           | Anthropic API (native SDK)   | yes (SDK) |
+| `claude-sonnet-5`    | `claude-sonnet-5`         | Anthropic API (native SDK)   | yes (SDK) |
+| `gemini-3.1-pro`     | `gemini-3.1-pro-preview`  | Google AI Studio API         | yes (SDK) |
+| `gemini-3.6-flash`   | `gemini-3.6-flash`        | Google AI Studio API         | yes (SDK) |
+| `deepseek-v4-pro`    | `deepseek-v4-pro`         | DeepSeek API (OpenAI-compat) | yes (SDK) |
+| `deepseek-v4-flash`  | `deepseek-v4-flash`       | DeepSeek API (OpenAI-compat) | yes (SDK) |
+| `mistral-large-3`    | `mistral-large-2512`      | Mistral API (OpenAI-compat)  | yes (SDK) |
+| `mistral-medium-3.5` | `mistral-medium-2604`     | Mistral API (OpenAI-compat)  | yes (SDK) |
+
+Two slugs differ from their backing id on purpose: Google ships no
+non-preview 3.1 Pro, and Mistral has no literal `mistral-large-3` — we
+pin the dated snapshot so a silent provider upgrade can't invalidate the
+comparison mid-study. All ten ids were verified callable on 2026-07-26.
 
 Each system is enabled in the DB only if its provider key is present, so
 a missing key means that system is skipped by pair selection rather than
@@ -67,11 +79,12 @@ so their historical reviews, votes and Elo snapshots remain queryable.
                             ┌───────────────┬─────────────┼──────────────┬───────────────┐
                             │               │             │              │               │
                     ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌──────▼───────┐
-                    │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  DeepSeek  │ │ Datalab      │
-                    │              │ │  Studio    │ │    API     │ │    API     │ │ Chandra API  │
-                    │ gpt-5(-mini) │ │ gemini 3/  │ │ opus-4.8   │ │  V3.2      │ │ PDF → md     │
-                    │              │ │  2.5-flash │ │            │ │            │ │              │
+                    │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  DeepSeek  │ │ Mistral API  │
+                    │              │ │  Studio    │ │    API     │ │    API     │ │              │
+                    │  gpt-5.5     │ │ gemini 3.1 │ │  opus-5    │ │ v4-pro     │ │ large-3      │
+                    │  gpt-5.5-pro │ │ /3.6-flash │ │  sonnet-5  │ │ v4-flash   │ │ medium-3.5   │
                     └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────────┘
+                                            (+ Datalab Chandra API for PDF → markdown)
 ```
 
 Everything heavy is a **third-party API call** — no GPUs, no model
@@ -149,11 +162,12 @@ cp .env.example .env
 pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
 pnpm --filter @reviewarena/api db:seed     # insert review systems
 
-# 3. Provider keys — nothing to deploy, all six systems are hosted APIs
-#   OPENAI_API_KEY    → gpt-5, gpt-5-mini
-#   GEMINI_API_KEY    → gemini-3-pro, gemini-2.5-flash (+ the LLM judge)
-#   ANTHROPIC_API_KEY → claude-opus-4-8
-#   DEEPSEEK_API_KEY  → deepseek-v3-2
+# 3. Provider keys — nothing to deploy, all ten systems are hosted APIs
+#   OPENAI_API_KEY    → gpt-5.5-pro, gpt-5.5
+#   ANTHROPIC_API_KEY → claude-opus-5, claude-sonnet-5
+#   GEMINI_API_KEY    → gemini-3.1-pro, gemini-3.6-flash (+ the LLM judge)
+#   DEEPSEEK_API_KEY  → deepseek-v4-pro, deepseek-v4-flash
+#   MISTRAL_API_KEY   → mistral-large-3, mistral-medium-3.5
 #   CHANDRA_API_KEY   → PDF parsing, from https://www.datalab.to
 
 # 4. Local Postgres (skip if using Neon or other managed)

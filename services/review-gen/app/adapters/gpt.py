@@ -1,4 +1,15 @@
-"""GPT-4o-mini prompting baseline.
+"""OpenAI base adapter.
+
+Provider-level base class; the per-system subclasses (gpt55pro.py,
+gpt55.py) only pin a model string and an adapter_key.
+
+TWO OpenAI endpoints are supported, selected by the `use_responses_api`
+config flag:
+  - /v1/chat/completions — the default, used by ordinary chat models.
+  - /v1/responses        — required by the "pro" reasoning tier.
+    gpt-5.5-pro is NOT a chat model: chat/completions returns
+    404 "This is not a chat model and thus not supported in the
+    v1/chat/completions endpoint". Verified 2026-07-26.
 
 Requires OPENAI_API_KEY in the environment. Raises at generate() time
 (via a runtime exception caller can catch) if missing — we don't want to
@@ -48,6 +59,10 @@ class GPTAdapter(Adapter):
         # so the seed config can omit it for those models.
         self._temperature = self.config.get("temperature")  # may be None
         self._context_window = int(self.config.get("context_window", 128_000))
+        # "pro"-tier reasoning models are Responses-API only (see module
+        # docstring). Set by the seed config, not sniffed from the model
+        # name, so a future rename can't silently route to a dead endpoint.
+        self._use_responses = bool(self.config.get("use_responses_api"))
 
     def _kwargs(self, prompt: str, *, stream: bool) -> dict:
         # Reasoning models (GPT-5, o1) reject `max_tokens` and require
@@ -83,6 +98,19 @@ class GPTAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped
         )
 
+    def _responses_kwargs(self, prompt: str) -> dict:
+        """Request shape for /v1/responses. The system prompt becomes
+        `instructions` and the paper becomes `input` — the Responses API
+        has no `messages` array."""
+        kwargs: dict = {
+            "model": self._model,
+            "instructions": self._system_prompt,
+            "input": prompt,
+        }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        return kwargs
+
     def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
@@ -90,8 +118,12 @@ class GPTAdapter(Adapter):
                 "Empty paper content — refusing to call the model. "
                 "The PDF probably contains no extractable text."
             )
-        response = self._client.chat.completions.create(**self._kwargs(prompt, stream=False))
-        raw = response.choices[0].message.content or ""
+        if self._use_responses:
+            response = self._client.responses.create(**self._responses_kwargs(prompt))
+            raw = response.output_text or ""
+        else:
+            response = self._client.chat.completions.create(**self._kwargs(prompt, stream=False))
+            raw = response.choices[0].message.content or ""
         # Unified ICLR markdown — same parser path as every other adapter.
         # ScoreScale.ICLR rescales the 1-4 dimension scores back to the 1-10
         # ranges that StructuredReview persists.
@@ -108,13 +140,28 @@ class GPTAdapter(Adapter):
                 yield StreamEvent(type="error", error="Empty paper text")
                 return
             chunks: list[str] = []
-            for event in self._client.chat.completions.create(**self._kwargs(prompt, stream=True)):
-                if not event.choices:
-                    continue
-                delta = event.choices[0].delta.content or ""
-                if delta:
-                    chunks.append(delta)
-                    yield StreamEvent(type="token", text=delta)
+            if self._use_responses:
+                # Responses API: deltas arrive as typed events rather than
+                # choice objects. Only output_text deltas are user-facing;
+                # reasoning-summary events are skipped.
+                with self._client.responses.stream(**self._responses_kwargs(prompt)) as stream:
+                    for event in stream:
+                        if getattr(event, "type", None) != "response.output_text.delta":
+                            continue
+                        delta = event.delta or ""
+                        if delta:
+                            chunks.append(delta)
+                            yield StreamEvent(type="token", text=delta)
+            else:
+                for event in self._client.chat.completions.create(
+                    **self._kwargs(prompt, stream=True)
+                ):
+                    if not event.choices:
+                        continue
+                    delta = event.choices[0].delta.content or ""
+                    if delta:
+                        chunks.append(delta)
+                        yield StreamEvent(type="token", text=delta)
             raw = "".join(chunks).strip()
             review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
             yield StreamEvent(

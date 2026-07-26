@@ -19,14 +19,21 @@ app/
     ├── base.py          Adapter abstract class + StreamEvent
     ├── _budget.py       Shared input budgeting (FAIRNESS A4)
     ├── _review_parse.py Shared markdown/JSON → StructuredReview
-    ├── gpt.py           OpenAI base adapter (shared by the GPT systems)
-    ├── gemini.py        Google base adapter (shared by the Gemini systems)
-    ├── gpt5.py          OpenAI GPT-5 zero-shot
-    ├── gpt5mini.py      OpenAI GPT-5-mini zero-shot
-    ├── gemini3pro.py    Google Gemini 3 Pro zero-shot
-    ├── gemini25flash.py Google Gemini 2.5 Flash zero-shot
-    ├── claude.py        Anthropic Claude Opus 4.8 (native SDK)
-    └── deepseek.py      DeepSeek V3.2 (OpenAI-compatible endpoint)
+    ├── gpt.py              OpenAI base (chat/completions + responses)
+    ├── claude.py           Anthropic base (native SDK)
+    ├── gemini.py           Google base
+    ├── deepseek.py         DeepSeek base (OpenAI-compatible)
+    ├── mistral.py          Mistral base (OpenAI-compatible)
+    ├── gpt55pro.py         GPT-5.5 Pro      (Responses API only)
+    ├── gpt55.py            GPT-5.5
+    ├── claudeopus5.py      Claude Opus 5
+    ├── claudesonnet5.py    Claude Sonnet 5
+    ├── gemini31pro.py      Gemini 3.1 Pro
+    ├── gemini36flash.py    Gemini 3.6 Flash
+    ├── deepseekv4pro.py    DeepSeek V4 Pro
+    ├── deepseekv4flash.py  DeepSeek V4 Flash
+    ├── mistrallarge3.py    Mistral Large 3
+    └── mistralmedium35.py  Mistral Medium 3.5
 ```
 
 All review systems are frontier commercial APIs. The open-weight

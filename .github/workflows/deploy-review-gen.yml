@@ -83,9 +83,9 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --concurrency=20 \
-            --timeout=600 \
+            --timeout=900 \
             --set-env-vars="REVIEWARENA_ENV=production,ARXIV2MD_BASE=https://reviewarena-arxiv2md-760031824692.europe-west3.run.app" \
-            --set-secrets="REVIEW_GEN_API_KEY=review-gen-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,DEEPSEEK_API_KEY=deepseek-api-key:latest,CHANDRA_API_KEY=chandra-api-key:latest" \
+            --set-secrets="REVIEW_GEN_API_KEY=review-gen-api-key:latest,OPENAI_API_KEY=openai-api-key:latest,ANTHROPIC_API_KEY=anthropic-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest,DEEPSEEK_API_KEY=deepseek-api-key:latest,MISTRAL_API_KEY=mistral-api-key:latest,CHANDRA_API_KEY=chandra-api-key:latest" \
             --quiet
 
       - name: Smoke test /health

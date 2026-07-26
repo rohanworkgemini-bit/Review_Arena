@@ -7,7 +7,9 @@ python-multipart==0.0.9
 python-dotenv==1.0.1
 
 # Review systems / model serving
-openai==1.40.0
+# >=2.x required: client.responses (gpt-5.5-pro is Responses-API only).
+# 1.40.0 has no `responses` attribute at all.
+openai==2.48.0
 google-generativeai==0.8.3
 # Anthropic SDK for Claude (Opus 4.8 reviewer). Native SDK is cheaper and
 # more reliable than going through OpenRouter (no markup, no proxy layer).

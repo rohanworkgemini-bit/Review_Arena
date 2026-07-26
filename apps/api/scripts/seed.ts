@@ -1,13 +1,19 @@
 // Seed review_systems so the demo has something to compare on day one.
 // Run: pnpm --filter @reviewarena/api db:seed
 //
-// Live lineup — 6 frontier commercial reviewers:
-//     - GPT-5            (OpenAI, top tier)
-//     - GPT-5-mini       (OpenAI, small)
-//     - Gemini 3 Pro     (Google, top tier)
-//     - Gemini 2.5 Flash (Google, small)
-//     - Claude Opus 4.8  (Anthropic, native SDK with adaptive thinking)
-//     - DeepSeek V3.2    (deepseek-chat via DeepSeek's OpenAI-compat API)
+// Live lineup — 10 frontier commercial reviewers, 5 providers x 2 tiers:
+//     - GPT-5.5 Pro / GPT-5.5              (OpenAI)
+//     - Claude Opus 5 / Claude Sonnet 5    (Anthropic, native SDK)
+//     - Gemini 3.1 Pro / Gemini 3.6 Flash  (Google)
+//     - DeepSeek V4 Pro / V4 Flash         (DeepSeek OpenAI-compat API)
+//     - Mistral Large 3 / Medium 3.5       (Mistral OpenAI-compat API)
+//
+// Two tiers per provider is deliberate: it lets the thesis separate
+// "which lab" from "how much compute" when reading the leaderboard.
+//
+// Every `model` string below was verified callable against the
+// provider's live model-list endpoint on 2026-07-26. Two do not match
+// their display name — see the comments on those rows.
 //
 // Scope: the thesis benchmarks frontier commercial LLMs only. The
 // open-weight specialist reviewers (DeepReviewer, OpenReviewer,
@@ -32,10 +38,18 @@ import { reviewSystems } from "../src/db/schema.js";
 // Slugs of retired adapters. Disabled (not deleted) so historical
 // reviews / votes / Elo snapshots remain in the DB for thesis analysis.
 const RETIRED_SLUGS = [
+  // Superseded by the 2026-07 lineup refresh (5 providers x 2 tiers).
+  "gpt-5",                  // → gpt-5.5-pro / gpt-5.5
+  "gpt-5-mini",             // → gpt-5.5
+  "claude-opus-4-8",        // → claude-opus-5 / claude-sonnet-5
+  "gemini-3-pro",           // → gemini-3.1-pro
+  "gemini-2.5-flash",       // → gemini-3.6-flash
+  "deepseek-v3-2",          // → deepseek-v4-pro / deepseek-v4-flash
+  // Earlier baselines.
   "gpt-4o-mini",            // pre-GPT-5 zero-shot baseline
-  "gpt-4o",                 // pre-GPT-5 frontier baseline, replaced by gpt-5
+  "gpt-4o",                 // pre-GPT-5 frontier baseline
   "gemini-1.5-flash",        // pre-Gemini-2.5 zero-shot baseline
-  "claude-sonnet",          // replaced by claude-opus-4-8 via native Anthropic SDK
+  "claude-sonnet",          // pre-Opus-5 Anthropic baseline
   "deepseek-v3",            // renamed to deepseek-v3-2 when we adopted per-system adapters
   "ai-scientist-gpt5",       // our port of Sakana's reviewer
   "tree-review-gpt5",         // our port of Chang et al.'s tree-of-questions
@@ -64,7 +78,7 @@ async function main() {
     }
   }
 
-  // Step 2 — upsert the 6 live frontier systems.
+  // Step 2 — upsert the 10 live frontier systems.
   const systems: Array<{
     slug: string;
     name: string;
@@ -73,82 +87,122 @@ async function main() {
     config: Record<string, unknown>;
     enabled?: boolean;
   }> = [
-    // ─── Live: 6 frontier commercial reviewers (per QSL plan) ─────────
-    // Two OpenAI (GPT-5 top + GPT-5-mini), two Google (Gemini 3 Pro top
-    // + Gemini 2.5 Flash), one Anthropic (Opus 4.8), one DeepSeek.
+    // ─── OpenAI ────────────────────────────────────────────────────────
     {
-      slug: "gpt-5",
-      name: "GPT-5 (zero-shot)",
+      slug: "gpt-5.5-pro",
+      name: "GPT-5.5 Pro (zero-shot)",
       description:
-        "OpenAI GPT-5 (top tier, not -mini) with our zero-shot reviewer prompt. " +
+        "OpenAI GPT-5.5 Pro (top tier) with our zero-shot reviewer prompt. " +
         "Reasoning-class model; uses adaptive thinking by default.",
-      adapterKey: "gpt-5",
-      config: { model: "gpt-5", use_max_completion_tokens: true },
+      adapterKey: "gpt-5.5-pro",
+      // The "pro" tier is Responses-API only — /v1/chat/completions 404s
+      // with "This is not a chat model". use_responses_api routes it to
+      // /v1/responses in GPTAdapter.
+      config: { model: "gpt-5.5-pro", use_responses_api: true },
       enabled: !!process.env.OPENAI_API_KEY,
     },
     {
-      slug: "gpt-5-mini",
-      name: "GPT-5-mini (zero-shot)",
-      description: "OpenAI GPT-5-mini with our zero-shot reviewer prompt.",
-      adapterKey: "gpt-5-mini",
-      config: { model: "gpt-5-mini", use_max_completion_tokens: true },
+      slug: "gpt-5.5",
+      name: "GPT-5.5 (zero-shot)",
+      description: "OpenAI GPT-5.5 (standard tier) with our zero-shot reviewer prompt.",
+      adapterKey: "gpt-5.5",
+      config: { model: "gpt-5.5", use_max_completion_tokens: true },
       enabled: !!process.env.OPENAI_API_KEY,
     },
+    // ─── Anthropic (native SDK, adaptive thinking) ─────────────────────
     {
-      slug: "gemini-3-pro",
-      name: "Gemini 3 Pro (zero-shot)",
+      slug: "claude-opus-5",
+      name: "Claude Opus 5 (zero-shot)",
       description:
-        "Google Gemini 3 Pro (top tier) with our zero-shot reviewer prompt. " +
-        "Frontier multi-modal model from the Gemini 3 family. " +
-        "Currently pinned to 'gemini-3.1-pro-preview' — Google deprecated " +
-        "'gemini-3-pro-preview' before the study began.",
-      adapterKey: "gemini-3-pro",
-      // gemini-3-pro-preview is dead (404). gemini-3.1-pro-preview is the
-      // current top-tier Gemini 3 model and IS working. We PIN the preview
-      // version so the entire study uses the same model snapshot — switching
-      // mid-study would invalidate apples-to-apples comparison.
-      // Verify currently-callable IDs with:
-      //   for m in "gemini-3.1-pro-preview" "gemini-pro-latest"; do \
-      //     curl -sS -o /dev/null -w "$m → %{http_code}\n" \
-      //       -X POST "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent?key=$GEMINI_API_KEY" \
-      //       -H "content-type: application/json" \
-      //       -d '{"contents":[{"parts":[{"text":"ping"}]}]}'; \
-      //   done
+        "Anthropic Claude Opus 5 (top tier) via the native Anthropic SDK. " +
+        "Adaptive thinking (effort=high) — auto-tuned reasoning depth for " +
+        "peer-review judgment.",
+      adapterKey: "claude-opus-5",
+      config: { model: "claude-opus-5", thinking: true },
+      enabled: !!process.env.ANTHROPIC_API_KEY,
+    },
+    {
+      slug: "claude-sonnet-5",
+      name: "Claude Sonnet 5 (zero-shot)",
+      description:
+        "Anthropic Claude Sonnet 5 (mid tier) via the native Anthropic SDK, " +
+        "adaptive thinking enabled.",
+      adapterKey: "claude-sonnet-5",
+      config: { model: "claude-sonnet-5", thinking: true },
+      enabled: !!process.env.ANTHROPIC_API_KEY,
+    },
+    // ─── Google ────────────────────────────────────────────────────────
+    {
+      slug: "gemini-3.1-pro",
+      name: "Gemini 3.1 Pro (zero-shot)",
+      description:
+        "Google Gemini 3.1 Pro (top tier) with our zero-shot reviewer prompt.",
+      adapterKey: "gemini-3.1-pro",
+      // "gemini-3.1-pro-preview" is the ONLY callable id for this tier —
+      // Google ships no non-preview 3.1 Pro. We PIN it so the entire study
+      // uses one model snapshot; switching mid-study would invalidate the
+      // apples-to-apples comparison. Verify currently-callable ids with:
+      //   curl -sS "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" \
+      //     | python3 -c "import json,sys;[print(m['name']) for m in json.load(sys.stdin)['models']]"
       config: { model: "gemini-3.1-pro-preview", temperature: 0.2 },
       enabled: !!process.env.GEMINI_API_KEY,
     },
     {
-      slug: "gemini-2.5-flash",
-      name: "Gemini 2.5 Flash (zero-shot)",
-      description: "Google Gemini 2.5 Flash with our zero-shot reviewer prompt.",
-      adapterKey: "gemini-2.5-flash",
-      config: { model: "gemini-2.5-flash", temperature: 0.2 },
+      slug: "gemini-3.6-flash",
+      name: "Gemini 3.6 Flash (zero-shot)",
+      description: "Google Gemini 3.6 Flash (fast tier) with our zero-shot reviewer prompt.",
+      adapterKey: "gemini-3.6-flash",
+      config: { model: "gemini-3.6-flash", temperature: 0.2 },
       enabled: !!process.env.GEMINI_API_KEY,
     },
+    // ─── DeepSeek (native OpenAI-compatible endpoint) ──────────────────
     {
-      slug: "claude-opus-4-8",
-      name: "Claude Opus 4.8 (zero-shot)",
+      slug: "deepseek-v4-pro",
+      name: "DeepSeek V4 Pro (zero-shot)",
       description:
-        "Anthropic Claude Opus 4.8 via native Anthropic SDK. Adaptive thinking " +
-        "(effort=high) — auto-tuned reasoning depth for peer-review judgment.",
-      adapterKey: "claude",
-      config: { model: "claude-opus-4-8", thinking: true },
-      enabled: !!process.env.ANTHROPIC_API_KEY,
-    },
-    // ─── DeepSeek (its own dedicated adapter; gpt-4o + claude-sonnet
-    // retired — see RETIRED_SLUGS above) ───────────────────────────────
-    {
-      slug: "deepseek-v3-2",
-      name: "DeepSeek V3.2 (zero-shot)",
-      description:
-        "DeepSeek V3.2 (deepseek-chat) zero-shot reviewer via DeepSeek's native " +
+        "DeepSeek V4 Pro zero-shot reviewer via DeepSeek's native " +
         "OpenAI-compatible endpoint. Strong, low-cost frontier baseline.",
-      adapterKey: "deepseek-v3-2",
-      config: {
-        model: "deepseek-chat",  // DeepSeek aliases this to the current top model (V3.2 as of 2026-06)
-        temperature: 0.2,
-      },
+      adapterKey: "deepseek-v4-pro",
+      config: { model: "deepseek-v4-pro", temperature: 0.2 },
       enabled: !!process.env.DEEPSEEK_API_KEY,
+    },
+    {
+      slug: "deepseek-v4-flash",
+      name: "DeepSeek V4 Flash (zero-shot)",
+      description:
+        "DeepSeek V4 Flash (fast tier) zero-shot reviewer via DeepSeek's " +
+        "OpenAI-compatible endpoint.",
+      adapterKey: "deepseek-v4-flash",
+      config: { model: "deepseek-v4-flash", temperature: 0.2 },
+      enabled: !!process.env.DEEPSEEK_API_KEY,
+    },
+    // ─── Mistral (native OpenAI-compatible endpoint) ───────────────────
+    {
+      slug: "mistral-large-3",
+      name: "Mistral Large 3 (zero-shot)",
+      description:
+        "Mistral Large 3 (top tier) zero-shot reviewer via Mistral's " +
+        "OpenAI-compatible endpoint.",
+      adapterKey: "mistral-large-3",
+      // Mistral exposes no literal "mistral-large-3" id. The current Large
+      // is "mistral-large-2512" (Dec 2025), which is what the
+      // "mistral-large-latest" alias resolves to. We pin the DATED id so a
+      // silent upgrade mid-study can't invalidate the comparison.
+      config: { model: "mistral-large-2512", temperature: 0.2 },
+      enabled: !!process.env.MISTRAL_API_KEY,
+    },
+    {
+      slug: "mistral-medium-3.5",
+      name: "Mistral Medium 3.5 (zero-shot)",
+      description:
+        "Mistral Medium 3.5 (mid tier) zero-shot reviewer via Mistral's " +
+        "OpenAI-compatible endpoint.",
+      adapterKey: "mistral-medium-3.5",
+      // "mistral-medium-3.5" is callable, but it is an ALIAS that currently
+      // resolves to the dated "mistral-medium-2604". Pinning the dated id
+      // for the same snapshot-stability reason as Large above.
+      config: { model: "mistral-medium-2604", temperature: 0.2 },
+      enabled: !!process.env.MISTRAL_API_KEY,
     },
   ];
 

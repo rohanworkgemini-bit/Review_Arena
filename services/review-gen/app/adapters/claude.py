@@ -1,15 +1,19 @@
-"""Claude (Anthropic) zero-shot reviewer.
+"""Claude (Anthropic) base adapter.
 
 Native Anthropic SDK — cheaper and more reliable than going through
-OpenRouter. Uses adaptive thinking (the Opus 4.8 default per Anthropic's
-recommendations: thinking depth is auto-tuned per request).
+OpenRouter. Uses adaptive thinking (thinking depth auto-tuned per
+request, per Anthropic's recommendation for Opus 4.6+).
+
+This is the provider-level base class; the per-system subclasses
+(claudeopus5.py, claudesonnet5.py) only pin a model string and an
+adapter_key.
 
 Requires ANTHROPIC_API_KEY in the environment. Falls back loudly if
 missing — we don't want to silently degrade on a billable model.
 
 Methodology references:
-  - claude-opus-4-8 is the current widely-released Opus tier (per
-    Anthropic's claude-api skill, 2026-06+).
+  - claude-opus-5 / claude-sonnet-5 are the seeded tiers; both verified
+    callable against GET /v1/models on 2026-07-26.
   - Adaptive thinking on Opus 4.6+ replaces the deprecated `budget_tokens`
     knob; effort=high is the default for intelligence-sensitive work.
   - We omit `thinking` entirely on models that don't support it (e.g. a
@@ -46,14 +50,14 @@ class ClaudeAdapter(Adapter):
         if not api_key:
             raise RuntimeError(
                 "ClaudeAdapter requires ANTHROPIC_API_KEY. "
-                "Set it in .env or disable the claude-opus system."
+                "Set it in .env or disable the Claude systems."
             )
         # Lazy import so the rest of the service starts without the
         # anthropic SDK installed.
         from anthropic import Anthropic
 
         self._client = Anthropic(api_key=api_key)
-        self._model = self.config.get("model", "claude-opus-4-8")
+        self._model = self.config.get("model", "claude-opus-5")
         # Opus 4.6+ supports adaptive thinking; pre-4.6 models don't.
         # Allow the seed to opt out via thinking=False if pointing at an
         # older model.
@@ -95,12 +99,23 @@ class ClaudeAdapter(Adapter):
                 "Empty paper content — refusing to call the model. "
                 "The PDF probably contains no extractable text."
             )
-        response = self._client.messages.create(**self._kwargs(prompt, stream=False))
-        # Concatenate every text block; ignore thinking blocks (they're
-        # for the model's internal reasoning, not the user-facing output).
-        raw = "".join(
-            block.text for block in response.content if getattr(block, "type", None) == "text"
-        )
+        # Streamed even though the caller wants one blob. The Anthropic SDK
+        # REFUSES a non-streaming request whose max_tokens implies a
+        # possible >10-minute run ("Streaming is required for operations
+        # that may take longer than 10 minutes"), which our 32k ceiling
+        # plus adaptive thinking always does — messages.create(stream=False)
+        # raises ValueError before sending anything. Collecting the stream
+        # here keeps /generate working for admin re-score and the
+        # playground, and guarantees it produces byte-identical output to
+        # the SSE path the participants see.
+        chunks: list[str] = []
+        with self._client.messages.stream(**self._kwargs(prompt, stream=True)) as stream:
+            for delta in stream.text_stream:
+                if delta:
+                    chunks.append(delta)
+        # text_stream yields only text blocks; thinking blocks are the
+        # model's internal reasoning and never reach the user-facing output.
+        raw = "".join(chunks).strip()
         # Unified ICLR markdown — same parser path as the other adapters.
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))

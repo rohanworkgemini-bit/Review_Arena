@@ -26,7 +26,16 @@ export interface ReviewStreamState {
   retry: () => void;
 }
 
-const STALL_MS = 90_000; // allow slow provider first-token (≤90 s) before declaring stalled
+// Silence tolerated before we declare a stream stalled.
+//
+// Raised 90s → 300s for the 2026-07 lineup. Measured TTFT on a ~10k-word
+// paper: mistral-large-3 0.7s, claude-opus-5 2.1s, gpt-5.5 2.5s — but
+// gpt-5.5-pro 61s, because the "pro" reasoning tier runs on the Responses
+// API and buffers the ENTIRE review into a single delta after thinking.
+// On a full-length submission that comfortably passes 90s, so the old
+// value would have failed a healthy stream and shown participants a
+// "stalled" error mid-battle.
+const STALL_MS = 300_000;
 
 const INITIAL = {
   text: "",
@@ -63,7 +72,7 @@ export function useReviewStream(
       stallTimer.current = setTimeout(() => {
         setState((prev) => ({
           ...prev,
-          error: prev.error ?? "Stream stalled — no tokens for 90s",
+          error: prev.error ?? "Stream stalled — no tokens for 5 minutes",
         }));
         es.close();
       }, STALL_MS);
