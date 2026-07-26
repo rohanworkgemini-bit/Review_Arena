@@ -31,7 +31,7 @@
  *     so we still favour close-rated pairs when no operator targets exist.
  *   - Soft seen-pair penalty (multiplier) for the current session.
  *
- * Why not pure proximity any more: with TreeReview / DeepReviewer landing
+ * Why not pure proximity any more: with new systems landing
  * mid-study at INIT_RATING, the operator needs a knob (`boost=true` on
  * those rows) to feed votes to them quickly — proximity alone can't tell
  * "new" from "stable" at the same rating.

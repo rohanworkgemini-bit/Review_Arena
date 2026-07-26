@@ -2,7 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { UploadCloud, FileText, Loader2, Link2, Check, ChevronDown } from "lucide-react";
+import {
+  UploadCloud,
+  FileText,
+  Loader2,
+  Link2,
+  Check,
+  ChevronDown,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { uploadArxiv, uploadPaper } from "@/lib/api";
@@ -92,22 +100,15 @@ export function UploadPage() {
           this paper follows the selected venue's review form and overall
           rating scale (both blind reviews always share the same scale). */}
       <div>
-        <label className="text-sm font-medium" htmlFor="conference">
-          Review format
-        </label>
+        <div className="text-sm font-medium">Review format</div>
         <div className="mt-1 flex flex-wrap items-baseline gap-3">
-          <select
-            id="conference"
+          <StyledDropdown
             value={conference}
-            onChange={(e) => setConference(e.target.value as Conference)}
-            className="border border-rule2 bg-card px-3 py-2 font-mono text-[13px] font-medium"
-          >
-            {CONFERENCES.map((c) => (
-              <option key={c} value={c}>
-                {CONFERENCE_NAMES[c]}
-              </option>
-            ))}
-          </select>
+            onChange={setConference}
+            options={CONFERENCE_OPTIONS}
+            ariaLabel="Review format"
+            idPrefix="conf"
+          />
           <span className="font-mono text-xs text-graphite">
             Both reviews follow this venue&rsquo;s form and rating scale.
           </span>
@@ -249,21 +250,38 @@ export function UploadPage() {
   );
 }
 
-// Dropdown menu to pick between "Upload PDF" and "arXiv link" sources.
-// Plain useState + click-outside; no Radix dependency for one menu.
-// Keyboard: Enter/Space opens, Esc closes, ArrowDown/ArrowUp move focus,
-// Enter on an item selects.
-const SOURCE_OPTIONS: { value: Source; label: string; icon: typeof UploadCloud }[] = [
+// A small styled dropdown menu — the shared look for compact pickers (the
+// paper source and the review format both use it). Plain useState +
+// click-outside; no Radix dependency. Keyboard: Enter/Space opens, Esc
+// closes, ArrowDown/ArrowUp move focus, Enter on an item selects.
+type DropdownOption<T extends string> = {
+  value: T;
+  label: string;
+  icon?: LucideIcon;
+};
+
+const SOURCE_OPTIONS: DropdownOption<Source>[] = [
   { value: "pdf", label: "Upload PDF", icon: UploadCloud },
   { value: "arxiv", label: "arXiv link", icon: Link2 },
 ];
 
-function SourceDropdown({
+const CONFERENCE_OPTIONS: DropdownOption<Conference>[] = CONFERENCES.map((c) => ({
+  value: c,
+  label: CONFERENCE_NAMES[c],
+}));
+
+function StyledDropdown<T extends string>({
   value,
   onChange,
+  options,
+  ariaLabel,
+  idPrefix,
 }: {
-  value: Source;
-  onChange: (s: Source) => void;
+  value: T;
+  onChange: (v: T) => void;
+  options: DropdownOption<T>[];
+  ariaLabel: string;
+  idPrefix: string;
 }) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -293,29 +311,29 @@ function SourceDropdown({
   // Focus the selected item when the menu opens for keyboard navigability.
   useEffect(() => {
     if (!open) return;
-    const id = `source-opt-${value}`;
+    const id = `${idPrefix}-opt-${value}`;
     requestAnimationFrame(() => {
       menuRef.current?.querySelector<HTMLElement>(`#${id}`)?.focus();
     });
-  }, [open, value]);
+  }, [open, value, idPrefix]);
 
   const onItemKey = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const next = (idx + 1) % SOURCE_OPTIONS.length;
+      const next = (idx + 1) % options.length;
       menuRef.current
-        ?.querySelector<HTMLElement>(`#source-opt-${SOURCE_OPTIONS[next]!.value}`)
+        ?.querySelector<HTMLElement>(`#${idPrefix}-opt-${options[next]!.value}`)
         ?.focus();
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      const prev = (idx - 1 + SOURCE_OPTIONS.length) % SOURCE_OPTIONS.length;
+      const prev = (idx - 1 + options.length) % options.length;
       menuRef.current
-        ?.querySelector<HTMLElement>(`#source-opt-${SOURCE_OPTIONS[prev]!.value}`)
+        ?.querySelector<HTMLElement>(`#${idPrefix}-opt-${options[prev]!.value}`)
         ?.focus();
     }
   };
 
-  const current = SOURCE_OPTIONS.find((o) => o.value === value) ?? SOURCE_OPTIONS[0]!;
+  const current = options.find((o) => o.value === value) ?? options[0]!;
   const CurrentIcon = current.icon;
 
   return (
@@ -325,10 +343,11 @@ function SourceDropdown({
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
+        aria-label={ariaLabel}
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-2 border border-rule2 bg-card px-3 py-2 font-mono text-[13px] font-medium transition-colors hover:bg-paper2"
       >
-        <CurrentIcon className="h-4 w-4 text-muted-foreground" />
+        {CurrentIcon && <CurrentIcon className="h-4 w-4 text-muted-foreground" />}
         <span>{current.label}</span>
         <ChevronDown
           className={cn(
@@ -342,16 +361,16 @@ function SourceDropdown({
         <div
           ref={menuRef}
           role="menu"
-          aria-label="Source"
+          aria-label={ariaLabel}
           className="absolute left-0 top-[calc(100%+4px)] z-30 min-w-[14rem] overflow-hidden border border-rule2 bg-card p-1"
         >
-          {SOURCE_OPTIONS.map((opt, idx) => {
+          {options.map((opt, idx) => {
             const Icon = opt.icon;
             const active = opt.value === value;
             return (
               <button
                 key={opt.value}
-                id={`source-opt-${opt.value}`}
+                id={`${idPrefix}-opt-${opt.value}`}
                 role="menuitemradio"
                 aria-checked={active}
                 type="button"
@@ -368,7 +387,7 @@ function SourceDropdown({
                     : "text-graphite hover:bg-paper2 hover:text-ink focus:bg-paper2 focus:text-ink",
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
                 <span className="flex-1 truncate">{opt.label}</span>
                 {active && <Check className="h-4 w-4 shrink-0 text-primary" />}
               </button>
@@ -377,5 +396,25 @@ function SourceDropdown({
         </div>
       )}
     </div>
+  );
+}
+
+// Paper source picker ("Upload PDF" / "arXiv link") — thin wrapper around
+// the shared StyledDropdown.
+function SourceDropdown({
+  value,
+  onChange,
+}: {
+  value: Source;
+  onChange: (s: Source) => void;
+}) {
+  return (
+    <StyledDropdown
+      value={value}
+      onChange={onChange}
+      options={SOURCE_OPTIONS}
+      ariaLabel="Source"
+      idPrefix="source"
+    />
   );
 }

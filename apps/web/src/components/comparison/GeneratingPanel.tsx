@@ -4,8 +4,8 @@ import { ReviewSkeleton } from "@/components/comparison/ReviewSkeleton";
 /**
  * The pre-streaming state: shown while we wait for /pair to land the
  * chosen reviewIds. Surfaces a "warming up" hint once 30 s have passed
- * so users know cold-start is normal, not a hang. Marker + Modal vLLM
- * can take 60-90 s on a fresh container.
+ * so users know the wait is normal, not a hang. PDF parsing plus a
+ * reasoning-class model can take 60-90 s before the first token.
  */
 export function GeneratingPanel({
   completed,

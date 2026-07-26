@@ -38,7 +38,12 @@ class GenerationMetrics:
     output_tokens:  reference-tokenizer count of the produced review.
     context_window: the system's native window (logged for transparency;
                     NOT used to size the input — that is equalized).
-    fair_input_tokens / fair_output_tokens: the caps applied to ALL systems.
+    fair_input_tokens / fair_output_tokens: legacy cap columns. The caps
+                    were removed (every system now gets the full paper and
+                    an uncapped response), so fair_output_tokens is 0 for
+                    all adapters and fair_input_tokens just mirrors the
+                    canonical-prompt count. Kept so historical rows stay
+                    comparable.
     """
 
     input_tokens: int = 0
@@ -80,46 +85,28 @@ class Adapter(ABC):
     #: Stable key the Node service uses to route generation requests.
     adapter_key: str = "unknown"
 
-    #: When True, generate() will be called with pdf_bytes=<original PDF
-    #: buffer>. Reserved for future adapters that need raw PDF input.
-    #: Default is False so the Node side knows it doesn't need to forward
-    #: the buffer for most adapters.
-    requires_pdf_bytes: bool = False
-
     def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
 
     @abstractmethod
-    def generate(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         """Produce a structured review for `paper`. Must be deterministic
         given the same paper + config when the underlying model permits.
 
-        pdf_bytes is the original uploaded PDF buffer; only adapters that
-        set ``requires_pdf_bytes = True`` will receive it (the Node side
-        skips forwarding the buffer for the rest, to keep request size
-        manageable). When None, the adapter must derive everything it
-        needs from `paper` alone.
+        Everything the adapter needs comes from the parsed `paper` — the
+        original PDF buffer is never forwarded, because every system is a
+        text-in commercial API.
         """
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         """Yield token deltas, then a final 'done' event with the parsed
         StructuredReview. Adapters with native streaming (gpt, gemini,
-        deepreviewer, openreviewer) override this. The default
+        claude, deepseek) override this. The default
         implementation falls back to a single-shot generate() — useful
         for adapters where the model produces output in one go.
         """
         try:
-            result = self.generate(paper, pdf_bytes=pdf_bytes)
+            result = self.generate(paper)
         except Exception as e:  # noqa: BLE001
             yield StreamEvent(type="error", error=str(e))
             return

@@ -2,7 +2,7 @@
 #
 # Only Postgres runs in a container; apps/web, apps/api, and
 # services/review-gen run on the host (fast iteration, and review-gen
-# talks to Modal-hosted GPU services for the heavy lifting).
+# calls the providers' hosted LLM APIs for the heavy lifting).
 #
 # PDFs are parsed via Datalab's hosted Chandra API (see
 # services/review-gen/app/parsing/chandra.py) — no local parsing container.

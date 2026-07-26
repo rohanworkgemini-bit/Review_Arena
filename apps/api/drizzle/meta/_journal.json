@@ -57,6 +57,13 @@
       "when": 1783785555754,
       "tag": "0007_sweet_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783871955754,
+      "tag": "0008_new_vote_dimensions",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 [project]
 name = "reviewarena-review-gen"
 version = "0.1.0"
-description = "FastAPI microservice that wraps automated review systems (DeepReviewer, TreeReview, GPT-4o-mini) behind a single HTTP interface."
+description = "FastAPI microservice that wraps the frontier commercial reviewer systems (GPT-5, Claude, Gemini, DeepSeek) behind a single HTTP interface."
 requires-python = ">=3.11"
 
 # Pinned in services/review-gen/requirements.txt. pyproject is here so the

@@ -31,11 +31,6 @@ const PROCESSORS: Array<{ name: string; role: string; data: string }> = [
     data: "The full parsed text of your paper",
   },
   {
-    name: "Modal",
-    role: "GPU hosting for open-source specialist reviewers (e.g. OpenReviewer)",
-    data: "The parsed text of your paper",
-  },
-  {
     name: "Vercel",
     role: "Hosts this web application",
     data: "Standard web traffic (requests, IP addresses in transit)",
@@ -99,20 +94,19 @@ export function ConsentPage() {
         Where your paper goes
       </h2>
       <p className="mt-3 text-[14.5px] leading-relaxed text-graphite">
-        To compare review systems — some of which are commercial services —
-        the text of your paper is sent to external providers. When you submit a
+        The review systems compared here are commercial AI services, so the
+        text of your paper is sent to external providers. When you submit a
         paper it flows through this pipeline: the document is parsed to text
         (Datalab&rsquo;s Marker API for PDFs, arxiv2md for arXiv links), the
         same text is sent to each participating review system —{" "}
         <span className="text-ink">commercial AI model APIs</span> (OpenAI,
-        Google Gemini, Anthropic, DeepSeek) and open-source specialist models
-        we host on Modal — and the generated reviews are additionally scored by
-        a commercial AI model acting as an automated judge. Data is transmitted
-        over encrypted connections (TLS). Under these providers&rsquo; API
-        terms, submitted content is not used to train their models, but it does
-        leave this application. Providers outside the EU are used on the basis
-        of their Standard Contractual Clauses / EU-U.S. Data Privacy Framework
-        certification.
+        Google Gemini, Anthropic, DeepSeek) — and the generated reviews are
+        additionally scored by a commercial AI model acting as an automated
+        judge. Data is transmitted over encrypted connections (TLS). Under
+        these providers&rsquo; API terms, submitted content is not used to
+        train their models, but it does leave this application. Providers
+        outside the EU are used on the basis of their Standard Contractual
+        Clauses / EU-U.S. Data Privacy Framework certification.
       </p>
 
       <div className="mt-5 overflow-x-auto">

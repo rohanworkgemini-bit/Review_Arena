@@ -14,8 +14,8 @@ The system declares, via its DB `config`:
       "context_window": 16000, "max_output_tokens": 2048  # optional budget
     }
 
-Output contract is the same ICLR-style markdown the specialist adapters
-emit. parse_markdown_review handles every system identically, so the
+Output contract is the same ICLR-style markdown every dedicated adapter
+emits. parse_markdown_review handles every system identically, so the
 comparison UI never branches on adapter type.
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ from app.adapters.base import Adapter, GenerationMetrics, GenerationResult, Stre
 from app.schemas import ParsedPaper
 
 # Shared zero-shot review prompt — identical ICLR markdown contract to
-# gpt.py / gemini.py / the specialist adapters. Every system normalizes
+# gpt.py / gemini.py / the per-system adapters. Every system normalizes
 # through parse_markdown_review(scale=ICLR).
 # The review-form system prompt is built per selected conference in
 # __init__ — see app/conference_scales.py (single source for the form
@@ -105,7 +105,7 @@ class OpenAICompatAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped
         )
 
-    def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
             raise ValueError("Empty paper content — refusing to call the model.")
@@ -114,12 +114,7 @@ class OpenAICompatAdapter(Adapter):
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         try:
             prompt = self._render_prompt(paper)
             if not prompt.strip():

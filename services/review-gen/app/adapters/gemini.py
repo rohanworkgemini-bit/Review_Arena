@@ -1,7 +1,7 @@
 """Gemini prompting baseline.
 
 Requires GEMINI_API_KEY in the environment. Emits the same ICLR-style
-markdown the specialist adapters produce, so every system goes through
+markdown every other adapter produces, so all systems go through
 parse_markdown_review and the comparison UI never branches on adapter.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ class GeminiAdapter(Adapter):
         if not api_key:
             raise RuntimeError(
                 "GeminiAdapter requires GEMINI_API_KEY. "
-                "Use the mock adapter for offline development."
+                "Set it in services/review-gen/.env for local development."
             )
         # Lazy import — only loaded when this adapter is actually used.
         import google.generativeai as genai
@@ -63,7 +63,7 @@ class GeminiAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped
         )
 
-    def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
             raise ValueError(
@@ -78,14 +78,9 @@ class GeminiAdapter(Adapter):
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         """Gemini streaming via generate_content(stream=True). Emits ICLR
-        markdown — same parse path as the specialists."""
+        markdown — same parse path as every other adapter."""
         try:
             prompt = self._render_prompt(paper)
             if not prompt.strip():

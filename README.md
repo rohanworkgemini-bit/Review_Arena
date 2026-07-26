@@ -11,8 +11,9 @@ TU Darmstadt.**
 ## What it does
 
 1. You upload a research paper (PDF or arXiv URL).
-2. ReviewArena parses it via **Marker** (Modal-hosted, GPU-backed PDF →
-   markdown) and picks two automated reviewers from the enabled pool
+2. ReviewArena parses it via **Datalab's hosted Chandra API** (PDF →
+   markdown; arXiv URLs go through our self-hosted `arxiv2md` service)
+   and picks two automated reviewers from the enabled pool
    using LMArena's weighted, Elo-aware pair-selection algorithm.
 3. The two reviews stream live into side-by-side panels (server-sent
    events, token-by-token).
@@ -27,14 +28,24 @@ TU Darmstadt.**
 
 ## Live review systems
 
+The thesis benchmarks **frontier commercial LLMs only** — every system is
+reached over its provider's API, so there is no GPU hosting anywhere in
+the stack.
+
 | Slug              | Backing model                    | Hosting                    | Streams?     |
 |-------------------|----------------------------------|----------------------------|--------------|
-| `gpt-5-mini`      | OpenAI GPT-4o-mini (chat)        | OpenAI API                 | yes (SDK)    |
+| `gpt-5`           | OpenAI GPT-5                     | OpenAI API                 | yes (SDK)    |
+| `gpt-5-mini`      | OpenAI GPT-5-mini                | OpenAI API                 | yes (SDK)    |
+| `gemini-3-pro`    | Google `gemini-3.1-pro-preview`  | Google AI Studio API       | yes (SDK)    |
 | `gemini-2.5-flash`| Google Gemini 2.5 Flash          | Google AI Studio API       | yes (SDK)    |
-| `deepreviewer-7b` | WestlakeNLP/DeepReviewer-7B      | Modal (vLLM, L4 GPU)       | yes (vLLM)   |
-| `openreviewer-8b` | maxidl/Llama-OpenReviewer-8B     | Modal (vLLM, L4 GPU)       | yes (vLLM)   |
+| `claude-opus-4-8` | Anthropic Claude Opus 4.8        | Anthropic API (native SDK) | yes (SDK)    |
+| `deepseek-v3-2`   | DeepSeek V3.2 (`deepseek-chat`)  | DeepSeek API (OpenAI-compat)| yes (SDK)   |
 
-Mock adapter exists for local-only dev.
+Each system is enabled in the DB only if its provider key is present, so
+a missing key means that system is skipped by pair selection rather than
+failing mid-battle. Retired systems (earlier baselines and the
+out-of-scope open-weight specialists) stay in the DB with `enabled=false`
+so their historical reviews, votes and Elo snapshots remain queryable.
 
 ## Architecture
 
@@ -46,22 +57,26 @@ Mock adapter exists for local-only dev.
                                │                          │
                         ┌──────▼───────┐         ┌────────▼──────────┐
                         │   Postgres   │         │  Adapters         │
-                        │  (Drizzle)   │         │  (mock / gpt /    │
-                        └──────────────┘         │   gemini /        │
-                                                 │   deepreviewer /  │
-                                                 │   openreviewer)   │
+                        │  (Drizzle)   │         │  (gpt5 / gpt5mini │
+                        └──────────────┘         │   gemini3pro /    │
+                                                 │   gemini25flash / │
+                                                 │   claude /        │
+                                                 │   deepseek)       │
                                                  └────────┬──────────┘
                                                           │
-                            ┌─────────────────────────────┼────────────────────────┐
-                            │                             │                        │
-                    ┌───────▼────────┐         ┌──────────▼─────────┐    ┌─────────▼──────────┐
-                    │ Marker (Modal) │         │ DeepReviewer-7B    │    │ OpenReviewer-8B    │
-                    │ PDF → markdown │         │ (Modal vLLM L4)    │    │ (Modal vLLM L4)    │
-                    └────────────────┘         └────────────────────┘    └────────────────────┘
+                            ┌───────────────┬─────────────┼──────────────┬───────────────┐
+                            │               │             │              │               │
+                    ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌──────▼───────┐
+                    │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  DeepSeek  │ │ Datalab      │
+                    │              │ │  Studio    │ │    API     │ │    API     │ │ Chandra API  │
+                    │ gpt-5(-mini) │ │ gemini 3/  │ │ opus-4.8   │ │  V3.2      │ │ PDF → md     │
+                    │              │ │  2.5-flash │ │            │ │            │ │              │
+                    └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────────┘
 ```
 
-All GPU work runs on **Modal** scale-to-zero containers. Local dev only
-needs Postgres (in Docker) — the four review adapters call hosted APIs.
+Everything heavy is a **third-party API call** — no GPUs, no model
+weights, no inference containers to operate. Local dev only needs
+Postgres (in Docker, or a Neon URL) plus the provider API keys.
 
 ## Monorepo layout
 
@@ -85,9 +100,8 @@ reviewarena/
 │           └── server.ts
 ├── services/
 │   ├── review-gen/                # FastAPI; /parse, /generate, /stream-generate, /judge
-│   │   └── app/adapters/{mock,gpt,gemini,deepreviewer_real,openreviewer}.py
-│   ├── deepreviewer-modal/        # WestlakeNLP/DeepReviewer-7B via vLLM on Modal
-│   └── openreviewer-modal/        # maxidl/Llama-OpenReviewer-8B via vLLM on Modal
+│   │   └── app/adapters/{gpt5,gpt5mini,gemini3pro,gemini25flash,claude,deepseek}.py
+│   └── cloudrun/arxiv2md/         # self-hosted arXiv → markdown, on Google Cloud Run
 # PDF parsing: review-gen/app/parsing/chandra.py → Datalab's hosted Chandra API
 ├── packages/
 │   └── shared-types/              # Zod schemas + TS types
@@ -111,10 +125,10 @@ reviewarena/
 | Data fetching    | TanStack Query                             | As specified. No Redux.                                                                                                   |
 | Backend          | **Express 4** (originally Fastify)         | Fastify silently swallowed Set-Cookie headers from `onRequest` hooks; Express + cookie-parser + multer + Zod was simpler. |
 | ORM              | **Drizzle** (originally Prisma)            | TS inference from the schema file, no codegen step.                                                                       |
-| Streaming        | Server-Sent Events (browser → API → Python → vLLM) | Survives Modal's ~150s sync-HTTP gateway timeout end-to-end.                                                               |
-| Review-gen       | Python FastAPI microservice                | Adapter SDKs (OpenAI, Gemini, httpx for Modal) + Pydantic schemas all Python-native.                                      |
-| PDF parsing      | **Marker on Modal** (was GROBID)           | Marker preserves LaTeX equations + reconstructs markdown tables; GROBID's TEI XML lost both. Modal scale-to-zero GPU.     |
-| GPU adapters     | **Modal serverless** (was self-hosted)     | L4 GPUs at ~$0.80/h with scale-to-zero; cold start mitigated by vLLM streaming + `--api-key` auth.                       |
+| Streaming        | Server-Sent Events (browser → API → Python → provider SDK) | One streaming path for every provider; the voter sees tokens instead of a spinner on multi-minute reasoning runs.          |
+| Review-gen       | Python FastAPI microservice                | Adapter SDKs (OpenAI, Gemini, Anthropic, DeepSeek) + Pydantic schemas all Python-native.                                  |
+| PDF parsing      | **Datalab Chandra API** (was GROBID)       | Chandra preserves LaTeX equations + reconstructs markdown tables; GROBID's TEI XML lost both. Hosted, so nothing to run.  |
+| Review systems   | **Frontier commercial APIs only**          | Open-weight specialists needed self-hosted GPUs — out of scope. Every system is now one HTTP call to its provider.        |
 | Tests            | Vitest                                     | Same runner both sides. Elo math + pair selection have the deepest coverage.                                              |
 | Package manager  | pnpm workspaces                            | Strict by default; surfaces missing deps early.                                                                           |
 
@@ -129,32 +143,32 @@ services/review-gen/.venv/bin/pip install -r services/review-gen/requirements.tx
 # 2. Environment + database
 cp .env.example .env
 # then paste DATABASE_URL, ADMIN_TOKEN, PAIR_TOKEN_SECRET, WEB_ORIGIN,
-# and (optionally) MARKER_URL/DEEPREVIEWER_URL/OPENREVIEWER_URL +
-# their Modal deploys + MODAL_SHARED_SECRET. Generate the local secrets
-# with `openssl rand -hex 32`. See docs/SECRETS.md for the rotation playbook.
+# REVIEW_GEN_API_KEY. Generate the local secrets with `openssl rand -hex 32`.
+# See docs/SECRETS.md for the rotation playbook.
 
 pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
 pnpm --filter @reviewarena/api db:seed     # insert review systems
 
-# 3. (One-time) Deploy the review-LLM Modal services + set the Datalab key
-modal secret create modal-shared-auth MODAL_SHARED_SECRET="<your value from .env>"
-modal secret create hf-token HF_TOKEN="<your HF read token>"
-modal deploy services/deepreviewer-modal/deepreviewer_modal.py
-modal deploy services/openreviewer-modal/openreviewer_modal.py
-# Paste the printed URLs into .env (DEEPREVIEWER_URL, OPENREVIEWER_URL).
-# Add CHANDRA_API_KEY from https://www.datalab.to (PDF parsing path).
+# 3. Provider keys — nothing to deploy, all six systems are hosted APIs
+#   OPENAI_API_KEY    → gpt-5, gpt-5-mini
+#   GEMINI_API_KEY    → gemini-3-pro, gemini-2.5-flash (+ the LLM judge)
+#   ANTHROPIC_API_KEY → claude-opus-4-8
+#   DEEPSEEK_API_KEY  → deepseek-v3-2
+#   CHANDRA_API_KEY   → PDF parsing, from https://www.datalab.to
 
 # 4. Local Postgres (skip if using Neon or other managed)
 docker compose up -d
 
 # 5. Run everything
-pnpm dev                           # starts postgres tail + review-gen :8001 + api :8000 + web :5173
+pnpm dev                           # starts review-gen :8001 + api :8000 + web :5173
 ```
 
 Then open <http://localhost:5173>.
 
-Without `OPENAI_API_KEY` / `GEMINI_API_KEY`, those adapters return 503
-and the LLM-as-judge falls back to a deterministic mock.
+`db:seed` only enables a system when its provider key is present, so a
+partially-filled `.env` gives you a smaller lineup rather than failed
+reviews. The LLM-as-judge needs `GEMINI_API_KEY` and has no mock
+fallback.
 
 ### Environment variables
 
@@ -164,18 +178,22 @@ See [.env.example](.env.example). Required at minimum:
 - `ADMIN_TOKEN` — bearer for `/admin/*` (32+ char random)
 - `PAIR_TOKEN_SECRET` — HMAC key for pair tokens (32+ char random, **separate** from ADMIN_TOKEN)
 - `WEB_ORIGIN` — CORS whitelist, comma-separated
-- `MODAL_SHARED_SECRET` — auth for the three Modal services
+- `REVIEW_GEN_API_KEY` — shared key the Node API sends to the Python
+  service as `X-API-Key`; required in production so no one else can
+  spend your LLM budget via `/generate`
 
-For LLM/Modal adapters you also need `OPENAI_API_KEY`, `GEMINI_API_KEY`,
-`HF_TOKEN`, and the three Modal URLs.
+For the review systems you also need `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, and `CHANDRA_API_KEY` for PDF
+parsing.
 
 Rotation playbook: [docs/SECRETS.md](docs/SECRETS.md).
 
 ## Deployment
 
-The API + web are small Node processes (any small VM works — Fly,
-Render, EC2). The expensive parts (PDF parsing, model inference) live
-on Modal and scale to zero.
+The deployed stack is Vercel (SPA) → Google Cloud Run (`api` +
+`review-gen`, plus the `arxiv2md` parser) → Neon Postgres. Nothing needs
+a GPU: PDF parsing and every review system are third-party APIs, so the
+services we operate are all small, stateless, CPU-only containers.
 
 ```bash
 pnpm install --frozen-lockfile
@@ -187,37 +205,34 @@ pnpm --filter @reviewarena/api exec drizzle-kit migrate
 pnpm --filter @reviewarena/api exec tsx scripts/add-votes-replay-uk.ts
 pnpm --filter @reviewarena/api exec tsx scripts/add-paper-uploaded-by-session.ts
 
-# Run with a process supervisor (systemd / pm2 / nixpacks):
+# Run with a process supervisor (systemd / pm2 / nixpacks) or Cloud Run:
 #   api:  node dist/server.js                     (port 8000)
 #   web:  any static host serving apps/web/dist/  (Vite SPA)
 #   review-gen: uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 2
-#   modal:  always-on, scale to zero
 ```
 
-A reverse proxy (Caddy / Nginx) typically routes `/api/*` to `:8000` and
-serves the SPA for everything else.
+In production, `vercel.json` rewrites `/api/*` to the Cloud Run API and
+serves the SPA for everything else; self-hosting, a reverse proxy
+(Caddy / Nginx) does the same job. `.github/workflows/deploy-api.yml`,
+`deploy-review-gen.yml` and `deploy-arxiv2md.yml` build and push the
+three Cloud Run services on pushes to `main`.
 
-### Modal service warming (scale-to-zero)
+### Before a study window
 
-The specialist review models (DeepReviewer-7B, OpenReviewer-8B, CycleReviewer-8B, SEA-E)
-are deployed on Modal with **`min_containers=0`** — they scale completely to zero when idle,
-incurring zero cost between requests.
+There is **no model warm-up step** — every review system is a hosted
+provider API, so there are no weights to load and no multi-minute cold
+start to pre-empt. Both Cloud Run services run at `--min-instances=0`;
+their cold start is a container boot (seconds), well inside the request
+timeouts (`api` 300 s, `review-gen` 600 s).
 
-**Caveat:** cold start takes 2–3 minutes, which exceeds Modal's 150s sync HTTP gateway
-timeout. First request after a long idle will timeout (303 error), then Modal boots the
-container, and the second request succeeds. For a study window, warm the services first:
+What is worth checking before a session:
 
-```bash
-# Warm all services before the study starts (DeepReviewer, OpenReviewer, CycleReviewer, SEA)
-./scripts/warm-modal.sh all
-
-# Check current warmth status
-./scripts/warm-modal.sh status
-```
-
-The CI/CD deployment workflow (`.github/workflows/deploy-modal.yml`) auto-warms each service
-after deployment, but manual warming is still needed before a study window if services have
-idled down completely (>5 min with no requests).
+- each provider key in `.env` is live and in budget;
+- `pnpm --filter @reviewarena/api db:seed` has been re-run, so the
+  systems you expect are `enabled` (a missing key silently disables its
+  system);
+- provider rate limits are high enough for the expected concurrency —
+  `review-gen` runs `--max-instances=3 --concurrency=20`.
 
 **Backup**: nightly `pg_dump`. PDFs are never persisted — only the
 parsed structure (jsonb) and review outputs are stored.
@@ -244,13 +259,13 @@ converges cleanly.
 - [x] **Checkpoint 3** — Express routes + Elo module + Vitest cases
 - [x] **Checkpoint 4** — Four frontend screens (Leaderboard, Upload,
        Comparison, Reveal)
-- [x] **Checkpoint 5** — FastAPI review-gen + 4 live adapters
+- [x] **Checkpoint 5** — FastAPI review-gen + the live frontier adapters
 - [x] **Checkpoint 6** — Upload → parse → pair-select → generate →
        vote → Elo → snapshot → reveal, with SSE streaming end-to-end
 - [x] **Checkpoint 7** — LLM-as-judge scoring (sole automatic metric;
        BLEU/ROUGE later removed), BERTopic / word-frequency analytics
-- [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Modal deploys,
-       [thesis evaluation script](scripts/thesis_eval.py)
+- [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Cloud Run / Vercel
+       deploys, [thesis evaluation script](scripts/thesis_eval.py)
 
 ## Testing
 
@@ -265,14 +280,18 @@ pnpm --filter @reviewarena/web typecheck
 - **8 dimensions, not 5.** Spec listed 5; thesis mockup canonical at 8.
 - **Prisma → Drizzle.** TS inference from schema beats codegen.
 - **Express, not Fastify.** Set-Cookie dropped from `onRequest` hooks.
-- **Marker, not GROBID.** Marker preserves equations + tables; GROBID's
-  TEI XML lost both, on top of being a 6 GB Docker image.
+- **Chandra (Datalab), not GROBID.** Chandra preserves equations +
+  tables; GROBID's TEI XML lost both, on top of being a 6 GB Docker
+  image. Hosted, so there is nothing to operate.
 - **LMArena pair selection** (was random) — Elo-aware weighted sample.
 - **Pre-select 2, then generate** (was fan-out to all enabled systems)
-  saves ~50% of GPU/API spend per paper.
-- **SSE end-to-end streaming** — survives Modal's ~150s sync gateway.
-- **DeepReviewer + OpenReviewer on Modal.** Both shipped as vLLM
-  `@web_server` apps with `--api-key` auth; no self-hosted GPU.
+  saves ~50% of API spend per paper.
+- **SSE end-to-end streaming** — keeps the connection alive across
+  multi-minute reasoning runs instead of one long blocking request.
+- **Frontier commercial systems only.** The open-weight specialists
+  (DeepReviewer, OpenReviewer, CycleReviewer, SEA) needed self-hosted
+  GPUs; their adapters and serving code were removed and their DB rows
+  disabled rather than deleted, so past votes stay analysable.
 - **Anonymous httpOnly session cookie.** No IP, fingerprint, or email.
 - **`PAIR_TOKEN_SECRET` separate from `ADMIN_TOKEN`.** Leaking admin
   must not let an attacker forge pair tokens.

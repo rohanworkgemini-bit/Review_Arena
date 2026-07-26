@@ -49,16 +49,60 @@ class JudgeResult:
     dimension_scores: dict[str, float]
 
 
+# Keep in sync with VOTE_DIMENSIONS in packages/shared-types/src/dimensions.ts
+# and the vote_dimension pgEnum in apps/api/src/db/schema.ts. The human
+# voters compare these same eight axes pairwise, so the judge must score
+# the same construct for the human-vs-judge agreement analysis (RQ1) to
+# mean anything.
 _DIMENSIONS = (
-    "COMPREHENSIVENESS",
-    "CLARITY",
-    "FAIRNESS",
-    "ACTIONABILITY",
-    "CONSTRUCTIVENESS",
-    "OBJECTIVITY",
-    "RELEVANCE",
-    "TECHNICAL_TERMS",
+    "CONTRIBUTION_ACCURACY",
+    "RESULTS_INTERPRETATION",
+    "COMPARATIVE_ANALYSIS",
+    "EVIDENCE_BASED_CRITIQUE",
+    "CRITIQUE_CLARITY",
+    "COMPLETENESS_COVERAGE",
+    "CONSTRUCTIVE_TONE",
+    "FALSE_CLAIMS",
 )
+
+# The rubric each dimension is scored against — mirrors DIMENSION_RUBRIC in
+# packages/shared-types/src/dimensions.ts. Given to the judge verbatim so it
+# grades the same definition the human voters see.
+_DIMENSION_RUBRIC = {
+    "CONTRIBUTION_ACCURACY": (
+        "Whether the review correctly understands the paper's main contributions "
+        "and methodological innovations without misrepresenting them."
+    ),
+    "RESULTS_INTERPRETATION": (
+        "Whether tables, figures, metrics, statistical comparisons, and "
+        "experimental results are interpreted correctly without exaggeration."
+    ),
+    "COMPARATIVE_ANALYSIS": (
+        "Whether the review appropriately discusses the paper's baselines and "
+        "related-work comparisons without making unsupported claims."
+    ),
+    "EVIDENCE_BASED_CRITIQUE": (
+        "Whether criticisms are supported by identifiable evidence from sections, "
+        "equations, algorithms, tables, or figures."
+    ),
+    "CRITIQUE_CLARITY": (
+        "Whether weaknesses and questions are concrete enough for authors to "
+        "understand the issue and how it could be addressed."
+    ),
+    "COMPLETENESS_COVERAGE": (
+        "Whether the review covers the major parts of the paper, including "
+        "methodology, theory, experiments, and related work."
+    ),
+    "CONSTRUCTIVE_TONE": (
+        "Whether the review is professional, balanced, respectful, and focused "
+        "on helping improve the work."
+    ),
+    "FALSE_CLAIMS": (
+        "Whether the review avoids inventing content, claiming an existing "
+        "experiment is missing, or contradicting the paper's methods or "
+        "reported findings. NOTE: higher score = FEWER such problems."
+    ),
+}
 
 
 def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
@@ -78,17 +122,26 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         "]},\n"
         '  "overall_score": float in [1,10]\n'
         "}\n\n"
+        "Dimension definitions — score each against exactly this rubric:\n"
+        + "".join(
+            f"- {dim}: {_DIMENSION_RUBRIC[dim]}\n" for dim in _DIMENSIONS
+        )
+        + "\n"
         "Methodology — follow in order:\n"
         "1. For each dimension, write 1-2 sentences of reasoning grounded in "
         "specific parts of the review and paper. This goes in "
         "`reasoning_per_dimension`. (Chain-of-thought before scoring, "
         "per Liu et al. 2023 G-Eval, improves score calibration.)\n"
         "2. Then assign each dimension a 1-10 score consistent with your "
-        "reasoning. 1=very poor, 5=adequate, 8=strong, 10=exemplary.\n"
+        "reasoning. 1=very poor, 5=adequate, 8=strong, 10=exemplary. For "
+        "EVERY dimension a higher score means the review is BETTER on that "
+        "axis — including FALSE_CLAIMS, where 10 means no false or "
+        "contradictory claims and 1 means many.\n"
         "3. Set `overall_score` as a holistic 1-10 judgment of the review's "
         "value to a paper author (NOT a mean of the dimensions).\n"
         "4. Do NOT reward verbose or padded reviews. Length without "
-        "substance should LOWER the COMPREHENSIVENESS and CLARITY scores."
+        "substance should LOWER the COMPLETENESS_COVERAGE and "
+        "CRITIQUE_CLARITY scores."
     )
     user_prompt = (
         f"=== PAPER ===\n{paper_text[:12000]}\n\n"

@@ -19,16 +19,20 @@ app/
     ├── base.py          Adapter abstract class + StreamEvent
     ├── _budget.py       Shared input budgeting (FAIRNESS A4)
     ├── _review_parse.py Shared markdown/JSON → StructuredReview
-    ├── vllm_base.py     Base for any OpenAI-compatible vLLM model
-    ├── mock.py          Deterministic offline fallback
-    ├── gpt.py           OpenAI GPT-5-mini zero-shot
-    ├── gemini.py        Google Gemini 2.5 Flash zero-shot
-    ├── deepreviewer_real.py  → Modal vLLM (WestlakeNLP/DeepReviewer-7B)
-    ├── openreviewer.py       → Modal vLLM (maxidl/Llama-OpenReviewer-8B)
-    ├── cyclereviewer.py      → Modal vLLM (CycleReviewer-8B)
-    ├── sea.py                → Modal vLLM (SEA-E)
-    └── openai_compat.py      Generic OpenAI-compatible (DeepSeek, Claude/OpenRouter, GPT-4o)
+    ├── gpt.py           OpenAI base adapter (shared by the GPT systems)
+    ├── gemini.py        Google base adapter (shared by the Gemini systems)
+    ├── gpt5.py          OpenAI GPT-5 zero-shot
+    ├── gpt5mini.py      OpenAI GPT-5-mini zero-shot
+    ├── gemini3pro.py    Google Gemini 3 Pro zero-shot
+    ├── gemini25flash.py Google Gemini 2.5 Flash zero-shot
+    ├── claude.py        Anthropic Claude Opus 4.8 (native SDK)
+    ├── deepseek.py      DeepSeek V3.2 (OpenAI-compatible endpoint)
+    └── openai_compat.py Generic OpenAI-compatible (template for new providers)
 ```
+
+All review systems are frontier commercial APIs. The open-weight
+specialist reviewers and their Modal/vLLM GPU serving were removed when
+the study was scoped to frontier models only.
 
 ## Endpoints
 
@@ -42,10 +46,11 @@ app/
 
 ## Adapter integration recipe
 
-To add a new vLLM-served model, create
-`adapters/<slug>.py` extending `VLLMChatAdapter` (see its docstring
-for required fields), register it in `adapters/__init__.py`, and
-add a row to `review_systems` via `apps/api/scripts/seed.ts`.
+To add a new review system, create `adapters/<slug>.py` (subclass the
+closest existing adapter, or `OpenAICompatAdapter` for any provider with
+an OpenAI-compatible `/chat/completions` endpoint), register it in
+`adapters/__init__.py`, and add a row to `review_systems` via
+`apps/api/scripts/seed.ts`.
 
 ## Dev
 

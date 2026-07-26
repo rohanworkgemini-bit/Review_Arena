@@ -185,7 +185,6 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
           review.reviewSystem.adapterKey,
           paperStructure as unknown as Parameters<typeof reviewGen.streamGenerate>[1],
           review.reviewSystem.config ?? {},
-          undefined,
           abortController.signal,
           review.paper?.conference,
         );

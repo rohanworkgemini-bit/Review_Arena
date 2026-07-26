@@ -50,15 +50,19 @@ export const judgeStatusEnum = pgEnum("judge_status", [
 
 export const voteWinnerEnum = pgEnum("vote_winner", ["A", "B", "TIE"]);
 
+// Keep in sync with VOTE_DIMENSIONS in packages/shared-types/src/dimensions.ts
+// and _DIMENSIONS in services/review-gen/app/judge.py. All eight are
+// polarity-aligned (higher / picked = better), including FALSE_CLAIMS,
+// where "better" means fewer false or contradictory claims.
 export const voteDimensionEnum = pgEnum("vote_dimension", [
-  "COMPREHENSIVENESS",
-  "CLARITY",
-  "FAIRNESS",
-  "ACTIONABILITY",
-  "CONSTRUCTIVENESS",
-  "OBJECTIVITY",
-  "RELEVANCE",
-  "TECHNICAL_TERMS",
+  "CONTRIBUTION_ACCURACY",
+  "RESULTS_INTERPRETATION",
+  "COMPARATIVE_ANALYSIS",
+  "EVIDENCE_BASED_CRITIQUE",
+  "CRITIQUE_CLARITY",
+  "COMPLETENESS_COVERAGE",
+  "CONSTRUCTIVE_TONE",
+  "FALSE_CLAIMS",
 ]);
 
 // LLM-as-judge is the single automatic quality metric. BLEU/ROUGE were
@@ -115,10 +119,11 @@ export const papers = pgTable(
     uploadedBySessionId: text("uploaded_by_session_id"),
     // When the uploader accepted the data-processing notice (/consent):
     // paper content is sent to commercial AI APIs (OpenAI, Google,
-    // Anthropic, DeepSeek), the Datalab Marker parsing API, and
-    // self-hosted specialist models; infrastructure runs on Vercel,
-    // Google Cloud and Modal. Required for new uploads (the API rejects
-    // uploads without consent). Nullable for legacy rows only.
+    // Anthropic, DeepSeek) and the Datalab parsing API; infrastructure
+    // runs on Vercel, Google Cloud and Neon. Keep this list in sync with
+    // apps/web/src/pages/ConsentPage.tsx — it is the processor list
+    // participants actually consent to. Required for new uploads (the API
+    // rejects uploads without consent). Nullable for legacy rows only.
     consentAcceptedAt: timestamp("consent_accepted_at", { withTimezone: true }),
     // Which venue's review form / rating scale the generated reviews
     // follow (iclr | icml | neurips | acl | emnlp). Chosen at upload;
@@ -143,7 +148,7 @@ export const reviewSystems = pgTable(
   "review_systems",
   {
     id: cuid(),
-    // Stable, human-friendly identifier ("deepreviewer-v1", "gpt-4o-mini").
+    // Stable, human-friendly identifier ("gpt-5", "claude-opus-4-8").
     slug: text("slug").notNull(),
     name: text("name").notNull(),
     description: text("description"),

@@ -88,7 +88,7 @@ class ClaudeAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped (32k = API-required ceiling)
         )
 
-    def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
             raise ValueError(
@@ -105,12 +105,7 @@ class ClaudeAdapter(Adapter):
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         """Anthropic streaming via the SDK helper. Emits per-token deltas
         as the model writes them; the browser renders markdown live."""
         try:

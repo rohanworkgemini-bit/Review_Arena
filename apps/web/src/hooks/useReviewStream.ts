@@ -26,7 +26,7 @@ export interface ReviewStreamState {
   retry: () => void;
 }
 
-const STALL_MS = 90_000; // give Modal cold-start (≤90 s) before declaring stalled
+const STALL_MS = 90_000; // allow slow provider first-token (≤90 s) before declaring stalled
 
 const INITIAL = {
   text: "",

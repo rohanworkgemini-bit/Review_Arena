@@ -261,14 +261,12 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
 
         // Two input paths: PDF multipart OR arxiv URL in JSON-ish body.
         let parsed;
-        let pdfBuffer: Buffer | undefined;
         if (req.file) {
           if (req.file.mimetype !== "application/pdf") {
             res.status(400).json({ error: "BadRequest", message: "Only application/pdf accepted." });
             return;
           }
-          pdfBuffer = req.file.buffer;
-          parsed = await reviewGen.parsePdf(pdfBuffer, req.file.originalname || "paper.pdf");
+          parsed = await reviewGen.parsePdf(req.file.buffer, req.file.originalname || "paper.pdf");
         } else if (typeof req.body.url === "string" && req.body.url.trim()) {
           const arxivId = normalizeArxivId(req.body.url.trim());
           if (!arxivId) {
@@ -287,12 +285,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
           return;
         }
 
-        const result = await reviewGen.generate(
-          system.adapterKey,
-          parsed,
-          system.config ?? {},
-          pdfBuffer,
-        );
+        const result = await reviewGen.generate(system.adapterKey, parsed, system.config ?? {});
         res.json({
           system: { slug: system.slug, name: system.name, adapterKey: system.adapterKey },
           paper: {

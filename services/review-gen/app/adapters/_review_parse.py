@@ -1,6 +1,6 @@
 """Shared OUTPUT contract for markdown-emitting adapters.
 
-DeepReviewer, OpenReviewer, and any future vLLM reviewer emit a markdown
+The commercial reviewer adapters emit a markdown
 review with `## Summary` / `## Strengths` / ... headings. This module is
 the single place that turns that markdown into the canonical
 `StructuredReview`, replacing the byte-for-byte-duplicated

@@ -1,6 +1,6 @@
 """GPT-4o-mini prompting baseline.
 
-Requires OPENAI_API_KEY in the environment. Falls back to the mock adapter
+Requires OPENAI_API_KEY in the environment. Raises at generate() time
 (via a runtime exception caller can catch) if missing — we don't want to
 silently degrade in production.
 """
@@ -36,7 +36,7 @@ class GPTAdapter(Adapter):
         if not api_key:
             raise RuntimeError(
                 "GPTAdapter requires OPENAI_API_KEY. "
-                "Use the mock adapter for offline development."
+                "Set it in services/review-gen/.env for local development."
             )
         # Lazy import so the rest of the service starts without the OpenAI
         # client installed.
@@ -83,7 +83,7 @@ class GPTAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped
         )
 
-    def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
             raise ValueError(
@@ -92,20 +92,15 @@ class GPTAdapter(Adapter):
             )
         response = self._client.chat.completions.create(**self._kwargs(prompt, stream=False))
         raw = response.choices[0].message.content or ""
-        # Unified ICLR markdown — same parser path as DeepReviewer/OpenReviewer.
+        # Unified ICLR markdown — same parser path as every other adapter.
         # ScoreScale.ICLR rescales the 1-4 dimension scores back to the 1-10
         # ranges that StructuredReview persists.
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         """OpenAI streaming. The token stream is the literal markdown the
-        browser will render — same format as the specialist adapters, so
+        browser will render — the same format every other adapter emits, so
         the comparison UI doesn't need to branch on parser type."""
         try:
             prompt = self._render_prompt(paper)

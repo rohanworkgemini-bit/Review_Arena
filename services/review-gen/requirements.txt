@@ -12,9 +12,6 @@ google-generativeai==0.8.3
 # Anthropic SDK for Claude (Opus 4.8 reviewer). Native SDK is cheaper and
 # more reliable than going through OpenRouter (no markup, no proxy layer).
 anthropic>=0.40.0
-# transformers==4.43.3
-# torch==2.4.0
-# accelerate==0.33.0
 
 # Analytics (added in Checkpoint 7)
 # bertopic==0.16.3

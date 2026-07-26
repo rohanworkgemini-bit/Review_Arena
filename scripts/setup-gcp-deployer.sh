@@ -152,12 +152,6 @@ ANTHROPIC_API_KEY
 GEMINI_API_KEY
 DEEPSEEK_API_KEY
 CHANDRA_API_KEY
-MODAL_SHARED_SECRET
-HF_TOKEN
-DEEPREVIEWER_URL
-OPENREVIEWER_URL
-CYCLEREVIEWER_URL
-SEA_URL
 "
 
 if [[ ! -f .env ]]; then
@@ -202,10 +196,8 @@ echo "  1. Open ${KEY_FILE} and copy the entire JSON content"
 echo "  2. GitHub → repo Settings → Secrets and variables → Actions → New secret:"
 echo "       Name:  GCP_SA_KEY"
 echo "       Value: <paste the JSON>"
-echo "  3. Add 3 more GH secrets:"
+echo "  3. Add 1 more GH secret:"
 echo "       GCP_PROJECT_ID = ${PROJECT_ID}"
-echo "       MODAL_TOKEN_ID = (from \`modal token current\`)"
-echo "       MODAL_TOKEN_SECRET = (from \`modal token current\`)"
 echo "  4. Add DATABASE_URL as a GH secret too (the deploy workflow needs"
 echo "     it for the drizzle migrate step, which runs OUTSIDE Cloud Run):"
 echo "       DATABASE_URL = (same value as in .env)"

@@ -1,25 +1,26 @@
-"""Adapter registry. Lazy so we don't import heavy ML deps unless asked.
+"""Adapter registry. Lazy so we don't import heavy SDKs unless asked.
 
 Live adapter keys (must match `review_systems.adapter_key` in the DB):
-  mock              — deterministic offline fallback, dev only
-  gpt-4o-mini       — OpenAI GPT-4o-mini zero-shot prompted reviewer
-  gemini            — Google Gemini-2.5-flash zero-shot prompted reviewer
-  deepreviewer-7b   — WestlakeNLP/DeepReviewer-7B served via vLLM on Modal
-  openreviewer-8b   — maxidl/Llama-OpenReviewer-8B served via vLLM on Modal
+  gpt-5             — OpenAI GPT-5 zero-shot prompted reviewer
+  gpt-5-mini        — OpenAI GPT-5-mini zero-shot prompted reviewer
+  gemini-3-pro      — Google Gemini 3 Pro zero-shot prompted reviewer
+  gemini-2.5-flash  — Google Gemini 2.5 Flash zero-shot prompted reviewer
+  claude            — Anthropic Claude Opus 4.8 (native SDK)
+  deepseek-v3-2     — DeepSeek V3.2 via its OpenAI-compatible endpoint
 
-The earlier in-process "port" adapters (our reimplementations of AI
-Scientist, DeepReviewer, TreeReview) have been removed in favour of
-calling the published systems' real upstream models. See the
-deepreviewer-modal/ and openreviewer-modal/ sibling services for the
-GPU-side serving code.
+Scope: the thesis benchmarks **frontier commercial LLMs only**. The
+open-weight specialist reviewers (DeepReviewer, OpenReviewer,
+CycleReviewer, SEA) and their Modal/vLLM GPU serving code have been
+removed — they required self-hosted GPUs, which is out of scope. Their
+historical DB rows are disabled (not deleted) so past reviews, votes and
+Elo snapshots remain intact for analysis; see apps/api/scripts/seed.ts.
 
 Standardized integration framework (so every system gets the same input
 budgeting + output normalization, and adding a new one is minimal):
-  - _budget.py        — token-sized input rendering (one truncation rule)
+  - _budget.py        — canonical paper rendering + one reference tokenizer
   - _review_parse.py  — markdown/JSON → StructuredReview + score clamping
-  - vllm_base.py      — VLLMChatAdapter: subclass + declare a few fields to
-                        add a new OpenAI-compatible (Modal-served) model.
-                        See its docstring for a copy-paste template.
+  - openai_compat.py  — generic OpenAI-compatible adapter for any new
+                        provider exposing a /chat/completions endpoint.
 """
 from __future__ import annotations
 
@@ -58,30 +59,10 @@ def _bootstrap() -> None:
 
         return GeminiAdapter(cfg)
 
-    def _deepreviewer_factory(cfg: dict) -> Adapter:
-        from app.adapters.deepreviewer_real import DeepReviewerRealAdapter
-
-        return DeepReviewerRealAdapter(cfg)
-
-    def _openreviewer_factory(cfg: dict) -> Adapter:
-        from app.adapters.openreviewer import OpenReviewerAdapter
-
-        return OpenReviewerAdapter(cfg)
-
     def _openai_compat_factory(cfg: dict) -> Adapter:
         from app.adapters.openai_compat import OpenAICompatAdapter
 
         return OpenAICompatAdapter(cfg)
-
-    def _cyclereviewer_factory(cfg: dict) -> Adapter:
-        from app.adapters.cyclereviewer import CycleReviewerAdapter
-
-        return CycleReviewerAdapter(cfg)
-
-    def _sea_factory(cfg: dict) -> Adapter:
-        from app.adapters.sea import SEAAdapter
-
-        return SEAAdapter(cfg)
 
     def _claude_factory(cfg: dict) -> Adapter:
         from app.adapters.claude import ClaudeAdapter
@@ -123,15 +104,10 @@ def _bootstrap() -> None:
     # compatibility with any unmigrated row.
     register("gpt-4o-mini", _gpt_factory)
     register("gemini", _gemini_factory)
-    register("deepreviewer-7b", _deepreviewer_factory)
-    register("openreviewer-8b", _openreviewer_factory)
     # Generic OpenAI-compatible adapter — still useful for ad-hoc base_url
     # overrides; not used by any active seeded system now that DeepSeek
     # has its own dedicated adapter.
     register("openai-compat", _openai_compat_factory)
-    # Specialist open-weight review models served on Modal (vLLM).
-    register("cyclereviewer-8b", _cyclereviewer_factory)
-    register("sea-e", _sea_factory)
     # Per-system commercial reviewers (one file per system).
     register("gpt-5", _gpt5_factory)
     register("gpt-5-mini", _gpt5mini_factory)

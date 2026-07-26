@@ -62,7 +62,9 @@ apps/api/prisma/generated/
 # workflow + agent transcripts (local Claude sessions)
 .claude/projects/
 
-# Thesis / ethics document artifacts (kept local, not source)
+# Thesis / ethics document artifacts (kept local, not source).
+# Root-level PDFs are exposé / presentation exports; docs/*.pdf would
+# still be committable if we ever want one in the repo.
 *.docx
 *.pptx
-Midterm_ Bachelor Thesis.pptx.pdf
+/*.pdf

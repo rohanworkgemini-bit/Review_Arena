@@ -5,14 +5,14 @@ import { signPairToken } from "../pair.js";
 
 describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
   const validDimensions = [
-    { dimension: "COMPREHENSIVENESS" as const, value: 1 as const },
-    { dimension: "CLARITY" as const, value: -1 as const },
-    { dimension: "FAIRNESS" as const, value: 1 as const },
-    { dimension: "ACTIONABILITY" as const, value: -1 as const },
-    { dimension: "CONSTRUCTIVENESS" as const, value: 1 as const },
-    { dimension: "OBJECTIVITY" as const, value: -1 as const },
-    { dimension: "RELEVANCE" as const, value: 1 as const },
-    { dimension: "TECHNICAL_TERMS" as const, value: -1 as const },
+    { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const },
+    { dimension: "CRITIQUE_CLARITY" as const, value: -1 as const },
+    { dimension: "COMPARATIVE_ANALYSIS" as const, value: 1 as const },
+    { dimension: "EVIDENCE_BASED_CRITIQUE" as const, value: -1 as const },
+    { dimension: "CONSTRUCTIVE_TONE" as const, value: 1 as const },
+    { dimension: "RESULTS_INTERPRETATION" as const, value: -1 as const },
+    { dimension: "COMPLETENESS_COVERAGE" as const, value: 1 as const },
+    { dimension: "FALSE_CLAIMS" as const, value: -1 as const },
   ];
 
   const secret = "test-secret-key-for-hmac";
@@ -106,7 +106,7 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
       pairToken,
       winner: "A" as const,
       dimensions: [
-        { dimension: "COMPREHENSIVENESS", value: 2 }, // invalid
+        { dimension: "CONTRIBUTION_ACCURACY", value: 2 }, // invalid
         ...validDimensions.slice(1),
       ],
     };
@@ -120,7 +120,7 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
       pairToken,
       winner: "TIE" as const,
       dimensions: [
-        { dimension: "COMPREHENSIVENESS" as const, value: 0 as const, note: "both equally thorough" },
+        { dimension: "CONTRIBUTION_ACCURACY" as const, value: 0 as const, note: "both equally thorough" },
         ...validDimensions.slice(1),
       ],
     };
@@ -138,7 +138,7 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
       pairToken,
       winner: "A" as const,
       dimensions: [
-        { dimension: "COMPREHENSIVENESS" as const, value: 1 as const, note: "x".repeat(1001) },
+        { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const, note: "x".repeat(1001) },
         ...validDimensions.slice(1),
       ],
     };

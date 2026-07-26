@@ -109,7 +109,7 @@ if not _REVIEW_GEN_API_KEY:
             "REVIEW_GEN_API_KEY is required in production "
             "(REVIEWARENA_ENV=production). "
             "Refusing to boot — would otherwise serve unauthenticated "
-            "requests that bill OpenAI / Anthropic / Datalab / Modal."
+            "requests that bill OpenAI / Anthropic / Google / DeepSeek / Datalab."
         )
     logger.warning(
         "REVIEW_GEN_API_KEY not set — running in OPEN mode (dev). "
@@ -217,18 +217,9 @@ def generate(req: GenerateRequest) -> GenerateResponse:
             raise HTTPException(status_code=503, detail=str(e))
         _INSTANCE_CACHE[key] = instance
 
-    # Decode PDF bytes only for adapters that asked for them.
-    pdf_bytes: bytes | None = None
-    if req.pdf_b64 and getattr(instance, "requires_pdf_bytes", False):
-        import base64
-        try:
-            pdf_bytes = base64.b64decode(req.pdf_b64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"bad pdf_b64: {e}") from e
-
     start = time.perf_counter()
     try:
-        result = instance.generate(req.paper, pdf_bytes=pdf_bytes)
+        result = instance.generate(req.paper)
     except Exception as e:
         logger.exception("adapter %s failed", req.adapter_key)
         raise HTTPException(status_code=502, detail=f"adapter failure: {e}") from e
@@ -260,7 +251,7 @@ async def stream_generate(req: GenerateRequest, request: Request):
     Disconnect handling: the generator polls request.is_disconnected()
     between events so the model call stops as soon as the Node bridge
     (which is itself reacting to a browser close) drops its socket.
-    Saves real GPU minutes on Modal-hosted adapters.
+    Saves real provider spend on abandoned generations.
     """
     from fastapi.responses import StreamingResponse
 
@@ -279,14 +270,6 @@ async def stream_generate(req: GenerateRequest, request: Request):
             raise HTTPException(status_code=503, detail=str(e))
         _INSTANCE_CACHE[key] = instance
 
-    pdf_bytes: bytes | None = None
-    if req.pdf_b64 and getattr(instance, "requires_pdf_bytes", False):
-        import base64
-        try:
-            pdf_bytes = base64.b64decode(req.pdf_b64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"bad pdf_b64: {e}") from e
-
     async def event_source():
         import json as _json
         start = time.perf_counter()
@@ -295,7 +278,7 @@ async def stream_generate(req: GenerateRequest, request: Request):
             # via an iterator hop so we can interleave is_disconnected()
             # checks on the asyncio loop. The hop is cheap — one
             # run_in_threadpool per emitted event.
-            iterator = instance.generate_stream(req.paper, pdf_bytes=pdf_bytes)
+            iterator = instance.generate_stream(req.paper)
             sentinel = object()
 
             def _next():

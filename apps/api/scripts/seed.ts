@@ -1,24 +1,23 @@
 // Seed review_systems so the demo has something to compare on day one.
 // Run: pnpm --filter @reviewarena/api db:seed
 //
-// Live lineup (per QSL grant plan — 6 commercial + 2 specialists):
-//   Commercial frontier reviewers:
+// Live lineup — 6 frontier commercial reviewers:
 //     - GPT-5            (OpenAI, top tier)
 //     - GPT-5-mini       (OpenAI, small)
 //     - Gemini 3 Pro     (Google, top tier)
 //     - Gemini 2.5 Flash (Google, small)
 //     - Claude Opus 4.8  (Anthropic, native SDK with adaptive thinking)
 //     - DeepSeek V3.2    (deepseek-chat via DeepSeek's OpenAI-compat API)
-//   Specialist open-weight fine-tunes (Modal-hosted vLLM):
-//     - DeepReviewer-7B   (WestlakeNLP)
-//     - OpenReviewer-8B   (maxidl / Llama-3.1)
-//     - CycleReviewer-8B  (WestlakeNLP — optional, gated on CYCLEREVIEWER_URL)
-//     - SEA-E             (ECNU — optional, gated on SEA_URL)
 //
-// Older in-process "port" adapters and pre-GPT-5 frontier baselines
-// (gpt-4o, claude-sonnet-3.7-via-OpenRouter, etc.) are kept in the DB
-// with enabled=false so historical votes / reviews / Elo snapshots
-// remain intact for the thesis analysis.
+// Scope: the thesis benchmarks frontier commercial LLMs only. The
+// open-weight specialist reviewers (DeepReviewer, OpenReviewer,
+// CycleReviewer, SEA) required self-hosted GPUs (Modal/vLLM) and are out
+// of scope; their adapters and GPU serving code have been removed.
+//
+// Older in-process "port" adapters, pre-GPT-5 frontier baselines
+// (gpt-4o, claude-sonnet-3.7-via-OpenRouter, etc.) and the retired
+// specialists are kept in the DB with enabled=false so historical votes /
+// reviews / Elo snapshots remain intact for the thesis analysis.
 
 import { config as loadEnv } from "dotenv";
 import { resolve } from "node:path";
@@ -41,6 +40,13 @@ const RETIRED_SLUGS = [
   "ai-scientist-gpt5",       // our port of Sakana's reviewer
   "tree-review-gpt5",         // our port of Chang et al.'s tree-of-questions
   "deepreviewer-14b",         // our port placeholder
+  // Open-weight specialists — out of scope (needed self-hosted GPUs).
+  // Rows are disabled, never deleted: their historical reviews, votes and
+  // Elo snapshots stay queryable for the thesis analysis.
+  "deepreviewer-7b",          // WestlakeNLP/DeepReviewer-7B (Modal vLLM)
+  "openreviewer-8b",          // maxidl/Llama-OpenReviewer-8B (Modal vLLM)
+  "cyclereviewer-8b",         // WestlakeNLP/CycleReviewer-ML-Llama-3.1-8B
+  "sea-e",                    // ECNU-SEA/SEA-E
 ];
 
 async function main() {
@@ -58,7 +64,7 @@ async function main() {
     }
   }
 
-  // Step 2 — upsert the 4 live systems + 2 mocks (dev fallback).
+  // Step 2 — upsert the 6 live frontier systems.
   const systems: Array<{
     slug: string;
     name: string;
@@ -129,61 +135,6 @@ async function main() {
       config: { model: "claude-opus-4-8", thinking: true },
       enabled: !!process.env.ANTHROPIC_API_KEY,
     },
-    {
-      slug: "deepreviewer-7b",
-      name: "DeepReviewer-7B",
-      description:
-        "WestlakeNLP/DeepReviewer-7B (Zhu et al., arxiv:2412.06090). " +
-        "Phi-4 / Qwen-2.5 fine-tune for peer review, served via vLLM on Modal GPU. " +
-        "Benchmark output only — not for formal peer review (per DeepReviewer License).",
-      adapterKey: "deepreviewer-7b",
-      // temperature 0.4 per the DeepReview paper's inference settings
-      // (arxiv:2503.08569 §inference). The earlier 0.2 was far below the
-      // model's own generation_config default (0.6) and caused
-      // degeneration loops on dense papers.
-      config: { model: "WestlakeNLP/DeepReviewer-7B", temperature: 0.4 },
-    },
-    {
-      slug: "openreviewer-8b",
-      name: "Llama-OpenReviewer-8B",
-      description:
-        "maxidl/Llama-OpenReviewer-8B (Idahl & Ahmadi, NAACL 2025 System Demos). " +
-        "Llama-3.1-8B fine-tuned on 79k expert ICLR / NeurIPS reviews, served via " +
-        "vLLM on Modal GPU. Built with Llama (Llama-3.1 Community License).",
-      adapterKey: "openreviewer-8b",
-      // temperature 0.6 per the model's generation_config.json (top_p 0.9).
-      // 0.2 was too low and caused repetition loops.
-      config: { model: "maxidl/Llama-OpenReviewer-8B", temperature: 0.6 },
-    },
-
-    // ─── Specialist open-weight review models (Modal vLLM) ─────────────
-    // Enabled only when their Modal URL is configured in .env (deploy the
-    // matching service + warm it first). Until then they stay disabled so
-    // pair selection won't pick a system that can't respond.
-    {
-      slug: "cyclereviewer-8b",
-      name: "CycleReviewer-8B",
-      description:
-        "WestlakeNLP/CycleReviewer-ML-Llama-3.1-8B (Weng et al., CycleResearcher, " +
-        "arxiv:2411.00816). Llama-3.1-8B fine-tune; emits multiple reviewer " +
-        "opinions, we surface the first. Served via vLLM on Modal GPU. " +
-        "Benchmark output only — not for formal peer review (CycleReviewer License).",
-      adapterKey: "cyclereviewer-8b",
-      config: { model: "WestlakeNLP/CycleReviewer-ML-Llama-3.1-8B", temperature: 0.4 },
-      enabled: !!process.env.CYCLEREVIEWER_URL,
-    },
-    {
-      slug: "sea-e",
-      name: "SEA-E",
-      description:
-        "ECNU-SEA/SEA-E (Yu et al., SEA, EMNLP 2024 Findings, arxiv:2407.12857). " +
-        "Mistral-7B-Instruct-v0.2 fine-tune for constructive review generation " +
-        "(apache-2.0). Served via vLLM on Modal GPU.",
-      adapterKey: "sea-e",
-      config: { model: "ECNU-SEA/SEA-E", temperature: 0.4 },
-      enabled: !!process.env.SEA_URL,
-    },
-
     // ─── DeepSeek (its own dedicated adapter; gpt-4o + claude-sonnet
     // retired — see RETIRED_SLUGS above) ───────────────────────────────
     {

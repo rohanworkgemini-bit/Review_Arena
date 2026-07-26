@@ -88,9 +88,6 @@ class GenerateRequest(BaseModel):
     # (see conference_scales.py). Chosen by the uploader; identical for
     # both systems in a battle.
     conference: str = "iclr"
-    # Original PDF bytes, base64-encoded. Forwarded only for adapters
-    # that need raw PDF input (MARG). Optional — None for everything else.
-    pdf_b64: str | None = None
 
 
 class GenerationMetricsOut(BaseModel):

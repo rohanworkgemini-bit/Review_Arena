@@ -88,7 +88,7 @@ class DeepSeekAdapter(Adapter):
             fair_output_tokens=0,  # 0 = uncapped (8192 = provider max)
         )
 
-    def generate(self, paper: ParsedPaper, *, pdf_bytes: bytes | None = None) -> GenerationResult:
+    def generate(self, paper: ParsedPaper) -> GenerationResult:
         prompt = self._render_prompt(paper)
         if not prompt.strip():
             raise ValueError(
@@ -100,12 +100,7 @@ class DeepSeekAdapter(Adapter):
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
-    def generate_stream(
-        self,
-        paper: ParsedPaper,
-        *,
-        pdf_bytes: bytes | None = None,
-    ) -> Iterator[StreamEvent]:
+    def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         try:
             prompt = self._render_prompt(paper)
             if not prompt.strip():

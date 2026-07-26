@@ -195,14 +195,14 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
         winner: "A" as const,
         decisionMs: 5000,
         dimensions: [
-          { dimension: "COMPREHENSIVENESS" as const, value: 1 as const },
-          { dimension: "CLARITY" as const, value: -1 as const },
-          { dimension: "FAIRNESS" as const, value: 1 as const },
-          { dimension: "ACTIONABILITY" as const, value: -1 as const },
-          { dimension: "CONSTRUCTIVENESS" as const, value: 1 as const },
-          { dimension: "OBJECTIVITY" as const, value: -1 as const },
-          { dimension: "RELEVANCE" as const, value: 1 as const },
-          { dimension: "TECHNICAL_TERMS" as const, value: -1 as const },
+          { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const },
+          { dimension: "CRITIQUE_CLARITY" as const, value: -1 as const },
+          { dimension: "COMPARATIVE_ANALYSIS" as const, value: 1 as const },
+          { dimension: "EVIDENCE_BASED_CRITIQUE" as const, value: -1 as const },
+          { dimension: "CONSTRUCTIVE_TONE" as const, value: 1 as const },
+          { dimension: "RESULTS_INTERPRETATION" as const, value: -1 as const },
+          { dimension: "COMPLETENESS_COVERAGE" as const, value: 1 as const },
+          { dimension: "FALSE_CLAIMS" as const, value: -1 as const },
         ],
       };
 
@@ -243,14 +243,14 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
 
     it("should record all 8 dimension votes", () => {
       const dimensionVotes = [
-        { dimension: "COMPREHENSIVENESS", value: 1 },
-        { dimension: "CLARITY", value: -1 },
-        { dimension: "FAIRNESS", value: 1 },
-        { dimension: "ACTIONABILITY", value: -1 },
-        { dimension: "CONSTRUCTIVENESS", value: 1 },
-        { dimension: "OBJECTIVITY", value: -1 },
-        { dimension: "RELEVANCE", value: 1 },
-        { dimension: "TECHNICAL_TERMS", value: -1 },
+        { dimension: "CONTRIBUTION_ACCURACY", value: 1 },
+        { dimension: "CRITIQUE_CLARITY", value: -1 },
+        { dimension: "COMPARATIVE_ANALYSIS", value: 1 },
+        { dimension: "EVIDENCE_BASED_CRITIQUE", value: -1 },
+        { dimension: "CONSTRUCTIVE_TONE", value: 1 },
+        { dimension: "RESULTS_INTERPRETATION", value: -1 },
+        { dimension: "COMPLETENESS_COVERAGE", value: 1 },
+        { dimension: "FALSE_CLAIMS", value: -1 },
       ];
 
       expect(dimensionVotes).toHaveLength(8);
@@ -312,15 +312,15 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
         reveal: {
           reviewA: {
             reviewId: reviewAId,
-            systemSlug: "deepreviewer-7b",
-            systemName: "DeepReviewer-7B",
+            systemSlug: "gpt-5",
+            systemName: "GPT-5 (zero-shot)",
             eloBefore: 1000,
             eloAfter: 1008,
           },
           reviewB: {
             reviewId: reviewBId,
-            systemSlug: "openreviewer-8b",
-            systemName: "OpenReviewer-8B",
+            systemSlug: "claude-opus-4-8",
+            systemName: "Claude Opus 4.8 (zero-shot)",
             eloBefore: 995,
             eloAfter: 987,
           },
@@ -364,7 +364,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
     it("should reflect new Elo in leaderboard after vote", () => {
       const leaderboardEntry = {
         rank: 1,
-        systemSlug: "deepreviewer-7b",
+        systemSlug: "gpt-5",
         rating: 1025,
         ratingCiLow: 1015,
         ratingCiHigh: 1035,
@@ -390,13 +390,13 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
 
   describe("9. Dimension Leaderboards", () => {
     it("should compute per-dimension Elo independently", () => {
-      // Each dimension (COMPREHENSIVENESS, CLARITY, etc.) has its own
+      // Each dimension (CONTRIBUTION_ACCURACY, CRITIQUE_CLARITY, etc.) has its own
       // battle history and separate Elo snapshot.
 
       const dimensionSnapshots = [
-        { dimension: "COMPREHENSIVENESS", rating: 1030, voteCount: 5 },
-        { dimension: "CLARITY", rating: 1015, voteCount: 5 },
-        { dimension: "FAIRNESS", rating: 1008, voteCount: 5 },
+        { dimension: "CONTRIBUTION_ACCURACY", rating: 1030, voteCount: 5 },
+        { dimension: "CRITIQUE_CLARITY", rating: 1015, voteCount: 5 },
+        { dimension: "COMPARATIVE_ANALYSIS", rating: 1008, voteCount: 5 },
       ];
 
       dimensionSnapshots.forEach((snap) => {
@@ -409,7 +409,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
     it("should exclude non-COMPLETED for dimension votes too", () => {
       // Fairness B1 applies per-dimension: only COMPLETED votes counted
       const validDimVotes = [
-        { voteId: createId(), dimension: "CLARITY", value: 1, status: "COMPLETED" as const },
+        { voteId: createId(), dimension: "CRITIQUE_CLARITY", value: 1, status: "COMPLETED" as const },
       ];
 
       validDimVotes.forEach((dv) => {

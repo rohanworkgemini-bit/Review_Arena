@@ -8,15 +8,15 @@ import type { ParsedPaper, StructuredReview } from "@reviewarena/shared-types";
 // stall under the default undici timeout. Streaming endpoints set
 // bodyTimeout: 0 so token-by-token reads aren't capped at the default.
 //
-// HEADERS timeouts have to cover Modal cold-start time, because the
-// non-streaming /generate endpoint holds the response until vLLM has
-// finished — no headers sent until then. A Modal cold-start of
-// DeepReviewer / OpenReviewer can take 3-4 minutes (model download +
+// HEADERS timeouts have to cover slow provider responses, because the
+// non-streaming /generate endpoint holds the response until the model has
+// finished — no headers sent until then. A reasoning-class model on a long
+// paper can take several minutes (
 // init), so 60s is far too tight. We use 600_000 for /generate to
 // match the body timeout, and a smaller 90_000 for the smaller
 // endpoints (/parse-arxiv).
 //
-// Retries: parsePdf/parseArxiv/generate retry once on 502/503/504 (Modal
+// Retries: parsePdf/parseArxiv/generate retry once on 502/503/504 (transient
 // cold-start signals) with 2s backoff. Streaming is NOT retried — the
 // caller has already sent SSE headers and a retry would duplicate
 // generation.
@@ -101,7 +101,7 @@ export class ReviewGenClient {
 
   /**
    * Parse a PDF via the Python service's /parse endpoint (Marker on
-   * Modal under the hood). Throws on 502 / network failure — callers
+   * the provider API under the hood). Throws on 502 / network failure — callers
    * mark the paper PARSE_FAILED so the user sees the upload didn't
    * succeed. Takes the PDF as an in-memory buffer; we never write it
    * to disk.
@@ -163,7 +163,6 @@ export class ReviewGenClient {
     adapterKey: string,
     paper: ParsedPaper,
     config: object = {},
-    pdfBytes?: Buffer,
     signal?: AbortSignal,
     conference?: string,
   ): AsyncGenerator<StreamEvent, void, unknown> {
@@ -175,7 +174,6 @@ export class ReviewGenClient {
     // Venue whose review form the adapter prompt follows (GenerateRequest
     // .conference on the Python side; defaults to iclr there).
     if (conference) body.conference = conference;
-    if (pdfBytes) body.pdf_b64 = pdfBytes.toString("base64");
 
     const { statusCode, body: respBody } = await request(
       `${this.baseUrl}/stream-generate`,
@@ -193,7 +191,7 @@ export class ReviewGenClient {
         // Forwarded by undici: if signal fires (browser disconnected),
         // the underlying socket closes and the upstream Python service
         // stops the model invocation. This is what prevents the
-        // "user navigates away → Modal GPU keeps burning" leak.
+        // "user navigates away → provider call keeps burning budget" leak.
         signal,
       },
     );
@@ -228,22 +226,16 @@ export class ReviewGenClient {
     adapterKey: string,
     paper: ParsedPaper,
     config: object = {},
-    pdfBytes?: Buffer,
     conference?: string,
   ): Promise<GenerateResult> {
-    // Only attach the PDF if the caller explicitly passed it through —
-    // the Python side only decodes it when the chosen adapter has
-    // requires_pdf_bytes=True (MARG). For everything else we skip the
-    // ~MB of base64 overhead.
+    // Text-only wire format: every system is a commercial API that reads
+    // the parsed paper, so the original PDF buffer is never forwarded.
     const body: Record<string, unknown> = {
       adapter_key: adapterKey,
       paper,
       config,
     };
     if (conference) body.conference = conference;
-    if (pdfBytes) {
-      body.pdf_b64 = pdfBytes.toString("base64");
-    }
     return withRetry(
       "review-gen /generate",
       async () => {

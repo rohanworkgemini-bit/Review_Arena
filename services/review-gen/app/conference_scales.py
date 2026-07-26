@@ -19,11 +19,11 @@ Only the ## Rating section varies by venue. The rest of the form
 order) is our fixed output contract — every adapter emits it so one
 parser handles all systems (see _review_parse.parse_markdown_review).
 
-The fine-tuned specialist adapters (OpenReviewer, CycleReviewer,
-DeepReviewer, SEA) keep their trained prompt/format regardless of the
-selected conference — you cannot re-scale a fine-tuned reviewer by
-prompt. The conference option is a commercial-adapter feature, which
-matches the thesis deployment (commercial models only).
+Every review system in the study is a commercial LLM prompted by us, so
+the selected conference applies uniformly to all of them — there is no
+adapter that ignores it. This is what makes the fairness claim in
+docs/FAIRNESS.md (B5, prompt symmetry) hold: both sides of a battle are
+built from this same prompt with the same venue scale.
 """
 from __future__ import annotations
 

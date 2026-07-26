@@ -40,7 +40,7 @@ export function lengthBandFor(fullTokens: number | null): string | null {
 
 /**
  * Per-session upload rate limiter — sliding window keyed by sessionId.
- * Anonymous uploads still cost real money (Datalab Chandra + Modal); without
+ * Anonymous uploads still cost real money (Datalab Chandra + LLM APIs); without
  * this a single page can flood the parser. 10 uploads/min/session is
  * far above any real human pattern and well below abusive.
  */

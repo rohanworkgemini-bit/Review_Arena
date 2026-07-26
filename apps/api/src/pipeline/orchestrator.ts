@@ -12,19 +12,8 @@ import { logger } from "../logger.js";
 // dropped the (paperId, reviewSystemId) unique constraint so the same
 // paper can be re-uploaded and get a fresh review pair each time.
 
-export interface GenerateOptions {
-  /** Original uploaded PDF bytes. Forwarded only to adapters whose
-   *  Python-side `requires_pdf_bytes=True` (MARG). Pass undefined for
-   *  arxiv2md uploads — MARG will be skipped for those. */
-  pdfBytes?: Buffer;
-}
-
 export interface Orchestrator {
-  generateAllReviews(
-    paper: Paper,
-    parsed: ParsedPaper,
-    options?: GenerateOptions,
-  ): Promise<void>;
+  generateAllReviews(paper: Paper, parsed: ParsedPaper): Promise<void>;
   /**
    * For the streaming path: insert pending review rows for the chosen
    * systems WITHOUT calling the model. The browser will trigger each
@@ -43,7 +32,7 @@ export function makeOrchestrator(
   judge?: JudgeClient,
 ): Orchestrator {
   return {
-    async generateAllReviews(paper, parsed, options) {
+    async generateAllReviews(paper, parsed) {
       const systems = await db.query.reviewSystems.findMany({
         where: eq(reviewSystems.enabled, true),
       });
@@ -58,9 +47,7 @@ export function makeOrchestrator(
       // review is COMPLETED (fire-and-forget), so judging runs concurrently
       // with the remaining adapters instead of waiting for the full batch.
       await Promise.all(
-        systems.map((s) =>
-          generateOne(paper, parsed, s, client, judge, paperText, options?.pdfBytes),
-        ),
+        systems.map((s) => generateOne(paper, parsed, s, client, judge, paperText)),
       );
     },
 
@@ -103,7 +90,6 @@ async function generateOne(
   client: ReviewGenClient,
   judge?: JudgeClient,
   paperText?: string,
-  pdfBytes?: Buffer,
 ): Promise<void> {
   // Fresh-per-upload: always insert a new row. Each upload gets a
   // distinct review, even if the same (paper, system) pair was reviewed
@@ -124,7 +110,6 @@ async function generateOne(
       system.adapterKey,
       parsed,
       system.config ?? {},
-      pdfBytes,
       paper.conference,
     );
     await db

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // The typed shape every review adapter returns. Stored as Review.structured.
-// Modelled on the ICLR/NeurIPS review form so DeepReviewer's output maps
+// Modelled on the ICLR/NeurIPS review form so each system's output maps
 // cleanly without translation.
 
 export const StructuredReviewSchema = z.object({

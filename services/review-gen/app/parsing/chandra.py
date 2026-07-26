@@ -1,17 +1,18 @@
 """Chandra OCR-2 PDF parser — via Datalab's hosted /convert API.
 
 Datalab (https://datalab.to) is the company that built both Marker and
-Chandra. They expose a hosted endpoint that runs the same Chandra OCR-2
-model we tried to self-host on Modal — except they handle the GPU, the
-weights, the cold start, and the vLLM runtime. We just POST a PDF and
-poll for the result.
+Chandra. They expose a hosted endpoint that runs the Chandra OCR-2 model
+on their own GPUs — they handle the weights, the cold start and the
+serving runtime. We just POST a PDF and poll for the result.
 
-Why hosted, not Modal:
-  - Cold-start: their fleet is warm; we'd pay 3-5 min per first request.
-  - Cost: Datalab's per-page price is competitive with the per-hour
-    A100 cost we'd otherwise burn idling.
-  - Operability: their service has no `_IncludedRouter` middleware
-    bug. We don't have to patch vendor packages.
+Why hosted, not self-served:
+  - Cold-start: their fleet is warm; a self-hosted GPU would cost 3-5 min
+    on the first request of every session.
+  - Cost: Datalab's per-page price beats the per-hour GPU cost we'd
+    otherwise burn idling between uploads.
+  - Scope: running model infrastructure is not what this thesis is
+    benchmarking. Same reasoning that scoped the reviewers to commercial
+    APIs (see app/adapters/__init__.py).
 
 API shape (https://documentation.datalab.to/api-reference/convert-document):
   - POST /api/v1/convert     → returns {request_id, request_check_url}
