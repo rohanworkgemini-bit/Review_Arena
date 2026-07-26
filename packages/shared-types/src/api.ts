@@ -5,7 +5,6 @@ import { StructuredReviewSchema } from "./structured-review.js";
 // ─── Shared scalars ─────────────────────────────────────────────────────────
 
 export const CuidSchema = z.string().min(20).max(40);
-export const SessionIdSchema = z.string().min(16).max(64);
 
 // ─── Conference (review-form scale) ─────────────────────────────────────────
 // The uploader picks which venue's review form / rating scale the generated
@@ -42,18 +41,6 @@ export const UploadPaperResponseSchema = z.object({
     .default([]),
 });
 export type UploadPaperResponse = z.infer<typeof UploadPaperResponseSchema>;
-
-// ─── GET /papers/:id ────────────────────────────────────────────────────────
-
-export const PaperSummarySchema = z.object({
-  id: CuidSchema,
-  title: z.string().nullable(),
-  status: z.enum(["UPLOADED", "PARSING", "PARSED", "PARSE_FAILED"]),
-  pageCount: z.number().int().nullable(),
-  reviewCount: z.number().int(),
-  createdAt: z.string(),  // ISO
-});
-export type PaperSummary = z.infer<typeof PaperSummarySchema>;
 
 // ─── GET /pair (next comparison) ────────────────────────────────────────────
 
@@ -207,12 +194,3 @@ export const CreateReviewSystemRequestSchema = z.object({
   config: z.record(z.unknown()).default({}),
 });
 export type CreateReviewSystemRequest = z.infer<typeof CreateReviewSystemRequestSchema>;
-
-// ─── Generic error envelope ─────────────────────────────────────────────────
-
-export const ErrorResponseSchema = z.object({
-  error: z.string(),
-  message: z.string(),
-  details: z.unknown().optional(),
-});
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;

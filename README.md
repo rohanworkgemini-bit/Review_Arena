@@ -3,7 +3,7 @@
 A web platform for benchmarking automated peer review systems through human
 pairwise comparison and Elo ranking.
 
-**Master thesis project — Ubiquitous Knowledge Processing Lab (UKP),
+**Bachelor thesis project — Ubiquitous Knowledge Processing Lab (UKP),
 TU Darmstadt.**
 
 ---

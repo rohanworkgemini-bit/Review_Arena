@@ -65,9 +65,10 @@ _DIMENSIONS = (
     "FALSE_CLAIMS",
 )
 
-# The rubric each dimension is scored against — mirrors DIMENSION_RUBRIC in
-# packages/shared-types/src/dimensions.ts. Given to the judge verbatim so it
-# grades the same definition the human voters see.
+# The rubric each dimension is scored against. This is the ONLY copy — the
+# voter-facing wording lives in DIMENSION_DESCRIPTIONS (shared-types), phrased
+# as the pairwise question. Keep the two semantically aligned so the
+# human-vs-judge agreement analysis (RQ1) compares the same construct.
 _DIMENSION_RUBRIC = {
     "CONTRIBUTION_ACCURACY": (
         "Whether the review correctly understands the paper's main contributions "

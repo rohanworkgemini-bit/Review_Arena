@@ -55,25 +55,3 @@ export const DIMENSION_DESCRIPTIONS: Record<VoteDimension, string> = {
   FALSE_CLAIMS:
     "Which review contains fewer false, unsupported, or contradictory claims?",
 };
-
-// The rubric definition behind each axis — what the dimension actually
-// measures. Used for tooltips / participant instructions, and mirrored in
-// the LLM-judge prompt so human voters and the judge score the same thing.
-export const DIMENSION_RUBRIC: Record<VoteDimension, string> = {
-  CONTRIBUTION_ACCURACY:
-    "Whether the review correctly understands the paper's main contributions and methodological innovations without misrepresenting them.",
-  RESULTS_INTERPRETATION:
-    "Whether tables, figures, metrics, statistical comparisons, and experimental results are interpreted correctly without exaggeration.",
-  COMPARATIVE_ANALYSIS:
-    "Whether the review appropriately discusses the paper's baselines and related-work comparisons without making unsupported claims.",
-  EVIDENCE_BASED_CRITIQUE:
-    "Whether criticisms are supported by identifiable evidence from sections, equations, algorithms, tables, or figures.",
-  CRITIQUE_CLARITY:
-    "Whether weaknesses and questions are concrete enough for authors to understand the issue and how it could be addressed.",
-  COMPLETENESS_COVERAGE:
-    "Whether the review covers the major parts of the paper, including methodology, theory, experiments, and related work.",
-  CONSTRUCTIVE_TONE:
-    "Whether the review is professional, balanced, respectful, and focused on helping improve the work.",
-  FALSE_CLAIMS:
-    "Whether the review avoids inventing content, claiming an existing experiment is missing, or contradicting the paper's methods or reported findings.",
-};

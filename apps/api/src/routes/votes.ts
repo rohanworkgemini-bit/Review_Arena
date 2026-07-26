@@ -316,5 +316,3 @@ async function snapshotLeaderboard(
 
   if (rows.length > 0) await executor.insert(eloSnapshots).values(rows);
 }
-
-void reviewSystems;

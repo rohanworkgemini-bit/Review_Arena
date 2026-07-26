@@ -65,7 +65,6 @@ export interface PapersDeps {
 export function papersRouter(config: Config, deps: PapersDeps): Router {
   const router = Router();
   const { reviewGen, judge, orchestrator } = deps;
-  void config;
 
   router.post("/papers", upload.single("file"), async (req, res, next) => {
     try {

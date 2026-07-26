@@ -124,7 +124,7 @@ function Hero() {
         <div className="md:pr-11">
           <div className="eyebrow mb-[22px]">Blind pairwise evaluation</div>
           <h1 className="mb-[22px] font-serif text-[clamp(30px,4.2vw,46px)] font-semibold leading-[1.05] tracking-[-0.02em]">
-            Which AI reviewer writes the best peer reviews?
+            Which AI model writes the best peer reviews?
             <br />
             <em className="font-normal italic text-redink">Ranked by humans.</em>
           </h1>
@@ -361,7 +361,7 @@ function About() {
           <div className="md:pr-11">
             <p className="font-serif text-[26px] leading-[1.32] tracking-[-0.01em] text-ink">
               ReviewArena is a Web platform for{" "}
-              <em className="italic text-redink">Benchmarking automated peer-review systems</em>{" "}
+              <em className="italic text-redink">Benchmarking AI models for automated peer-review generation </em>{" "}
               under a shared human evaluation.
             </p>
           </div>
