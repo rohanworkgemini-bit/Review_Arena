@@ -11,8 +11,10 @@ import type { StructuredReview } from "@reviewarena/shared-types";
  *
  * When `raw` is provided, a Formatted/Raw toggle lets the rater read
  * the model's verbatim markdown output instead of our parsed sections —
- * transparency about what the LLM actually produced (the parser only
- * reorganizes; it never rewrites).
+ * transparency about what the LLM actually produced. The parser
+ * reorganizes and strips inline markdown emphasis (so one model's bold
+ * lead-ins can't out-shout a plain-prose rival in a blind comparison);
+ * it never changes the wording. Raw shows the untouched original.
  */
 export function ReviewPanel({
   label,

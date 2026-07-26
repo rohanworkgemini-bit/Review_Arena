@@ -13,7 +13,12 @@ Two responsibilities:
    section (first non-empty line only, so a stray "2024" in prose can't
    be mistaken for a rating).
 
-2. **Normalize scores to a common scale** — different venues score
+2. **Normalize presentation** — strip inline markdown emphasis so both
+   panels of a blind comparison are typographically identical (see
+   strip_inline_emphasis below for why this is a fairness control, not a
+   cosmetic one). Nothing else about the wording is altered.
+
+3. **Normalize scores to a common scale** — different venues score
    differently. ICLR rates Soundness/Presentation/Contribution on 1-4;
    GPT/Gemini are prompted for 1-10. For a fair cross-system leaderboard
    we rescale everything to StructuredReview's ranges (dims + rating
@@ -63,6 +68,36 @@ _HEADER_MAP = {
 _HEADING_RX = re.compile(r"^#{1,4}\s*(.+?)\s*$", re.MULTILINE)
 _NUMBER_RX = re.compile(r"(\d+(?:\.\d+)?)")
 
+# Inline markdown emphasis, stripped from every user-facing field.
+#
+# FAIRNESS (presentation symmetry). Some models open each bullet with a
+# bold lead-in ("**Robustness**: ..."), others write plain prose. The
+# comparison UI renders bullets as text, so the markers used to reach the
+# screen literally as "**" — one panel cluttered, the other clean. Either
+# way that is a presentation artifact influencing a vote that is supposed
+# to measure review CONTENT: rendering the bold would hand one system
+# visual salience its opponent lacks, and the review form never asks for
+# emphasis in the first place ("Concise bullet list").
+#
+# Normalising here rather than in the web layer keeps ONE definition of
+# the text: score-paper.ts judges renderReviewText(structured), so the
+# LLM judge and the human rater now read exactly the same string. The
+# verbatim model output is untouched in reviews.rawOutput and remains
+# available behind the panel's Raw toggle.
+#
+# Only the asterisk forms are handled. Underscore emphasis is left alone
+# on purpose — reviews routinely mention snake_case identifiers, and
+# `__init__` must not silently become `init`.
+_BOLD_RX = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", re.S)
+_ITALIC_RX = re.compile(r"(?<!\*)\*(?=\S)([^*]+?)(?<=\S)\*(?!\*)")
+
+
+def strip_inline_emphasis(text: str) -> str:
+    """Drop markdown bold/italic markers, keeping the words they wrap."""
+    if not text:
+        return text
+    return _ITALIC_RX.sub(r"\1", _BOLD_RX.sub(r"\1", text))
+
 
 def parse_markdown_review(md: str, *, scale: ScoreScale = ScoreScale.ICLR) -> StructuredReview:
     """Turn a markdown review into a normalized StructuredReview."""
@@ -72,7 +107,7 @@ def parse_markdown_review(md: str, *, scale: ScoreScale = ScoreScale.ICLR) -> St
         return sections.get(key, "").strip()
 
     return StructuredReview(
-        summary=pick("summary") or "(no summary)",
+        summary=strip_inline_emphasis(pick("summary")) or "(no summary)",
         strengths=_bulletize(pick("strengths")),
         weaknesses=_bulletize(pick("weaknesses")),
         questions=_bulletize(pick("questions")),
@@ -111,6 +146,7 @@ def _bulletize(text: str) -> list[str]:
     items: list[str] = []
     for raw in text.split("\n"):
         cleaned = raw.strip().lstrip("-*•").lstrip("0123456789. )").strip()
+        cleaned = strip_inline_emphasis(cleaned)
         if cleaned:
             items.append(cleaned)
     return items
