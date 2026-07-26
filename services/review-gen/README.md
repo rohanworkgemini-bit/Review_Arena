@@ -26,8 +26,7 @@ app/
     ├── gemini3pro.py    Google Gemini 3 Pro zero-shot
     ├── gemini25flash.py Google Gemini 2.5 Flash zero-shot
     ├── claude.py        Anthropic Claude Opus 4.8 (native SDK)
-    ├── deepseek.py      DeepSeek V3.2 (OpenAI-compatible endpoint)
-    └── openai_compat.py Generic OpenAI-compatible (template for new providers)
+    └── deepseek.py      DeepSeek V3.2 (OpenAI-compatible endpoint)
 ```
 
 All review systems are frontier commercial APIs. The open-weight
@@ -46,11 +45,12 @@ the study was scoped to frontier models only.
 
 ## Adapter integration recipe
 
-To add a new review system, create `adapters/<slug>.py` (subclass the
-closest existing adapter, or `OpenAICompatAdapter` for any provider with
-an OpenAI-compatible `/chat/completions` endpoint), register it in
-`adapters/__init__.py`, and add a row to `review_systems` via
-`apps/api/scripts/seed.ts`.
+To add a new review system, create `adapters/<slug>.py` by copying the
+closest existing adapter — `deepseek.py` for any provider with an
+OpenAI-compatible `/chat/completions` endpoint (it is the openai SDK
+pointed at a different `base_url`), `claude.py` or `gemini.py` for a
+native SDK — register it in `adapters/__init__.py`, and add a row to
+`review_systems` via `apps/api/scripts/seed.ts`.
 
 ## Dev
 

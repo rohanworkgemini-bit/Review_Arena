@@ -4,10 +4,10 @@ Native DeepSeek API access via DeepSeek's OpenAI-compatible endpoint.
 We use the openai SDK pointed at https://api.deepseek.com/v1 — the
 DeepSeek docs explicitly recommend this and their schema matches.
 
-A dedicated adapter (vs reusing openai_compat with config) gives the
-thesis a clean 1:1 mapping between review_systems rows and adapter
-source, and lets us add DeepSeek-specific behaviour later without
-touching the shared generic adapter:
+A dedicated adapter (vs one config-driven generic adapter shared by
+every provider) gives the thesis a clean 1:1 mapping between
+review_systems rows and adapter source, and leaves room for
+DeepSeek-specific behaviour without touching anyone else:
   - cache-hit pricing (DeepSeek bills cached prefix tokens at a steep
     discount; logging both separately matters for the cost chapter)
   - reasoning-mode support when we switch to deepseek-reasoner

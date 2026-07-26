@@ -19,8 +19,11 @@ Standardized integration framework (so every system gets the same input
 budgeting + output normalization, and adding a new one is minimal):
   - _budget.py        — canonical paper rendering + one reference tokenizer
   - _review_parse.py  — markdown/JSON → StructuredReview + score clamping
-  - openai_compat.py  — generic OpenAI-compatible adapter for any new
-                        provider exposing a /chat/completions endpoint.
+
+To add a provider, copy the closest adapter: deepseek.py for anything
+with an OpenAI-compatible /chat/completions endpoint (it is the openai
+SDK pointed at a different base_url), claude.py or gemini.py for a
+native SDK.
 """
 from __future__ import annotations
 
@@ -58,11 +61,6 @@ def _bootstrap() -> None:
         from app.adapters.gemini import GeminiAdapter
 
         return GeminiAdapter(cfg)
-
-    def _openai_compat_factory(cfg: dict) -> Adapter:
-        from app.adapters.openai_compat import OpenAICompatAdapter
-
-        return OpenAICompatAdapter(cfg)
 
     def _claude_factory(cfg: dict) -> Adapter:
         from app.adapters.claude import ClaudeAdapter
@@ -104,10 +102,6 @@ def _bootstrap() -> None:
     # compatibility with any unmigrated row.
     register("gpt-4o-mini", _gpt_factory)
     register("gemini", _gemini_factory)
-    # Generic OpenAI-compatible adapter — still useful for ad-hoc base_url
-    # overrides; not used by any active seeded system now that DeepSeek
-    # has its own dedicated adapter.
-    register("openai-compat", _openai_compat_factory)
     # Per-system commercial reviewers (one file per system).
     register("gpt-5", _gpt5_factory)
     register("gpt-5-mini", _gpt5mini_factory)
