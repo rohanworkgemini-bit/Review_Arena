@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import { ApiError, getPair, getPaperStatus, submitVote } from "@/lib/api";
 import { useReviewStream } from "@/hooks/useReviewStream";
+import { BottomBar } from "@/components/layout/BottomBar";
 import {
   DimensionProgress,
   DimensionRow,
@@ -471,10 +472,10 @@ export function ComparisonPage() {
         )
       )}
 
-      {/* Sticky vote strip — the single primary action on the page. */}
-      <div
-        className="fixed bottom-0 right-0 z-30 border-t border-rule bg-paper left-0 lg:[left:var(--sidebar-w)]"
-      >
+      {/* Sticky vote strip — the single primary action on the page.
+          <BottomBar> reports its height to AppShell so the footer stays
+          reachable underneath it. */}
+      <BottomBar className="border-rule bg-paper">
         <div className="container max-w-[1080px] flex flex-col gap-2 py-3 md:flex-row md:items-center">
           {readOnly ? (
             // Already voted: the strip becomes a record of the verdict plus
@@ -551,7 +552,7 @@ export function ComparisonPage() {
           </div>
           )}
         </div>
-      </div>
+      </BottomBar>
     </div>
   );
 }

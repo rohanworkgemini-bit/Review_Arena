@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { uploadArxiv, uploadPaper } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { BottomBar } from "@/components/layout/BottomBar";
 import {
   CONFERENCES,
   CONFERENCE_NAMES,
@@ -91,13 +92,12 @@ export function UploadPage() {
           Upload a paper
         </h1>
         <p className="text-graphite mt-1">
-          PDF, max 10 MB. Both reviewing systems get the same section
-          selection; you then compare the two reviews blinded and vote.
+           Via PDF or arXiv link, Select the Review format, Read and vote for the better Review.
         </p>
       </div>
 
       {/* Conference format — chosen up front; every generated review for
-          this paper follows the selected venue's review form and overall
+          this paper follows the selected venue's review form and overallå
           rating scale (both blind reviews always share the same scale). */}
       <div>
         <div className="text-sm font-medium">Review format</div>
@@ -216,9 +216,9 @@ export function UploadPage() {
         <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
       )}
 
-      <div
-        className="fixed bottom-0 right-0 z-30 border-t bg-background left-0 lg:[left:var(--sidebar-w)]"
-      >
+      {/* <BottomBar> reports its height to AppShell so this never covers
+          the footer once the page is scrolled to the end. */}
+      <BottomBar className="bg-background">
         <div className="container max-w-2xl flex items-center gap-4 py-3">
           {submitting ? (
             <div className="flex flex-1 items-center gap-2 font-mono text-xs text-graphite">
@@ -245,7 +245,7 @@ export function UploadPage() {
             {submitting ? "Working…" : "Upload and start comparing"}
           </Button>
         </div>
-      </div>
+      </BottomBar>
     </div>
   );
 }
