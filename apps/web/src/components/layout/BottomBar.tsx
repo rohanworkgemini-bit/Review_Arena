@@ -1,33 +1,26 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  type ReactNode,
-} from "react";
+import { type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * A viewport-pinned action bar (the upload button, the vote strip) that
- * does NOT cover the footer.
+ * The page's primary action bar (upload button, vote strip).
  *
- * Why this exists: the bar is `position: fixed`, so it sits at the bottom
- * of the VIEWPORT. The Footer is the last element in AppShell's normal
- * flow, so once you scroll to the end of the document the two occupy the
- * same band and the bar wins — the footer (session id, data-processing
- * link) was unreachable on /upload and /compare. Page-level `pb-*` can't
- * fix it: the Footer lives outside <main>, so padding inside the page
- * pushes the footer DOWN rather than reserving room after it.
+ * `sticky`, deliberately NOT `fixed`. A fixed bar is glued to the bottom
+ * of the VIEWPORT, so at the end of the document it lands on top of — or
+ * below — the footer, and the footer is where the anonymous session id
+ * lives that /consent tells participants to quote in a deletion request.
  *
- * The fix has to add scrollable space AFTER the footer, which only the
- * shell can do. So the bar measures itself and reports its height up;
- * AppShell pads its column by that much. Measured rather than hardcoded
- * because the bars reflow (the vote strip wraps to two lines on narrow
- * viewports, and swaps to a taller "vote recorded" state).
+ * Sticky gives both behaviours from one rule: while there is page content
+ * left to scroll the bar is pinned to the bottom of the screen exactly as
+ * before, and once the end of the page is reached it comes to rest in
+ * normal flow, so the footer is always the last thing on the page.
+ *
+ * It must therefore stay the LAST child of the page's container element —
+ * a sticky element only travels within its own parent.
+ *
+ * The negative inline margin cancels the container's 1.5rem padding so the
+ * rule above the bar spans the full column, while the padding puts its
+ * contents back in line with the rest of the page.
  */
-export const BottomBarContext = createContext<(height: number) => void>(() => {});
-
 export function BottomBar({
   children,
   className,
@@ -35,32 +28,8 @@ export function BottomBar({
   children: ReactNode;
   className?: string;
 }) {
-  const setHeight = useContext(BottomBarContext);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // ResizeObserver rather than a one-shot measure: the bar changes
-    // height when its content wraps or its state swaps.
-    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
-    ro.observe(el);
-    setHeight(el.offsetHeight);
-    return () => ro.disconnect();
-  }, [setHeight]);
-
-  // Release the reservation when the page unmounts, otherwise every other
-  // route keeps a dead gap under its footer.
-  useEffect(() => () => setHeight(0), [setHeight]);
-
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "fixed bottom-0 left-0 right-0 z-30 border-t lg:[left:var(--sidebar-w)]",
-        className,
-      )}
-    >
+    <div className={cn("sticky bottom-0 z-30 -mx-6 border-t px-6", className)}>
       {children}
     </div>
   );

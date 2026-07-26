@@ -85,7 +85,7 @@ export function UploadPage() {
     !submitting && consented && (source === "pdf" ? !!file : arxivLooksValid);
 
   return (
-    <div className="container max-w-2xl py-10 pb-32 space-y-6">
+    <div className="container max-w-2xl py-10 space-y-6">
       <div>
         <div className="eyebrow mb-3">Submit a manuscript</div>
         <h1 className="text-3xl font-semibold tracking-[-0.01em]">
@@ -216,10 +216,10 @@ export function UploadPage() {
         <p className="text-sm text-destructive">{(mutation.error as Error).message}</p>
       )}
 
-      {/* <BottomBar> reports its height to AppShell so this never covers
-          the footer once the page is scrolled to the end. */}
+      {/* Must stay the LAST child of the container so it comes to rest
+          above the footer at the end of the page (see BottomBar). */}
       <BottomBar className="bg-background">
-        <div className="container max-w-2xl flex items-center gap-4 py-3">
+        <div className="flex items-center gap-4 py-3">
           {submitting ? (
             <div className="flex flex-1 items-center gap-2 font-mono text-xs text-graphite">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />

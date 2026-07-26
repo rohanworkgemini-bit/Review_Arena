@@ -301,8 +301,7 @@ export function ComparisonPage() {
   }
 
   return (
-    // pb-32 so the sticky bottom bar never covers the last review section.
-    <div className="container max-w-[1080px] py-6 pb-32 space-y-5">
+    <div className="container max-w-[1080px] py-6 space-y-5">
       {usingPlaceholder && (
         <div className="flex justify-end">
           <Badge variant="outline">placeholder</Badge>
@@ -472,11 +471,11 @@ export function ComparisonPage() {
         )
       )}
 
-      {/* Sticky vote strip — the single primary action on the page.
-          <BottomBar> reports its height to AppShell so the footer stays
-          reachable underneath it. */}
+      {/* Sticky vote strip — the single primary action on the page. Must
+          stay the LAST child of the container so it comes to rest above
+          the footer at the end of the page (see BottomBar). */}
       <BottomBar className="border-rule bg-paper">
-        <div className="container max-w-[1080px] flex flex-col gap-2 py-3 md:flex-row md:items-center">
+        <div className="flex flex-col gap-2 py-3 md:flex-row md:items-center">
           {readOnly ? (
             // Already voted: the strip becomes a record of the verdict plus
             // a way back to the reveal, instead of a second chance to vote.

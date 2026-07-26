@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
-import { BottomBarContext } from "@/components/layout/BottomBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // Code-split each route. The leaderboard pulls in recharts (~80 KB);
@@ -67,41 +66,30 @@ function AppShell({ children }: { children: ReactNode }) {
     window.localStorage.setItem(COLLAPSED_KEY, String(collapsed));
   }, [collapsed]);
 
-  // Height of the current page's fixed bottom bar, reported by <BottomBar>.
-  // Reserved as padding below the footer — see the comment on the layout
-  // div, and components/layout/BottomBar.tsx for why the shell owns this.
-  const [bottomBarH, setBottomBarH] = useState(0);
-
-  // --sidebar-w is consumed by Sidebar itself and by any sticky element
-  // that needs to offset around the sidebar (e.g. the bottom vote bar on
-  // /compare). Lives on the root layout div so every descendant inherits.
+  // --sidebar-w is consumed by Sidebar itself and by any element that
+  // needs to offset around the sidebar. Lives on the root layout div so
+  // every descendant inherits it.
   const layoutStyle: CSSProperties = {
     ["--sidebar-w" as string]: collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
   };
 
   return (
-    <BottomBarContext.Provider value={setBottomBarH}>
-      <div style={layoutStyle}>
-        {/* editor's mark across the very top — same as the landing page */}
-        <div className="h-[3px] bg-red" aria-hidden />
-        <div className="relative flex min-h-[calc(100vh-3px)]">
-          <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
-          {/* paddingBottom reserves scrollable space UNDER the footer equal
-              to any fixed bottom bar the current page renders, so the bar
-              can never sit on top of the footer. 0 on pages without one. */}
-          <div
-            className="relative z-10 flex min-w-0 flex-1 flex-col"
-            style={{ paddingBottom: bottomBarH }}
-          >
-            <Header />
-            {/* main is flex-1 so on short pages the Footer still hugs the
-                viewport bottom instead of floating mid-screen. */}
-            <main className="flex-1">{children}</main>
-            <Footer />
-          </div>
+    <div style={layoutStyle}>
+      {/* editor's mark across the very top — same as the landing page */}
+      <div className="h-[3px] bg-red" aria-hidden />
+      <div className="relative flex min-h-[calc(100vh-3px)]">
+        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+          <Header />
+          {/* main is flex-1 so on short pages the Footer still hugs the
+              viewport bottom instead of floating mid-screen. Page action
+              bars are sticky INSIDE main (see BottomBar), so the Footer is
+              always the last thing on the page. */}
+          <main className="flex-1">{children}</main>
+          <Footer />
         </div>
       </div>
-    </BottomBarContext.Provider>
+    </div>
   );
 }
 
