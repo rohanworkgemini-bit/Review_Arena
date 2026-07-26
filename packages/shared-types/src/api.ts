@@ -22,7 +22,7 @@ export type Conference = z.infer<typeof ConferenceSchema>;
 export const CONFERENCE_NAMES: Record<Conference, string> = {
   iclr: "ICLR 2026",
   icml: "ICML 2026",
-  neurips: "NeurIPS 2025",
+  neurips: "NeurIPS 2026",
   arr: "ARR 2025",
 };
 

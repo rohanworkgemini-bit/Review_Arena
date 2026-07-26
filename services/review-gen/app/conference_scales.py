@@ -6,12 +6,11 @@ paper → API → GenerateRequest.conference → adapter config → this prompt,
 so BOTH systems in a battle review under the same venue's scale (fairness:
 an ICLR-style review is never compared against an ARR-style one).
 
-Four venue editions, matching the exposé (ARR 2025; ICML 2026;
-NeurIPS 2025; ICLR 2026). Scales verified against the live venue
-guidelines (July 2026):
+Four venue editions: ARR 2025, ICML 2026, NeurIPS 2026, ICLR 2026.
+Scales verified against the live venue guidelines (July 2026):
   - ICLR 2026 Reviewer Guide — overall rating mapped to {0,2,4,6,8,10}
     (changed from 2025's {1,3,5,6,8,10}).
-  - NeurIPS 2025 Reviewer Guidelines — 6-point scale (1-6).
+  - NeurIPS 2025/2026 Reviewer Guidelines — 6-point scale (1-6).
   - ICML 2026 Reviewer Instructions — 6-point scale (1-6).
   - ACL Rolling Review (ARR) 2025 review form — Overall Assessment 1-5,
     half points allowed. This is the only *ACL entry: EMNLP, ACL and
@@ -62,7 +61,7 @@ CONFERENCE_SCALES: Dict[str, Dict] = {
         },
     },
     "neurips": {
-        "name": "NeurIPS 2025",
+        "name": "NeurIPS 2026",
         "scores": [1, 2, 3, 4, 5, 6],
         "labels": {
             6: "Strong Accept — technically flawless, groundbreaking impact",
