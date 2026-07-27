@@ -8,7 +8,7 @@ export interface JudgeResult {
 // Keep in sync with DEFAULT_JUDGE_MODEL in services/review-gen/app/judge.py.
 // Stored on every metric row's meta so the leaderboard / reveal page
 // can surface which judge produced a given score.
-export const DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview";
+export const DEFAULT_JUDGE_MODEL = "gemini-3.6-flash";
 
 export class JudgeClient {
   private readonly apiKey: string;

@@ -245,12 +245,13 @@ def _one_judge_pass(
     raise RuntimeError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
 
 
-# Default judge model — Gemini 3.1 Pro, chosen deliberately (2026-07).
+# Default judge model — Gemini 3.6 Flash (set 2026-07-27).
 #
-# KNOWN, ACCEPTED CONFLICT: this is the SAME model id the `gemini-3.1-pro`
-# leaderboard system is pinned to (see apps/api/scripts/seed.ts), and a
-# same-family sibling of `gemini-3.6-flash`. The judge therefore grades
-# its own output for 1 of the 10 systems.
+# KNOWN, ACCEPTED CONFLICT: this is the SAME model id the
+# `gemini-3.6-flash` leaderboard system is pinned to (see
+# apps/api/scripts/seed.ts), and a same-family sibling of
+# `gemini-3.1-pro`. The judge therefore grades its own output for 1 of
+# the 10 systems.
 #
 # This is not an oversight. Since the 2026-07 lineup refresh the board
 # spans five vendors (OpenAI, Anthropic, Google, DeepSeek, Mistral), so
@@ -258,11 +259,17 @@ def _one_judge_pass(
 # relocate the conflict, not remove it. The thesis's primary claim rests
 # on *human* Elo; the judge is a secondary correlate for RQ1.
 #
+# Flash vs Pro: the judge runs on EVERY generated review (2 passes each),
+# so it is the highest-volume model call in the system. Flash is the
+# cheap, low-latency tier; the trade is a weaker grader scoring stronger
+# models' output, which biases toward noisier scores rather than toward
+# any one system. Report the human-judge correlation with that caveat.
+#
 # Required mitigation (docs/FAIRNESS.md B3): report judge scores for the
 # two Google systems separately and check whether judge-human correlation
-# differs for them. Do NOT change this model mid-study — that would make
-# the RQ1 correlation incomparable across collected data.
-DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview"
+# differs for them. Do NOT change this model again mid-study — that would
+# make the RQ1 correlation incomparable across collected data.
+DEFAULT_JUDGE_MODEL = "gemini-3.6-flash"
 
 
 def judge_review(
