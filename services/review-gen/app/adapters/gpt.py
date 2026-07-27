@@ -160,7 +160,11 @@ class GPTAdapter(Adapter):
                     for resp_event in stream:
                         if getattr(resp_event, "type", None) != "response.output_text.delta":
                             continue
-                        delta = resp_event.delta or ""
+                        # getattr, not `.delta`: the SDK types this stream as a
+                        # ~50-member event union and the string check above
+                        # does not narrow it, so direct attribute access fails
+                        # type-checking on every member without a delta.
+                        delta = getattr(resp_event, "delta", "") or ""
                         if delta:
                             chunks.append(delta)
                             yield StreamEvent(type="token", text=delta)
