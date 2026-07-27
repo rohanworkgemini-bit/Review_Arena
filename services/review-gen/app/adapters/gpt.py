@@ -154,20 +154,23 @@ class GPTAdapter(Adapter):
                 # choice objects. Only output_text deltas are user-facing;
                 # reasoning-summary events are skipped.
                 with self._client.responses.stream(**self._responses_kwargs(prompt)) as stream:
-                    for event in stream:
-                        if getattr(event, "type", None) != "response.output_text.delta":
+                    # Distinct loop variable per branch: the two APIs yield
+                    # unrelated event types, and reusing one name makes mypy
+                    # union them and reject `.choices` below.
+                    for resp_event in stream:
+                        if getattr(resp_event, "type", None) != "response.output_text.delta":
                             continue
-                        delta = event.delta or ""
+                        delta = resp_event.delta or ""
                         if delta:
                             chunks.append(delta)
                             yield StreamEvent(type="token", text=delta)
             else:
-                for event in self._client.chat.completions.create(
+                for chat_event in self._client.chat.completions.create(
                     **self._kwargs(prompt, stream=True)
                 ):
-                    if not event.choices:
+                    if not chat_event.choices:
                         continue
-                    delta = event.choices[0].delta.content or ""
+                    delta = chat_event.choices[0].delta.content or ""
                     if delta:
                         chunks.append(delta)
                         yield StreamEvent(type="token", text=delta)

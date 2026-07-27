@@ -106,6 +106,15 @@ jobs:
           cache-to: type=gha,mode=max
 
       # ─── Deploy to Cloud Run ──────────────────────────────────────
+      # NOTE: keep this block free of `#` comments. A comment after a
+      # line-continuation `\` swallows the rest of the joined logical
+      # line, so every following flag is parsed as a separate command
+      # (exit 127) — and gcloud still deploys, silently missing them.
+      #
+      # --timeout=900: the API proxies the SSE review stream, so its
+      # request timeout must exceed the slowest generation. gpt-5.5-pro
+      # (Responses API, reasoning tier) measured 61s TTFT on a ~10k-word
+      # paper and scales with length; 300s was too tight.
       - name: Deploy revision
         run: |
           gcloud run deploy ${{ env.SERVICE_NAME }} \
@@ -119,10 +128,6 @@ jobs:
             --min-instances=0 \
             --max-instances=3 \
             --concurrency=50 \
-            # 900s: the API proxies the SSE review stream, so its request
-            # timeout must exceed the slowest generation. gpt-5.5-pro
-            # (Responses API, reasoning tier) measured 61s TTFT on a
-            # ~10k-word paper and scales with length; 300s was too tight.
             --timeout=900 \
             --set-env-vars="^|^NODE_ENV=production|REVIEWARENA_ENV=production|WEB_ORIGIN=https://review-arena-web.vercel.app,https://*.vercel.app|REVIEW_GEN_URL=https://reviewarena-review-gen-760031824692.europe-west3.run.app" \
             --set-secrets="DATABASE_URL=database-url:latest,ADMIN_TOKEN=admin-token:latest,PAIR_TOKEN_SECRET=pair-token-secret:latest,REVIEW_GEN_API_KEY=review-gen-api-key:latest" \
