@@ -106,6 +106,26 @@ _DIMENSION_RUBRIC = {
 }
 
 
+# The judge reads the COMPLETE paper and review (changed 2026-07-28;
+# previously paper[:12000] / review[:6000]). Rationale: FALSE_CLAIMS and
+# EVIDENCE_BASED_CRITIQUE ask whether the review's claims are grounded in
+# the paper — with a 12k-char cap the judge never saw the experiments
+# section it was supposed to verify claims against, so those scores were
+# partly guesses. gemini-3.6-flash has a 1M-token window; a full canonical
+# paper (~23k tokens) fits with a wide margin.
+#
+# The caps below are SAFETY LIMITS against pathological inputs (a 400-page
+# scanned PDF), not evaluation truncation — no real paper or review comes
+# near them. ~4 chars/token ⇒ 400k chars ≈ 100k tokens.
+#
+# Cost at Flash pricing ($1.50/M in, $7.50/M out, 2 passes): ≈ $0.05-0.09
+# per review vs ≈ $0.026 truncated — accepted for grounded scores.
+# Do not change these mid-study: judge inputs must be one regime across
+# all collected data or the RQ1 correlation is incomparable.
+PAPER_CHAR_CAP = 400_000
+REVIEW_CHAR_CAP = 50_000
+
+
 def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
     """System + user prompt for one judge pass. Pure function so both the
     single-pass call and the multi-pass loop produce byte-identical
@@ -145,8 +165,8 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         "CRITIQUE_CLARITY scores."
     )
     user_prompt = (
-        f"=== PAPER ===\n{paper_text[:12000]}\n\n"
-        f"=== REVIEW ===\n{review_text[:6000]}\n"
+        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n"
+        f"=== REVIEW ===\n{review_text[:REVIEW_CHAR_CAP]}\n"
     )
     return system_prompt, user_prompt
 
