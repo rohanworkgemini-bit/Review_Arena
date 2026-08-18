@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "mprocs",
-    "dev:clean": "for p in 8000 8001 5173; do pid=$(lsof -ti :$p 2>/dev/null); [ -n \"$pid\" ] && kill -9 $pid && echo \"killed $pid on :$p\" || echo \":$p already free\"; done",
+    "dev:clean": "for p in 8000 8001 5173 4983; do pid=$(lsof -ti :$p 2>/dev/null); [ -n \"$pid\" ] && kill -9 $pid && echo \"killed $pid on :$p\" || echo \":$p already free\"; done",
     "dev:review-gen": "services/review-gen/.venv/bin/python -m uvicorn app.main:app --reload --port 8001 --app-dir services/review-gen --reload-dir services/review-gen/app",
     "dev:api": "pnpm --filter @reviewarena/api dev",
     "dev:web": "pnpm --filter @reviewarena/web dev",

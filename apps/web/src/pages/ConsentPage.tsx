@@ -40,11 +40,6 @@ const PROCESSORS: Array<{ name: string; role: string; data: string }> = [
     role: "Hosts the API and the review-generation service",
     data: "All application data in transit",
   },
-  {
-    name: "Neon",
-    role: "Managed Postgres database",
-    data: "Parsed paper text, generated reviews, votes and notes",
-  },
 ];
 
 export function ConsentPage() {
@@ -180,7 +175,8 @@ export function ConsentPage() {
         analysed for academic research on automated peer review, and results
         are published only in aggregate (e.g. Elo rankings, statistical
         analyses). Study data is stored in an access-controlled, encrypted
-        database (Neon, Frankfurt) and analysed on an encrypted work computer.
+        database operated by the UKP Lab and analysed on an encrypted work
+        computer.
         Individual votes are never published in a form linked to you — there is
         nothing to link them to beyond the anonymous session identifier.{" "}
         <span className="text-ink">

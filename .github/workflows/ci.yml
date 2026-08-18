@@ -1,8 +1,9 @@
 # CI — type-check + Python syntax check on every PR.
 #
-# Does NOT deploy. Deploy workflows live in deploy-*.yml and only fire
-# on pushes to main. This file's job is to gate PRs: a red check here
-# means the PR can't be merged.
+# Does NOT deploy — this repo has no deploy automation at all (the
+# Vercel / Cloud Run workflows were removed pending the VM move). This
+# file's job is to gate PRs: a red check here means the PR can't be
+# merged.
 #
 # Fast (~2 min) — pnpm + python install are cached.
 

@@ -89,7 +89,7 @@ so their historical reviews, votes and Elo snapshots remain queryable.
 
 Everything heavy is a **third-party API call** — no GPUs, no model
 weights, no inference containers to operate. Local dev only needs
-Postgres (in Docker, or a Neon URL) plus the provider API keys.
+Postgres (in Docker) plus the provider API keys.
 
 ## Monorepo layout
 
@@ -153,16 +153,19 @@ pnpm install
 python3 -m venv services/review-gen/.venv
 services/review-gen/.venv/bin/pip install -r services/review-gen/requirements.txt
 
-# 2. Environment + database
+# 2. Local Postgres — the only supported database target
+docker compose up -d postgres
+
+# 3. Environment + schema
 cp .env.example .env
-# then paste DATABASE_URL, ADMIN_TOKEN, PAIR_TOKEN_SECRET, WEB_ORIGIN,
-# REVIEW_GEN_API_KEY. Generate the local secrets with `openssl rand -hex 32`.
-# See docs/SECRETS.md for the rotation playbook.
+# DATABASE_URL already points at the container started above. Fill in
+# ADMIN_TOKEN, PAIR_TOKEN_SECRET, WEB_ORIGIN, REVIEW_GEN_API_KEY —
+# generate the local secrets with `openssl rand -hex 32`.
 
 pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
 pnpm --filter @reviewarena/api db:seed     # insert review systems
 
-# 3. Provider keys — nothing to deploy, all ten systems are hosted APIs
+# 4. Provider keys — nothing to deploy, all ten systems are hosted APIs
 #   OPENAI_API_KEY    → gpt-5.2, gpt-5.4-mini
 #   ANTHROPIC_API_KEY → claude-opus-4-8, claude-sonnet-5
 #   GEMINI_API_KEY    → gemini-3.1-pro, gemini-3.6-flash (+ the LLM judge)
@@ -170,14 +173,13 @@ pnpm --filter @reviewarena/api db:seed     # insert review systems
 #   MISTRAL_API_KEY   → mistral-large-3, mistral-medium-3.5
 #   CHANDRA_API_KEY   → PDF parsing, from https://www.datalab.to
 
-# 4. Local Postgres (skip if using Neon or other managed)
-docker compose up -d
-
 # 5. Run everything
-pnpm dev                           # starts review-gen :8001 + api :8000 + web :5173
+pnpm dev     # postgres + review-gen :8001 + api :8000 + web :5173 + db UI :4983
 ```
 
-Then open <http://localhost:5173>.
+Then open <http://localhost:5173>. The database itself is browsable at
+<http://localhost:4983> (read-only table viewer, see **Looking at the
+database** below).
 
 `db:seed` only enables a system when its provider key is present, so a
 partially-filled `.env` gives you a smaller lineup rather than failed
@@ -188,7 +190,7 @@ fallback.
 
 See [.env.example](.env.example). Required at minimum:
 
-- `DATABASE_URL` — Postgres connection (Neon or local)
+- `DATABASE_URL` — Postgres connection (the local Docker instance)
 - `ADMIN_TOKEN` — bearer for `/admin/*` (32+ char random)
 - `PAIR_TOKEN_SECRET` — HMAC key for pair tokens (32+ char random, **separate** from ADMIN_TOKEN)
 - `WEB_ORIGIN` — CORS whitelist, comma-separated
@@ -202,42 +204,82 @@ parsing.
 
 Rotation playbook: [docs/SECRETS.md](docs/SECRETS.md).
 
+## Looking at the database
+
+The database is the `postgres` service in [docker-compose.yml](docker-compose.yml)
+— one local instance, nothing managed. Three ways to read it:
+
+```bash
+# 1. Browser UI — read-only table viewer, started automatically by `pnpm dev`
+pnpm --filter @reviewarena/api db:browser      # → http://localhost:4983
+
+# 2. psql inside the container (no local psql needed)
+docker exec -it reviewarena-postgres psql -U reviewarena -d reviewarena
+```
+
+The browser UI ([scripts/db-browser.ts](apps/api/scripts/db-browser.ts)) is
+deliberately minimal: `node:http` + the `pg` pool, no extra dependencies.
+Every query is a `SELECT`, table names are whitelisted from `pg_tables`
+rather than taken from the URL, and it binds `127.0.0.1` only. Drizzle
+Studio (`db:studio`) does not work on Node 24 with the pinned
+`drizzle-kit@0.30.x` — it patches undici internals that no longer exist,
+and fails with a misleading `ETIMEDOUT`.
+
+Useful one-shots: `db:inspect` (latest paper + its review statuses),
+`db:wipe-data` (truncate study data, keep the reviewer registry),
+`db:nuke` (drop everything).
+
 ## Deployment
 
-The deployed stack is Vercel (SPA) → Google Cloud Run (`api` +
-`review-gen`, plus the `arxiv2md` parser) → Neon Postgres. Nothing needs
-a GPU: PDF parsing and every review system are third-party APIs, so the
-services we operate are all small, stateless, CPU-only containers.
+**There is no deploy automation in this repo.** The Vercel and Google
+Cloud workflows were removed pending the move to a self-hosted VM; the
+only workflow left is [ci.yml](.github/workflows/ci.yml), which
+type-checks and tests but never deploys. Pushing to `main` no longer
+changes any running environment — and no longer runs migrations against
+a live database.
+
+Nothing needs a GPU: PDF parsing and every review system are third-party
+APIs, so the three services are small, stateless, CPU-only processes.
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm --filter @reviewarena/shared-types build
 pnpm --filter @reviewarena/api build
 pnpm --filter @reviewarena/web build
 
-# Apply migrations + custom one-shots
-pnpm --filter @reviewarena/api exec drizzle-kit migrate
-pnpm --filter @reviewarena/api exec tsx scripts/add-votes-replay-uk.ts
-pnpm --filter @reviewarena/api exec tsx scripts/add-paper-uploaded-by-session.ts
+# Schema (drizzle-kit push diffs schema.ts against the target DB)
+pnpm --filter @reviewarena/api db:push
+pnpm --filter @reviewarena/api db:seed
 
-# Run with a process supervisor (systemd / pm2 / nixpacks) or Cloud Run:
-#   api:  node dist/server.js                     (port 8000)
-#   web:  any static host serving apps/web/dist/  (Vite SPA)
+# Run under a process supervisor (systemd / pm2) or in containers:
+#   postgres:   docker compose up -d postgres
+#   api:        node dist/server.js                     (port 8000)
 #   review-gen: uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 2
+#   web:        any static host serving apps/web/dist/  (Vite SPA)
 ```
 
-In production, `vercel.json` rewrites `/api/*` to the Cloud Run API and
-serves the SPA for everything else; self-hosting, a reverse proxy
-(Caddy / Nginx) does the same job. `.github/workflows/deploy-api.yml`,
-`deploy-review-gen.yml` and `deploy-arxiv2md.yml` build and push the
-three Cloud Run services on pushes to `main`.
+`apps/api/Dockerfile` and `services/review-gen/Dockerfile` are kept —
+they build plain containers with no platform-specific glue, so they carry
+over to the VM. A reverse proxy (Caddy / Nginx) terminates TLS, serves
+the SPA, and routes `/api/*` to the API process.
+
+### Still tied to Google Cloud
+
+One runtime dependency survives the cleanup: arXiv parsing calls a
+self-hosted `arxiv2md` instance whose default URL is hard-coded in
+[arxiv2md.py](services/review-gen/app/parsing/arxiv2md.py) and still
+points at Cloud Run. Its source is in `services/cloudrun/arxiv2md/` (with
+a Dockerfile). Run that container on the VM and set `ARXIV2MD_BASE` to
+the new address, or arXiv uploads break once the Cloud Run service is
+torn down. PDF uploads are unaffected — they go to Datalab's hosted API.
 
 ### Before a study window
 
 There is **no model warm-up step** — every review system is a hosted
 provider API, so there are no weights to load and no multi-minute cold
-start to pre-empt. Both Cloud Run services run at `--min-instances=0`;
-their cold start is a container boot (seconds), well inside the request
-timeouts (`api` 300 s, `review-gen` 600 s).
+start to pre-empt. Keep the API's request timeout generous (300 s) and
+review-gen's more generous still (600 s): a reasoning model streaming a
+long review can run for minutes.
 
 What is worth checking before a session:
 
@@ -246,7 +288,7 @@ What is worth checking before a session:
   systems you expect are `enabled` (a missing key silently disables its
   system);
 - provider rate limits are high enough for the expected concurrency —
-  `review-gen` runs `--max-instances=3 --concurrency=20`.
+  size the review-gen worker count against them, not against CPU.
 
 **Backup**: nightly `pg_dump`. PDFs are never persisted — only the
 parsed structure (jsonb) and review outputs are stored.

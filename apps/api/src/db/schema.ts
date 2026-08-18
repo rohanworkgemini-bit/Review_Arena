@@ -120,7 +120,8 @@ export const papers = pgTable(
     // When the uploader accepted the data-processing notice (/consent):
     // paper content is sent to commercial AI APIs (OpenAI, Google,
     // Anthropic, DeepSeek) and the Datalab parsing API; infrastructure
-    // runs on Vercel, Google Cloud and Neon. Keep this list in sync with
+    // runs on Vercel, Google Cloud, and a Postgres we operate. Keep this
+    // list in sync with
     // apps/web/src/pages/ConsentPage.tsx — it is the processor list
     // participants actually consent to. Required for new uploads (the API
     // rejects uploads without consent). Nullable for legacy rows only.

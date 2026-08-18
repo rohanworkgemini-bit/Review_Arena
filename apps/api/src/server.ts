@@ -174,7 +174,7 @@ app.get("/health", async (_req, res) => {
     res.json({ ok: true, db: "ok" });
   } catch (err) {
     // SECURITY: /health is publicly reachable. A DB failure message
-    // would leak the Neon hostname, role, or connection-string detail —
+    // would leak the database hostname, role, or connection-string detail —
     // useful intel for an attacker. Log full error server-side; return
     // an opaque status to the client.
     logger.error({ err }, "healthz: db unreachable");

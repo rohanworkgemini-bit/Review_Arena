@@ -14,9 +14,10 @@ function build() {
       "DATABASE_URL is not set. Ensure the project-root .env is loaded before importing db.",
     );
   }
-  // Cap connections so a request spike (or a leak) can't exhaust Neon's
-  // per-role limit (~100). 20 is comfortable for our small-N concurrent
-  // voter load; raise if the soak test starves under contention.
+  // Cap connections so a request spike (or a leak) can't exhaust
+  // Postgres's max_connections (100 by default). 20 is comfortable for
+  // our small-N concurrent voter load; raise if the soak test starves
+  // under contention.
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     max: 20,

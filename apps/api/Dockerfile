@@ -1,4 +1,5 @@
-# Multi-stage Dockerfile for apps/api on Cloud Run.
+# Multi-stage Dockerfile for apps/api. Platform-agnostic — runs on any
+# container host (the VM's docker compose, a plain `docker run`, …).
 #
 # Build context MUST be the monorepo root (`docker build -f apps/api/Dockerfile .`)
 # because pnpm workspaces need access to the root pnpm-workspace.yaml +
@@ -60,11 +61,11 @@ COPY --from=builder /repo/apps/api/drizzle apps/api/drizzle
 COPY --from=builder /repo/apps/api/drizzle.config.ts apps/api/
 
 # Non-root user — drops blast radius if the container is ever compromised.
-# Cloud Run honours USER directives in containers.
 RUN useradd --create-home --uid 10001 reviewarena
 USER reviewarena
 
-# Cloud Run injects $PORT (default 8080); Express reads it via config.ts → API_PORT.
+# Express reads API_PORT via config.ts. Override at run time if the host
+# injects its own port (e.g. -e API_PORT=$PORT).
 ENV NODE_ENV=production
 ENV API_PORT=8080
 EXPOSE 8080

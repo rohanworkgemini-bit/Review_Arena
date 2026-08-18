@@ -12,13 +12,13 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "db:nuke": "tsx scripts/drop-all.ts",
     "db:wipe-data": "tsx scripts/wipe-data.ts",
-    "db:inspect": "tsx scripts/inspect.ts"
+    "db:inspect": "tsx scripts/inspect.ts",
+    "db:browser": "tsx scripts/db-browser.ts"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",

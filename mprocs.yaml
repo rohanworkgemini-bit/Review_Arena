@@ -5,12 +5,16 @@
 # leaves the others alone (unlike `concurrently -k` which killed them as
 # a group). If you actually want them all dead, quit mprocs with `q`.
 #
-# This project uses Neon (managed Postgres) by default — see DATABASE_URL
-# in .env. If you switch to local Postgres, add a `postgres:` proc that
-# runs `docker compose up -d postgres && docker compose logs -f postgres`
-# (requires Docker / OrbStack running).
+# The database is the local docker-compose Postgres — the `postgres` proc
+# below brings it up and tails its logs (requires Docker / OrbStack
+# running). `db-ui` serves a read-only browser view of every table at
+# http://localhost:4983.
 
 procs:
+  postgres:
+    shell: docker compose up -d postgres && docker compose logs -f postgres
+  db-ui:
+    shell: pnpm --filter @reviewarena/api db:browser
   review-gen:
     shell: services/review-gen/.venv/bin/python -m uvicorn app.main:app --reload --port 8001 --app-dir services/review-gen --reload-dir services/review-gen/app
   api:

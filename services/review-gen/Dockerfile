@@ -1,7 +1,8 @@
-# Dockerfile for services/review-gen on Cloud Run.
+# Dockerfile for services/review-gen. Platform-agnostic — runs on any
+# container host.
 #
-# Build context: services/review-gen/ (so the Cloud Run --source flag
-# can target this dir directly without monorepo plumbing).
+# Build context: services/review-gen/ (this dir is self-contained; no
+# monorepo plumbing needed).
 #
 # Single stage — the Python dep tree is large (openai + anthropic +
 # google-generativeai + tiktoken + httpx ~= 500 MB installed) but multi-

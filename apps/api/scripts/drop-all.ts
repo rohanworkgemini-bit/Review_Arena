@@ -1,6 +1,6 @@
 // One-shot: drop every table + enum in the public schema, then exit.
-// Used to clear the Neon DB before the first drizzle-kit push when the
-// database has leftovers from a previous app.
+// Used to clear the database before the first drizzle-kit push when it
+// has leftovers from a previous app.
 //
 // Run: pnpm --filter @reviewarena/api db:nuke
 
