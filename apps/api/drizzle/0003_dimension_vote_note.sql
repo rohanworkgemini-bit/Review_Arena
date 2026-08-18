@@ -1,1 +1,0 @@
-ALTER TABLE "dimension_votes" ADD COLUMN "note" text;

@@ -1,1 +1,0 @@
-ALTER TABLE "votes" ADD COLUMN "note" text;
