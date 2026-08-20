@@ -1,0 +1,6016 @@
+{
+ "_comment": "Golden fixture: a seeded battle log plus the ratings FastChat's compute_bt produces for it. FastChat's default baseline (mixtral-8x7b-instruct-v0.1) is absent from this field, so it applies no baseline shift and the ratings come out mean-centred on 1000 \u2014 which is exactly what computeBT's mean-centring fallback must reproduce. Regenerate with gen-bt-fixture.py.",
+ "_source": "https://raw.githubusercontent.com/lm-sys/FastChat/main/fastchat/serve/monitor/rating_systems.py",
+ "_retrieved": "2026-08-20",
+ "battles": [
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "mistral-large-3",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0.5
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "claude-sonnet-5",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.2",
+   "outcome": 0.5
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "claude-sonnet-5",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "gpt-5.4-mini",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "mistral-large-3",
+   "outcome": 0
+  },
+  {
+   "a": "mistral-large-3",
+   "b": "gpt-5.2",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "claude-opus-4-8",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "mistral-large-3",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 1
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 0
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "gpt-5.4-mini",
+   "outcome": 0
+  },
+  {
+   "a": "gpt-5.4-mini",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gpt-5.2",
+   "outcome": 1
+  },
+  {
+   "a": "claude-opus-4-8",
+   "b": "deepseek-v4-pro",
+   "outcome": 1
+  },
+  {
+   "a": "gpt-5.2",
+   "b": "gemini-3.1-pro",
+   "outcome": 0.5
+  },
+  {
+   "a": "claude-sonnet-5",
+   "b": "gemini-3.1-pro",
+   "outcome": 1
+  },
+  {
+   "a": "deepseek-v4-pro",
+   "b": "claude-opus-4-8",
+   "outcome": 0
+  },
+  {
+   "a": "gemini-3.1-pro",
+   "b": "gpt-5.2",
+   "outcome": 1
+  }
+ ],
+ "fastchat_bt": {
+  "gpt-5.2": 1061.0180883080498,
+  "claude-opus-4-8": 1046.2177902796336,
+  "gemini-3.1-pro": 1022.3816970508906,
+  "claude-sonnet-5": 1017.0512270023105,
+  "gpt-5.4-mini": 978.2006050713205,
+  "deepseek-v4-pro": 965.8208877721441,
+  "mistral-large-3": 909.309704515651
+ }
+}
