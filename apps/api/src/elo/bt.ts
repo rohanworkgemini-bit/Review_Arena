@@ -385,6 +385,15 @@ export function bootstrapBTCI(
     for (const [slug, rating] of ratings) samples.get(slug)!.push(rating);
   }
 
+  return intervalsFrom(samples, voteCount);
+}
+
+/** Median + 2.5/97.5 percentile bounds per system, over whatever replicates
+ *  that system appeared in. Systems with no replicate stay off the board. */
+function intervalsFrom(
+  samples: Map<string, number[]>,
+  voteCount: Map<string, number>,
+): Map<string, BootstrapInterval> {
   const out = new Map<string, BootstrapInterval>();
   for (const [slug, arr] of samples) {
     if (arr.length === 0) continue;
@@ -397,6 +406,100 @@ export function bootstrapBTCI(
     });
   }
   return out;
+}
+
+/** A comparison tagged with the unit that judgments are correlated within —
+ *  for the controlled study, the participant. */
+export interface ClusteredBattle extends Battle {
+  cluster: string;
+}
+
+/**
+ * Participant-level cluster bootstrap.
+ *
+ * bootstrapBTCI resamples individual comparisons, which assumes every
+ * comparison is an independent draw. In the controlled study it is not: one
+ * participant contributes nine comparisons, and a participant with a
+ * systematic preference (say, for longer reviews) moves all nine the same
+ * way. Resampling comparisons treats those nine as nine independent pieces
+ * of evidence and reports an interval that is too narrow.
+ *
+ * This resamples whole participants with replacement — a selected
+ * participant brings all of their comparisons, a participant selected twice
+ * brings them twice — so the interval reflects uncertainty about which
+ * participants you happened to recruit. That is the quantity a study with
+ * n=20 people is actually uncertain about.
+ *
+ * Each participant's comparisons are pre-aggregated once, so a replicate is
+ * a sum of per-cluster cell counts rather than a rescan of the log; 5000
+ * replicates over 180 comparisons stays in the millisecond range.
+ */
+export function bootstrapBTByCluster(
+  battles: readonly ClusteredBattle[],
+  rounds: number = 2000,
+  opts: BTOptions = {},
+  rng: () => number = mulberry32(0),
+): Map<string, BootstrapInterval> {
+  if (battles.length === 0) return new Map();
+  const c = opts.c ?? DEFAULT_BT;
+  const baselineSlug = opts.baselineSlug ?? null;
+
+  // Fix the model index on the full data, so a replicate that happens to
+  // omit a system still maps its ratings back to the right slugs.
+  const { models } = preprocessForBT(battles);
+  if (models.length < 2) return new Map();
+  const modelId = new Map(models.map((m, i) => [m, i]));
+
+  const byCluster = new Map<string, Map<string, BTRow>>();
+  const voteCount = new Map<string, number>();
+  for (const b of battles) {
+    voteCount.set(b.a, (voteCount.get(b.a) ?? 0) + 1);
+    voteCount.set(b.b, (voteCount.get(b.b) ?? 0) + 1);
+    let cells = byCluster.get(b.cluster);
+    if (!cells) {
+      cells = new Map();
+      byCluster.set(b.cluster, cells);
+    }
+    const ia = modelId.get(b.a)!;
+    const ib = modelId.get(b.b)!;
+    const key = `${ia}|${ib}|${b.outcome}`;
+    const cell = cells.get(key);
+    if (cell) cell.weight += 1;
+    else cells.set(key, { a: ia, b: ib, outcome: b.outcome, weight: 1 });
+  }
+
+  const clusters = [...byCluster.values()];
+  const samples = new Map<string, number[]>();
+  for (const m of models) samples.set(m, []);
+
+  for (let round = 0; round < rounds; round++) {
+    const merged = new Map<string, BTRow>();
+    for (let k = 0; k < clusters.length; k++) {
+      const picked = clusters[Math.floor(rng() * clusters.length)]!;
+      for (const [key, cell] of picked) {
+        const acc = merged.get(key);
+        if (acc) acc.weight += cell.weight;
+        else merged.set(key, { ...cell });
+      }
+    }
+
+    const rows = [...merged.values()];
+    const members = largestStronglyConnected(rows, models.length);
+    // A replicate can be degenerate — e.g. every participant who ever beat
+    // system F was left out of it. Such a replicate contributes nothing for
+    // the systems it cannot place, rather than a diverged number.
+    if (members.length < 2) continue;
+    const { pi } = fitBT(
+      componentRows(rows, members, models.length),
+      members.length,
+      opts.maxIter ?? BT_MAX_ITER,
+      opts.tol ?? BT_TOL,
+    );
+    const { ratings } = scaleAndOffset(pi, members, models, c, baselineSlug);
+    for (const [slug, rating] of ratings) samples.get(slug)!.push(rating);
+  }
+
+  return intervalsFrom(samples, voteCount);
 }
 
 /**
