@@ -1,7 +1,7 @@
 # ReviewArena
 
 A web platform for benchmarking automated peer review systems through human
-pairwise comparison and Elo ranking.
+pairwise comparison and Bradley-Terry ranking.
 
 **Bachelor thesis project — Ubiquitous Knowledge Processing Lab (UKP),
 TU Darmstadt.**
@@ -21,10 +21,15 @@ TU Darmstadt.**
    refine across eight dimensions: Comprehensiveness, Clarity, Fairness,
    Actionability, Constructiveness, Objectivity, Relevance,
    Technical Terms.
-5. Votes update an overall and per-dimension Elo ranking with
-   bootstrapped 95% CIs (verbatim FastChat port).
-6. The reveal screen shows which system produced A and B, the Elo
-   before/after, and a radar of LLM-judge dimension scores.
+5. Votes update an overall and per-dimension ranking with bootstrapped
+   95% CIs (verbatim FastChat port). Two rating systems are computed on
+   every vote and stored side by side: **Bradley-Terry** (maximum
+   likelihood over the whole comparison log — the default board, and what
+   LMArena publishes) and **online Elo** (order-dependent, incremental).
+   The leaderboard has a toggle; BT leads.
+6. The reveal screen shows which system produced A and B, both ratings
+   before/after on the same 1000-point scale, and a radar of LLM-judge
+   dimension scores.
 
 ## Live review systems
 
@@ -106,7 +111,7 @@ reviewarena/
 │           ├── db/                # schema.ts, client.ts
 │           ├── clients/           # review-gen-client.ts, judge-client.ts
 │           ├── pipeline/          # orchestrator.ts, score-paper.ts
-│           ├── elo/               # FastChat-port Elo + bootstrap CI (+ tests)
+│           ├── elo/               # FastChat-port Elo + Bradley-Terry + bootstrap CI (+ tests)
 │           ├── pair/              # LMArena pair selector (+ tests)
 │           ├── routes/            # papers, pair, votes, leaderboard, reveal, admin
 │           ├── plugins/           # session cookie, admin bearer auth
@@ -142,7 +147,7 @@ reviewarena/
 | Review-gen       | Python FastAPI microservice                | Adapter SDKs (OpenAI, Gemini, Anthropic, DeepSeek) + Pydantic schemas all Python-native.                                  |
 | PDF parsing      | **Datalab Chandra API** (was GROBID)       | Chandra preserves LaTeX equations + reconstructs markdown tables; GROBID's TEI XML lost both. Hosted, so nothing to run.  |
 | Review systems   | **Frontier commercial APIs only**          | Open-weight specialists needed self-hosted GPUs — out of scope. Every system is now one HTTP call to its provider.        |
-| Tests            | Vitest                                     | Same runner both sides. Elo math + pair selection have the deepest coverage.                                              |
+| Tests            | Vitest                                     | Same runner both sides. Rating math (Elo + BT, incl. parity against FastChat's own solver) and pair selection have the deepest coverage. |
 | Package manager  | pnpm workspaces                            | Strict by default; surfaces missing deps early.                                                                           |
 
 ## Quickstart
@@ -197,6 +202,14 @@ See [.env.example](.env.example). Required at minimum:
 - `REVIEW_GEN_API_KEY` — shared key the Node API sends to the Python
   service as `X-API-Key`; required in production so no one else can
   spend your LLM budget via `/generate`
+
+Optional:
+
+- `RATING_BASELINE_SLUG` — system pinned at 1000 on the Bradley-Terry
+  board (default `gpt-5.2`). BT ratings are only defined up to an additive
+  constant, so one system fixes the origin. Change it and every BT rating
+  renumbers, so pick a high-volume system and leave it: retiring the
+  system is fine, since disabled systems keep their battle history.
 
 For the review systems you also need `OPENAI_API_KEY`, `GEMINI_API_KEY`,
 `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, and `CHANDRA_API_KEY` for PDF
@@ -295,17 +308,48 @@ parsed structure (jsonb) and review outputs are stored.
 
 ## Algorithmic credits
 
-Elo update and bootstrap CI are ported verbatim from
-[LMSYS FastChat](https://github.com/lm-sys/FastChat) (Apache 2.0); see
-the file-level comment in [apps/api/src/elo/elo.ts](apps/api/src/elo/elo.ts).
-Constants are FastChat's defaults (K=4, BASE=10, SCALE=400, INIT=1000).
-The LMArena `get_battle_pair` weighted sampler is similarly ported to
+Both rating systems are ported from
+[LMSYS FastChat](https://github.com/lm-sys/FastChat) (Apache 2.0),
+`fastchat/serve/monitor/rating_systems.py`. Constants are FastChat's
+defaults (K=4, BASE=10, SCALE=400, INIT=1000). The LMArena
+`get_battle_pair` weighted sampler is similarly ported to
 [apps/api/src/pair/select-pair.ts](apps/api/src/pair/select-pair.ts).
 
-LMArena's *current* public leaderboard uses Bradley-Terry MLE with
-style control; we deliberately use online Elo + bootstrap CI because
-thesis-scale (~250 votes) is below the data threshold where BT-MLE
-converges cleanly.
+- **Elo** — `compute_elo` / `compute_bootstrap_elo`, in
+  [apps/api/src/elo/elo.ts](apps/api/src/elo/elo.ts). Order-dependent and
+  incremental, which is what the pair sampler reads and what the reveal
+  screen's per-vote delta is.
+- **Bradley-Terry** — `preprocess_for_bt` / `fit_bt` / `scale_and_offset`
+  / `compute_bt` / `compute_bootstrap_bt`, in
+  [apps/api/src/elo/bt.ts](apps/api/src/elo/bt.ts). This is the default
+  board, matching LMArena's current public leaderboard (minus style
+  control, which needs per-response length and markdown features we do
+  not collect).
+
+Two documented deviations in the BT port, neither of which moves the
+estimate where FastChat's own estimate is well-defined:
+
+1. **MM (Zermelo/Hunter/Newman) fixed point instead of scipy L-BFGS-B**,
+   since Node has no L-BFGS. Same likelihood, same MLE. Checked against a
+   fixture generated from FastChat's own `compute_bt`
+   ([bt-parity.test.ts](apps/api/src/elo/__tests__/bt-parity.test.ts)):
+   our fit reaches `|grad|inf = 1.5e-08` where FastChat's L-BFGS stops at
+   `3.4e-03`, so the ~5e-4-point gap between the two is *their*
+   `gtol=1e-6`, not our error.
+2. **A connectivity guard.** The BT MLE is finite only if the win-graph is
+   strongly connected (Ford 1957) — an unbeaten or winless system diverges,
+   and FastChat reports whatever `maxiter=100` reached. We fit the largest
+   strongly-connected component and report the rest as unranked. This is
+   what makes BT usable at thesis scale (~250 votes) and on the eight
+   sparse per-dimension boards, where separation is the norm rather than
+   the exception.
+
+BT ratings are identified only up to an additive constant, so
+`RATING_BASELINE_SLUG` (default `gpt-5.2`) is pinned at 1000 to keep
+snapshots comparable as systems are added and retired — FastChat pins
+`mixtral-8x7b-instruct-v0.1` at 1114 for the same reason. Boards where the
+baseline has not battled are mean-centred instead, recorded per snapshot row
+as `anchor`.
 
 ## Status
 

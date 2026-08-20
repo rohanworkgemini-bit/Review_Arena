@@ -19,8 +19,10 @@ import {
   incrementalEloUpdate,
   DEFAULT_ELO,
   type Battle,
+  type BootstrapInterval,
   type Outcome,
 } from "../elo/elo.js";
+import { computeBT, bootstrapBTCI } from "../elo/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
 import { invalidateLeaderboardCache } from "./leaderboard.js";
@@ -28,6 +30,10 @@ import { invalidateLeaderboardCache } from "./leaderboard.js";
 // Postgres advisory-lock key for serialising vote+snapshot writes.
 // Any constant int8 works; 0xE10E10 = "eloelo" mnemonic, no clash.
 const ELO_WRITER_LOCK = 0xe10e10;
+
+// Resamples per snapshot, shared by both rating systems so their intervals
+// are comparable. FastChat uses 100 for the public board.
+const BOOTSTRAP_ROUNDS = 100;
 
 /** Detect Postgres unique-violation errors thrown through node-postgres /
  *  Drizzle. Matches by SQLSTATE 23505 and (optionally) the constraint name
@@ -114,10 +120,43 @@ export function votesRouter(config: Config): Router {
         outcome,
       );
 
+      // BT has no incremental update — it refits from the whole log — so the
+      // reveal delta is a genuine before/after refit rather than Elo's
+      // one-battle approximation. Both are point MLEs, which drift a little
+      // from the bootstrap medians the leaderboard stores; same caveat that
+      // already applies to the Elo numbers here.
+      //
+      // The battle only enters the "after" fit if it would survive
+      // loadBattles' filters, so a flagged or failed comparison correctly
+      // shows no movement.
+      const countsTowardBoard =
+        reviewA.status === "COMPLETED" &&
+        reviewB.status === "COMPLETED" &&
+        reviewA.judgeStatus === "COMPLETE" &&
+        reviewB.judgeStatus === "COMPLETE" &&
+        !qualityFlagged;
+      const afterBattles: Battle[] = countsTowardBoard
+        ? [
+            ...beforeBattles,
+            { a: reviewA.reviewSystem.slug, b: reviewB.reviewSystem.slug, outcome },
+          ]
+        : beforeBattles;
+      const btOpts = { baselineSlug: config.RATING_BASELINE_SLUG };
+      const btBeforeRatings = computeBT(beforeBattles, btOpts).ratings;
+      const btAfterRatings = computeBT(afterBattles, btOpts).ratings;
+      // null = this system is not on the BT board yet: too few comparisons to
+      // connect it to the rest of the field (see bt.ts, Ford's condition).
+      const btBeforeA = btBeforeRatings.get(reviewA.reviewSystem.slug) ?? null;
+      const btBeforeB = btBeforeRatings.get(reviewB.reviewSystem.slug) ?? null;
+      const btAfterA = btAfterRatings.get(reviewA.reviewSystem.slug) ?? null;
+      const btAfterB = btAfterRatings.get(reviewB.reviewSystem.slug) ?? null;
+
       logger.info(
         {
           votePayload: { winner: body.winner, decisionMs: body.decisionMs },
           systems: { A: reviewA.reviewSystem.slug, B: reviewB.reviewSystem.slug },
+          btAfterA,
+          btAfterB,
           eloBeforeA: ratingABefore,
           eloBeforeB: ratingBBefore,
           eloAfterA: ratingAAfter,
@@ -164,9 +203,9 @@ export function votesRouter(config: Config): Router {
             })),
           );
 
-          await snapshotLeaderboard(tx, newId, null);
+          await snapshotLeaderboard(tx, newId, null, config.RATING_BASELINE_SLUG);
           for (const d of body.dimensions) {
-            await snapshotLeaderboard(tx, newId, d.dimension);
+            await snapshotLeaderboard(tx, newId, d.dimension, config.RATING_BASELINE_SLUG);
           }
           logger.info({ voteId: newId, paperId: payload.paperId }, "vote_persisted_and_snapshotted");
           return newId;
@@ -199,6 +238,8 @@ export function votesRouter(config: Config): Router {
             systemName: reviewA.reviewSystem.name,
             eloBefore: ratingABefore,
             eloAfter: ratingAAfter,
+            btBefore: btBeforeA,
+            btAfter: btAfterA,
           },
           reviewB: {
             reviewId: reviewB.id,
@@ -206,6 +247,8 @@ export function votesRouter(config: Config): Router {
             systemName: reviewB.reviewSystem.name,
             eloBefore: ratingBBefore,
             eloAfter: ratingBAfter,
+            btBefore: btBeforeB,
+            btAfter: btAfterB,
           },
         },
       });
@@ -259,6 +302,7 @@ async function snapshotLeaderboard(
   executor: DbExecutor,
   triggerVoteId: string,
   dimension: VoteDimension | null,
+  baselineSlug: string,
 ): Promise<void> {
   let battles: Battle[];
   if (dimension === null) {
@@ -293,26 +337,45 @@ async function snapshotLeaderboard(
   }
 
   if (battles.length === 0) return;
-  const ci = bootstrapEloCI(battles, 100);
+
+  // Both systems, same battle set, same number of resamples — so the two
+  // boards are always reading the same evidence and can be compared directly.
+  const eloCI = bootstrapEloCI(battles, BOOTSTRAP_ROUNDS);
+  const btCI = bootstrapBTCI(battles, BOOTSTRAP_ROUNDS, { baselineSlug });
+  // BT is anchored on the baseline only where the baseline actually appears
+  // on this board; sparse per-dimension boards fall back to mean-centring.
+  const btAnchor = btCI.has(baselineSlug) ? "BASELINE" : "MEAN";
 
   const allSystems = await executor.query.reviewSystems.findMany();
   const slugToId = new Map(allSystems.map((s) => [s.slug, s.id]));
 
-  const rows = [...ci.entries()]
-    .map(([slug, iv]) => {
-      const systemId = slugToId.get(slug);
-      if (!systemId) return null;
-      return {
-        reviewSystemId: systemId,
-        dimension,
-        rating: iv.rating,
-        ratingCiLow: iv.ciLow,
-        ratingCiHigh: iv.ciHigh,
-        voteCount: iv.voteCount,
-        triggerVoteId,
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
+  const toRows = (
+    ci: Map<string, BootstrapInterval>,
+    method: "ELO" | "BT",
+    anchor: string | null,
+  ) =>
+    [...ci.entries()]
+      .map(([slug, iv]) => {
+        const systemId = slugToId.get(slug);
+        if (!systemId) return null;
+        return {
+          reviewSystemId: systemId,
+          dimension,
+          method,
+          anchor,
+          rating: iv.rating,
+          ratingCiLow: iv.ciLow,
+          ratingCiHigh: iv.ciHigh,
+          voteCount: iv.voteCount,
+          triggerVoteId,
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  // Systems BT could not place (outside the connected component) simply get
+  // no BT row — the leaderboard reports them as unranked rather than
+  // inventing a number for them.
+  const rows = [...toRows(eloCI, "ELO", null), ...toRows(btCI, "BT", btAnchor)];
 
   if (rows.length > 0) await executor.insert(eloSnapshots).values(rows);
 }

@@ -26,6 +26,16 @@ const ConfigSchema = z.object({
   // production, otherwise any internet caller can spend your LLM
   // budget by hitting /generate directly.
   REVIEW_GEN_API_KEY: z.string().default(""),
+
+  // Slug pinned to 1000 on the Bradley-Terry board. BT ratings are only
+  // identified up to an additive constant, so one system has to fix the
+  // origin — FastChat pins mixtral-8x7b to 1114. Pick a system with heavy
+  // battle volume and then leave it alone: changing it renumbers every
+  // rating on the board. Retiring the system is fine, since disabled systems
+  // keep their battle history (that is exactly why FastChat's anchor is an
+  // old model). Boards where the baseline has not battled mean-centre
+  // instead, and record `anchor = 'MEAN'` on the snapshot row.
+  RATING_BASELINE_SLUG: z.string().default("gpt-5.2"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 

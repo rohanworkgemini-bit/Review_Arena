@@ -5,6 +5,7 @@ import type {
   SubmitVoteRequest,
   SubmitVoteResponse,
   LeaderboardResponse,
+  RatingMethod,
   UploadPaperResponse,
 } from "@reviewarena/shared-types";
 
@@ -140,9 +141,14 @@ export async function getSession(): Promise<{ sessionId: string }> {
   return jsonOrThrow<{ sessionId: string }>(res);
 }
 
-export async function getLeaderboard(dimension?: string): Promise<LeaderboardResponse> {
+export async function getLeaderboard(
+  dimension?: string,
+  method?: RatingMethod,
+): Promise<LeaderboardResponse> {
   const url = new URL(`${BASE}/leaderboard`, window.location.origin);
   if (dimension) url.searchParams.set("dimension", dimension);
+  // Omitted => the API's default board, Bradley-Terry.
+  if (method) url.searchParams.set("method", method);
   const res = await fetch(url.toString(), { credentials: "include" });
   return jsonOrThrow<LeaderboardResponse>(res);
 }

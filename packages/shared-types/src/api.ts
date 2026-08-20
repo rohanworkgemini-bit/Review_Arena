@@ -120,6 +120,11 @@ export const SubmitVoteResponseSchema = z.object({
       systemName: z.string(),
       eloBefore: z.number(),
       eloAfter: z.number(),
+      // Bradley-Terry refit before and after this vote, on the same 1000-point
+      // scale as the leaderboard. null when the system is not on the BT board
+      // yet — too few comparisons to connect it to the rest of the field.
+      btBefore: z.number().nullable(),
+      btAfter: z.number().nullable(),
     }),
     reviewB: z.object({
       reviewId: CuidSchema,
@@ -127,6 +132,8 @@ export const SubmitVoteResponseSchema = z.object({
       systemName: z.string(),
       eloBefore: z.number(),
       eloAfter: z.number(),
+      btBefore: z.number().nullable(),
+      btAfter: z.number().nullable(),
     }),
   }),
 });
@@ -152,6 +159,12 @@ export type RevealDetailResponse = z.infer<typeof RevealDetailResponseSchema>;
 
 // ─── GET /leaderboard ───────────────────────────────────────────────────────
 
+// Which rating system a board was computed with. BT (Bradley-Terry MLE) is
+// the default and what LMArena publishes; ELO is the online, order-dependent
+// system, kept as a second view.
+export const RatingMethodSchema = z.enum(["BT", "ELO"]);
+export type RatingMethod = z.infer<typeof RatingMethodSchema>;
+
 export const LeaderboardEntrySchema = z.object({
   rank: z.number().int().min(1),
   systemSlug: z.string(),
@@ -166,9 +179,19 @@ export type LeaderboardEntry = z.infer<typeof LeaderboardEntrySchema>;
 export const LeaderboardResponseSchema = z.object({
   // null = overall, otherwise per-dimension leaderboard.
   dimension: VoteDimensionSchema.nullable(),
+  method: RatingMethodSchema,
   totalPapers: z.number().int().nonnegative(),
   totalVotes: z.number().int().nonnegative(),
   entries: z.array(LeaderboardEntrySchema),
+  // Enabled systems this board cannot place: no votes yet, or — on BT — not
+  // yet connected to the rest of the field by a chain of wins and losses.
+  unranked: z.array(z.object({ systemSlug: z.string(), systemName: z.string() })),
+  // BT only. "BASELINE": baselineSlug is pinned to 1000, so the scale's
+  // origin is fixed and boards stay comparable over time. "MEAN": that system
+  // has not battled here, so this board is mean-centred on 1000 instead.
+  // null for the Elo board, which has no free constant to fix.
+  anchor: z.enum(["BASELINE", "MEAN"]).nullable(),
+  baselineSlug: z.string().nullable(),
   computedAt: z.string(),
 });
 export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;

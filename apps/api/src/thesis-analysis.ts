@@ -11,6 +11,7 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 
 const { db } = await import("./db/client.js");
 const { computeElo, bootstrapEloCI } = await import("./elo/elo.js");
+const { computeBT, bootstrapBTCI } = await import("./elo/bt.js");
 const { asc, eq } = await import("drizzle-orm");
 const schema = await import("./db/schema.js");
 const { votes, dimensionVotes, reviews, reviewSystems, metricScores, papers } = schema;
@@ -46,7 +47,11 @@ const judgeByReview = new Map(judgeRows.map((m) => [m.reviewId, m]));
 
 const paperRows = await db.select({ id: papers.id }).from(papers);
 
-// ── RQ2: Elo (overall + per dimension) ────────────────────────────────────
+// Must match RATING_BASELINE_SLUG in config.ts, or the numbers here will not
+// line up with the live board.
+const BASELINE_SLUG = process.env.RATING_BASELINE_SLUG ?? "gpt-5.2";
+
+// ── RQ2: ratings (overall + per dimension), Bradley-Terry and Elo ─────────
 
 const overallBattles: Battle[] = cleanVotes.map((v) => ({
   a: reviewSys.get(v.reviewAId)!,
@@ -73,6 +78,32 @@ function eloTable(battles: Battle[]) {
   return [...ci.entries()]
     .map(([slug, b]) => ({ ...b, slug, rating: point.get(slug) ?? 1000 }))
     .sort((x, y) => y.rating - x.rating);
+}
+
+/**
+ * Bradley-Terry counterpart of eloTable. `rating` is the MLE point estimate;
+ * the interval is the bootstrap percentile. Systems the connectivity guard
+ * could not place are returned separately rather than given a number.
+ */
+function btTable(battles: Battle[]) {
+  const ci = bootstrapBTCI(battles, 100, { baselineSlug: BASELINE_SLUG });
+  const { ratings, unranked, anchor } = computeBT(battles, { baselineSlug: BASELINE_SLUG });
+  const rows = [...ci.entries()]
+    .filter(([slug]) => ratings.has(slug))
+    .map(([slug, b]) => ({ ...b, slug, rating: ratings.get(slug)! }))
+    .sort((x, y) => y.rating - x.rating);
+  return { rows, unranked, anchor };
+}
+
+/** Rank displacement between two orderings of the same systems. */
+function maxRankShift(a: string[], b: string[]): number {
+  const rankB = new Map(b.map((slug, i) => [slug, i]));
+  let worst = 0;
+  a.forEach((slug, i) => {
+    const j = rankB.get(slug);
+    if (j !== undefined) worst = Math.max(worst, Math.abs(i - j));
+  });
+  return worst;
 }
 
 // ── Judge means per system (overall + per dimension from meta) ────────────
@@ -158,7 +189,32 @@ out.push(
 );
 out.push(``);
 
-out.push(`## RQ2a — Overall human leaderboard (Elo, K=4, 100-round bootstrap 95% CI)`);
+const bt = btTable(overallBattles);
+const btOverall = bt.rows;
+out.push(
+  `## RQ2a — Overall human leaderboard (Bradley-Terry MLE, 100-round bootstrap 95% CI)`,
+);
+out.push(``);
+out.push(
+  bt.anchor === "BASELINE"
+    ? `Anchored: \`${BASELINE_SLUG}\` pinned at 1000.`
+    : `Mean-centred at 1000 (\`${BASELINE_SLUG}\` has no battles in this set).`,
+);
+out.push(``);
+out.push(`| Rank | System | BT | 95% CI | Battles |`);
+out.push(`|---|---|---|---|---|`);
+btOverall.forEach((e, i) =>
+  out.push(`| ${i + 1} | ${e.slug} | ${f(e.rating)} | [${f(e.ciLow)}, ${f(e.ciHigh)}] | ${e.voteCount} |`),
+);
+if (bt.unranked.length > 0) {
+  out.push(``);
+  out.push(
+    `Unranked (not connected to the field by wins and losses): ${bt.unranked.join(", ")}`,
+  );
+}
+out.push(``);
+
+out.push(`## RQ2a-ii — Same battles under online Elo (K=4, 100-round bootstrap 95% CI)`);
 out.push(``);
 out.push(`| Rank | System | Elo | 95% CI | Battles |`);
 out.push(`|---|---|---|---|---|`);
@@ -168,22 +224,51 @@ overall.forEach((e, i) =>
 );
 out.push(``);
 
-out.push(`## RQ2b — Per-dimension Elo (rank per dimension)`);
+// How much the choice of rating system actually changes the answer. Elo is
+// order-dependent and BT is not, so this is the headline robustness check.
+{
+  const btRanked = btOverall.map((e) => e.slug);
+  const eloRanked = overall.map((e) => e.slug).filter((slug) => btOverall.some((b) => b.slug === slug));
+  const btRating = new Map(btOverall.map((e) => [e.slug, e.rating]));
+  const eloRating = new Map(overall.map((e) => [e.slug, e.rating]));
+  const shared = btRanked.filter((slug) => eloRating.has(slug));
+  out.push(`## RQ2a-iii — Bradley-Terry vs Elo agreement (n=${shared.length} systems)`);
+  out.push(``);
+  if (shared.length >= 3) {
+    const bx = shared.map((slug) => btRating.get(slug)!);
+    const ex = shared.map((slug) => eloRating.get(slug)!);
+    out.push(`| Statistic | Value |`);
+    out.push(`|---|---|`);
+    out.push(`| Spearman ρ (BT vs Elo ranking) | ${spearman(bx, ex).toFixed(3)} |`);
+    out.push(`| Kendall τ | ${kendall(bx, ex).toFixed(3)} |`);
+    out.push(`| Pearson r (rating scales) | ${pearson(bx, ex).toFixed(3)} |`);
+    out.push(`| Max rank displacement | ${maxRankShift(btRanked, eloRanked)} |`);
+  } else {
+    out.push(`Not enough systems on both boards (${shared.length}).`);
+  }
+  out.push(``);
+}
+
+out.push(`## RQ2b — Per-dimension Bradley-Terry (rank per dimension)`);
 out.push(``);
-const slugs = overall.map((e) => e.slug);
+out.push(`"—" = the dimension's votes do not place that system (no votes, or not connected to the field).`);
+out.push(``);
+const slugs = btOverall.map((e) => e.slug);
 out.push(`| Dimension | ${slugs.join(" | ")} |`);
 out.push(`|---|${slugs.map(() => "---").join("|")}|`);
 const dimEloBySlug = new Map<string, Map<string, number>>();
+const dimBTBySlug = new Map<string, Map<string, number>>();
 for (const d of DIMS) {
-  const t = eloTable(dimBattles.get(d)!);
-  dimEloBySlug.set(d, new Map(t.map((e) => [e.slug, e.rating])));
-  const rankOf = new Map(t.map((e, i) => [e.slug, i + 1]));
+  const dimBt = btTable(dimBattles.get(d)!);
+  dimBTBySlug.set(d, new Map(dimBt.rows.map((e) => [e.slug, e.rating])));
+  dimEloBySlug.set(d, new Map(eloTable(dimBattles.get(d)!).map((e) => [e.slug, e.rating])));
+  const rankOf = new Map(dimBt.rows.map((e, i) => [e.slug, i + 1]));
   out.push(
     `| ${d} | ${slugs
       .map((s) => {
         const r = rankOf.get(s);
-        const elo = dimEloBySlug.get(d)!.get(s);
-        return r ? `#${r} (${f(elo!)})` : "—";
+        const rating = dimBTBySlug.get(d)!.get(s);
+        return r ? `#${r} (${f(rating!)})` : "—";
       })
       .join(" | ")} |`,
   );
@@ -212,9 +297,17 @@ if (common.length >= 3) {
   out.push(``);
   out.push(`| Statistic | Value |`);
   out.push(`|---|---|`);
+  const btCommon = common.map((e) => btOverall.find((b) => b.slug === e.slug)?.rating);
+  const bothRated = btCommon.every((r) => r !== undefined);
+  if (bothRated) {
+    const bx = btCommon as number[];
+    out.push(`| **Spearman ρ (human BT vs mean judge score)** | **${spearman(bx, jx).toFixed(3)}** |`);
+    out.push(`| Kendall τ (BT) | ${kendall(bx, jx).toFixed(3)} |`);
+    out.push(`| Pearson r (BT) | ${pearson(bx, jx).toFixed(3)} |`);
+  }
   out.push(`| Spearman ρ (human Elo vs mean judge score) | ${spearman(hx, jx).toFixed(3)} |`);
-  out.push(`| Kendall τ | ${kendall(hx, jx).toFixed(3)} |`);
-  out.push(`| Pearson r | ${pearson(hx, jx).toFixed(3)} |`);
+  out.push(`| Kendall τ (Elo) | ${kendall(hx, jx).toFixed(3)} |`);
+  out.push(`| Pearson r (Elo) | ${pearson(hx, jx).toFixed(3)} |`);
   out.push(``);
 } else {
   out.push(`## RQ1a — system-level correlation: not enough systems with both signals (${common.length})`);
@@ -249,12 +342,14 @@ out.push(`| **Agreement rate (decisive both sides)** | **${decisive ? ((100 * ag
 out.push(``);
 
 // RQ1 level 3: per-dimension correlation
-out.push(`## RQ1c — Per-dimension correlation (human dimension-Elo vs mean judge dimension score)`);
+out.push(`## RQ1c — Per-dimension correlation (human dimension rating vs mean judge dimension score)`);
 out.push(``);
-out.push(`| Dimension | n systems | Spearman ρ |`);
-out.push(`|---|---|---|`);
+out.push(`| Dimension | n systems | Spearman ρ (BT) | Spearman ρ (Elo) |`);
+out.push(`|---|---|---|---|`);
 for (const d of DIMS) {
   const dimElo = dimEloBySlug.get(d)!;
+  const dimBT = dimBTBySlug.get(d)!;
+  const btPts: Array<[number, number]> = [];
   const pts: Array<[number, number]> = [];
   for (const [slug, elo] of dimElo) {
     // judge meta dimension keys may be lowercase or various case; try both
@@ -265,13 +360,14 @@ for (const d of DIMS) {
       agg.dims.get(d.toLowerCase()) ??
       agg.dims.get(d.toLowerCase().replace(/_(.)/g, (_, c) => c.toUpperCase()));
     if (!jd) continue;
-    pts.push([elo, jd.sum / jd.n]);
+    const judgeMeanForDim = jd.sum / jd.n;
+    pts.push([elo, judgeMeanForDim]);
+    const btRating = dimBT.get(slug);
+    if (btRating !== undefined) btPts.push([btRating, judgeMeanForDim]);
   }
-  if (pts.length >= 3) {
-    out.push(`| ${d} | ${pts.length} | ${spearman(pts.map((p) => p[0]), pts.map((p) => p[1])).toFixed(3)} |`);
-  } else {
-    out.push(`| ${d} | ${pts.length} | insufficient |`);
-  }
+  const rho = (ps: Array<[number, number]>) =>
+    ps.length >= 3 ? spearman(ps.map((q) => q[0]), ps.map((q) => q[1])).toFixed(3) : "insufficient";
+  out.push(`| ${d} | ${pts.length} | ${rho(btPts)} | ${rho(pts)} |`);
 }
 out.push(``);
 

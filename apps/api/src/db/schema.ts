@@ -50,6 +50,12 @@ export const judgeStatusEnum = pgEnum("judge_status", [
 
 export const voteWinnerEnum = pgEnum("vote_winner", ["A", "B", "TIE"]);
 
+// Both rating systems are computed on every vote and stored side by side.
+// BT (Bradley-Terry MLE) is what the leaderboard shows by default and what
+// LMArena reports publicly; ELO is the online, order-dependent system kept
+// for the reveal-screen delta and for the thesis' side-by-side comparison.
+export const ratingMethodEnum = pgEnum("rating_method", ["ELO", "BT"]);
+
 // Keep in sync with VOTE_DIMENSIONS in packages/shared-types/src/dimensions.ts
 // and _DIMENSIONS in services/review-gen/app/judge.py. All eight are
 // polarity-aligned (higher / picked = better), including FALSE_CLAIMS,
@@ -335,6 +341,14 @@ export const eloSnapshots = pgTable(
       .references(() => reviewSystems.id),
     // null = overall leaderboard; otherwise per-dimension sub-leaderboard.
     dimension: voteDimensionEnum("dimension"),
+    // Which rating system produced this row. Defaults to ELO so the migration
+    // labels rows written before BT existed correctly — application code
+    // always sets it explicitly.
+    method: ratingMethodEnum("method").notNull().default("ELO"),
+    // BT only: 'BASELINE' if RATING_BASELINE_SLUG was pinned to 1000 on this
+    // board, 'MEAN' if that system had not battled here and the board was
+    // mean-centred instead. Null for ELO rows, which have no free constant.
+    anchor: text("anchor"),
     rating: doublePrecision("rating").notNull(),
     ratingCiLow: doublePrecision("rating_ci_low").notNull(),
     ratingCiHigh: doublePrecision("rating_ci_high").notNull(),
@@ -344,9 +358,10 @@ export const eloSnapshots = pgTable(
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    systemDimComputedIdx: index("elo_snapshots_system_dim_computed_idx").on(
+    systemDimMethodComputedIdx: index("elo_snapshots_system_dim_method_computed_idx").on(
       t.reviewSystemId,
       t.dimension,
+      t.method,
       t.computedAt,
     ),
     computedIdx: index("elo_snapshots_computed_idx").on(t.computedAt),

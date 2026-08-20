@@ -316,6 +316,8 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
             systemName: "GPT-5 (zero-shot)",
             eloBefore: 1000,
             eloAfter: 1008,
+            btBefore: 1002.4,
+            btAfter: 1009.1,
           },
           reviewB: {
             reviewId: reviewBId,
@@ -323,6 +325,8 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
             systemName: "Claude Opus 4.8 (zero-shot)",
             eloBefore: 995,
             eloAfter: 987,
+            btBefore: 993.6,
+            btAfter: 986.9,
           },
         },
       };
@@ -338,7 +342,44 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
         expect(result.data.reveal.reviewB.eloAfter).toBeLessThan(
           result.data.reveal.reviewB.eloBefore,
         );
+        // BT is refit rather than nudged, but a win still has to move the
+        // winner up and the loser down.
+        expect(result.data.reveal.reviewA.btAfter!).toBeGreaterThan(
+          result.data.reveal.reviewA.btBefore!,
+        );
+        expect(result.data.reveal.reviewB.btAfter!).toBeLessThan(
+          result.data.reveal.reviewB.btBefore!,
+        );
       }
+    });
+
+    it("accepts null BT ratings for a system not yet on the BT board", () => {
+      // Bradley-Terry cannot place a system until wins and losses connect it
+      // to the rest of the field, so the reveal payload has to carry nulls.
+      const voteResponse = {
+        voteId: createId(),
+        reveal: {
+          reviewA: {
+            reviewId: reviewAId,
+            systemSlug: "brand-new-system",
+            systemName: "Brand New System",
+            eloBefore: 1000,
+            eloAfter: 1004,
+            btBefore: null,
+            btAfter: null,
+          },
+          reviewB: {
+            reviewId: reviewBId,
+            systemSlug: "claude-opus-4-8",
+            systemName: "Claude Opus 4.8 (zero-shot)",
+            eloBefore: 995,
+            eloAfter: 991,
+            btBefore: 993.6,
+            btAfter: 993.6,
+          },
+        },
+      };
+      expect(SubmitVoteResponseSchema.safeParse(voteResponse).success).toBe(true);
     });
 
     it("should show delta as incremental update (not full-history Elo)", () => {

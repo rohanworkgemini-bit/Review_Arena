@@ -195,7 +195,7 @@ app.use(papersRouter(config, { reviewGen, judge, orchestrator }));
 app.use(reviewsStreamRouter({ reviewGen, judge }));
 app.use(pairRouter(config));
 app.use(votesRouter(config));
-app.use(leaderboardRouter());
+app.use(leaderboardRouter(config));
 app.use(revealRouter());
 app.use(adminRouter(config, { reviewGen, judge, orchestrator }));
 

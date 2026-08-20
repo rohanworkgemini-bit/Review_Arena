@@ -36,6 +36,8 @@ const PLACEHOLDER_HEADER: RevealHeader = {
     systemName: "GPT-5-mini",
     eloBefore: 1100,
     eloAfter: 1112,
+    btBefore: 1094.2,
+    btAfter: 1101.7,
   },
   reviewB: {
     reviewId: "rev-b",
@@ -43,6 +45,8 @@ const PLACEHOLDER_HEADER: RevealHeader = {
     systemName: "Gemini 2.5 Flash",
     eloBefore: 1080,
     eloAfter: 1068,
+    btBefore: 1071.5,
+    btAfter: 1064.3,
   },
 };
 
@@ -53,6 +57,8 @@ const ERROR_HEADER: RevealHeader = {
     systemName: "Error",
     eloBefore: 0,
     eloAfter: 0,
+    btBefore: null,
+    btAfter: null,
   },
   reviewB: {
     reviewId: "",
@@ -60,6 +66,8 @@ const ERROR_HEADER: RevealHeader = {
     systemName: "Error",
     eloBefore: 0,
     eloAfter: 0,
+    btBefore: null,
+    btAfter: null,
   },
 };
 
@@ -163,6 +171,15 @@ export function RevealPage() {
         <RevealCard slot="B" reveal={header.reviewB} detail={detail?.reviewB} />
       </div>
 
+      <p className="font-mono text-[11px] text-graphite">
+        Bradley-Terry (large) refits every comparison in the log and is what the{" "}
+        <Link to="/leaderboard" className="underline underline-offset-2">
+          standings
+        </Link>{" "}
+        rank by; Elo (small) is the running per-vote update. Both sit on the same
+        1000-point scale, where 400 points is ten-to-one odds.
+      </p>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">LLM-as-judge dimension scores</CardTitle>
@@ -246,7 +263,14 @@ function RevealCard({
   detail?: RevealSide;
 }) {
   const delta = reveal.eloAfter - reveal.eloBefore;
-  const positive = delta >= 0;
+  // Bradley-Terry has no incremental update, so these two numbers are the
+  // board refit over every comparison before this vote and again after it —
+  // already converted to the same 1000-point scale the standings use.
+  // null means BT cannot place this system yet (see the leaderboard's
+  // "not yet ranked" note).
+  const btBefore = reveal.btBefore ?? null;
+  const btAfter = reveal.btAfter ?? null;
+  const btDelta = btBefore !== null && btAfter !== null ? btAfter - btBefore : null;
   return (
     <Card>
       <CardHeader>
@@ -261,18 +285,42 @@ function RevealCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-baseline gap-3">
-          <div className="font-mono text-3xl">{Math.round(reveal.eloAfter)}</div>
-          <div
-            className={`font-mono text-sm ${
-              positive ? "text-up" : "text-red"
-            }`}
-          >
-            {positive ? "+" : ""}
-            {delta.toFixed(1)} Elo
-          </div>
-          <div className="ml-auto font-mono text-xs text-muted-foreground">
-            was {Math.round(reveal.eloBefore)}
+        <div className="space-y-1">
+          {/* Bradley-Terry leads: it is the board the standings rank by. */}
+          {btAfter !== null && btDelta !== null ? (
+            <div className="flex items-baseline gap-3">
+              <div className="font-mono text-3xl">{Math.round(btAfter)}</div>
+              <div className={`font-mono text-sm ${btDelta >= 0 ? "text-up" : "text-red"}`}>
+                {btDelta >= 0 ? "+" : ""}
+                {btDelta.toFixed(1)} BT
+              </div>
+              <div className="ml-auto font-mono text-xs text-muted-foreground">
+                was {Math.round(btBefore!)}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-3">
+              <div className="font-mono text-3xl text-muted-foreground">—</div>
+              <div className="font-mono text-xs text-muted-foreground">
+                not on the Bradley-Terry board yet
+              </div>
+            </div>
+          )}
+          <div className="flex items-baseline gap-3">
+            <div className="font-mono text-base text-muted-foreground">
+              {Math.round(reveal.eloAfter)}
+            </div>
+            <div
+              className={`font-mono text-xs ${
+                delta >= 0 ? "text-up" : "text-red"
+              }`}
+            >
+              {delta >= 0 ? "+" : ""}
+              {delta.toFixed(1)} Elo
+            </div>
+            <div className="ml-auto font-mono text-xs text-muted-foreground">
+              was {Math.round(reveal.eloBefore)}
+            </div>
           </div>
         </div>
 

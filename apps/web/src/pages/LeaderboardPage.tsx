@@ -3,14 +3,28 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { getLeaderboard } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { VOTE_DIMENSIONS, DIMENSION_LABELS, type VoteDimension } from "@reviewarena/shared-types";
+import {
+  VOTE_DIMENSIONS,
+  DIMENSION_LABELS,
+  type RatingMethod,
+  type VoteDimension,
+} from "@reviewarena/shared-types";
+
+const METHOD_LABELS: Record<RatingMethod, string> = {
+  BT: "Bradley-Terry",
+  ELO: "Elo",
+};
 
 export function LeaderboardPage() {
   const [dimension, setDimension] = useState<VoteDimension | null>(null);
+  // Bradley-Terry is the board we lead with: it is the maximum-likelihood fit
+  // to the whole comparison log, so it does not depend on the order votes
+  // happened to arrive in. Elo stays one click away.
+  const [method, setMethod] = useState<RatingMethod>("BT");
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["leaderboard", dimension],
-    queryFn: () => getLeaderboard(dimension ?? undefined),
+    queryKey: ["leaderboard", dimension, method],
+    queryFn: () => getLeaderboard(dimension ?? undefined, method),
     placeholderData: keepPreviousData,
     retry: false,
   });
@@ -52,6 +66,11 @@ export function LeaderboardPage() {
   const currentDescription = dimension
     ? `Ranking by ${DIMENSION_LABELS[dimension]}, computed only over votes that included a per-dimension pick for ${DIMENSION_LABELS[dimension]}.`
     : "Overall ranking across automated peer-review systems, computed from blinded pairwise human comparisons.";
+  const methodDescription =
+    method === "BT"
+      ? "Bradley-Terry ratings: a single maximum-likelihood fit to every comparison at once."
+      : "Online Elo: the comparison log replayed in vote order, K=4.";
+  const baselineSlug = data?.baselineSlug ?? null;
 
   return (
     <div className="container max-w-[1080px] py-8">
@@ -78,10 +97,27 @@ export function LeaderboardPage() {
 
         {/* ─── Right pane: header + table ──────────────────────────────── */}
         <section className="min-w-0">
-          <h1 className="text-[28px] font-semibold tracking-[-0.01em]">
-            Standings — {currentLabel}
-          </h1>
-          <p className="mt-1 max-w-prose text-sm text-graphite">{currentDescription}</p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h1 className="text-[28px] font-semibold tracking-[-0.01em]">
+              Standings — {currentLabel}
+            </h1>
+            <div className="flex items-center gap-1">
+              <span className="mr-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">
+                Rating
+              </span>
+              {(["BT", "ELO"] as const).map((m) => (
+                <MethodTab
+                  key={m}
+                  label={METHOD_LABELS[m]}
+                  active={method === m}
+                  onClick={() => setMethod(m)}
+                />
+              ))}
+            </div>
+          </div>
+          <p className="mt-1 max-w-prose text-sm text-graphite">
+            {currentDescription} {methodDescription}
+          </p>
           <div className="mt-3 font-mono text-[11.5px] text-graphite">
             <span className="text-ink">{data?.totalVotes ?? "—"}</span> votes ·{" "}
             <span className="text-ink">{data?.totalPapers ?? "—"}</span> papers ·{" "}
@@ -117,7 +153,7 @@ export function LeaderboardPage() {
                     <tr>
                       <Th className="text-left">Rank spread</Th>
                       <Th className="text-left">System</Th>
-                      <Th className="text-right">Elo</Th>
+                      <Th className="text-right">{method === "BT" ? "BT score" : "Elo"}</Th>
                       <Th className="hidden w-[30%] pl-5 text-left md:table-cell">95% CI</Th>
                       <Th className="text-right">Votes</Th>
                     </tr>
@@ -126,6 +162,10 @@ export function LeaderboardPage() {
                     {entries.map((e) => {
                       const spread = rankSpread.get(e.systemSlug);
                       const halfCi = Math.round((e.ratingCiHigh - e.ratingCiLow) / 2);
+                      // The anchor defines the origin of the BT scale, so its
+                      // interval is zero-wide by construction. Drawing it as a
+                      // bar would read as "we are certain about this one".
+                      const isBaseline = e.systemSlug === baselineSlug;
                       return (
                         <tr key={e.systemSlug}>
                           <td className="border-b border-rule py-[13px] pr-3">
@@ -135,7 +175,17 @@ export function LeaderboardPage() {
                             />
                           </td>
                           <td className="border-b border-rule py-[13px] pr-4">
-                            <div className="font-medium text-ink">{e.systemName}</div>
+                            <div className="font-medium text-ink">
+                              {e.systemName}
+                              {isBaseline && (
+                                <span
+                                  className="ml-1.5 text-[10px] uppercase tracking-[0.1em] text-graphite"
+                                  title="Scale anchor: pinned at 1000"
+                                >
+                                  anchor
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-graphite">{e.systemSlug}</div>
                           </td>
                           <td className="border-b border-rule py-[13px] pr-1 text-right">
@@ -149,9 +199,12 @@ export function LeaderboardPage() {
                               high={e.ratingCiHigh}
                               min={minRating}
                               max={maxRating}
+                              anchored={isBaseline}
                             />
                             <div className="mt-1 text-[10px] text-graphite">
-                              [{Math.round(e.ratingCiLow)}, {Math.round(e.ratingCiHigh)}]
+                              {isBaseline
+                                ? "fixed point of the scale"
+                                : `[${Math.round(e.ratingCiLow)}, ${Math.round(e.ratingCiHigh)}]`}
                             </div>
                           </td>
                           <td className="border-b border-rule py-[13px] text-right text-ink2">
@@ -163,10 +216,39 @@ export function LeaderboardPage() {
                   </tbody>
                 </table>
                 <p className="mt-4 font-mono text-[11px] text-graphite">
-                  Elo initialised at 1000 · online Elo (K=4, full-history replay) ·
-                  intervals from 100 bootstrap resamples · overlapping intervals
-                  widen the rank spread
+                  {method === "BT" ? (
+                    <>
+                      Bradley-Terry maximum likelihood ·{" "}
+                      {data?.anchor === "BASELINE" && baselineSlug
+                        ? `${baselineSlug} pinned at 1000`
+                        : "mean-centred at 1000"}{" "}
+                      · intervals from 100 bootstrap resamples · order-independent:
+                      the same votes in any order give the same ratings
+                    </>
+                  ) : (
+                    <>
+                      Elo initialised at 1000 · online Elo (K=4, full-history replay) ·
+                      intervals from 100 bootstrap resamples · overlapping intervals
+                      widen the rank spread
+                    </>
+                  )}
                 </p>
+                {method === "BT" && data?.anchor === "BASELINE" && (
+                  <p className="mt-1 font-mono text-[11px] text-graphite">
+                    Bradley-Terry ratings are only defined up to a constant, so one
+                    system fixes the origin. The anchor's interval is zero-wide
+                    because of that, not because its rating is better established —
+                    and its rank spread reads tighter for the same reason.
+                  </p>
+                )}
+                {data && data.unranked.length > 0 && (
+                  <p className="mt-1 font-mono text-[11px] text-graphite">
+                    Not yet ranked: {data.unranked.map((u) => u.systemName).join(", ")}
+                    {method === "BT"
+                      ? " — not yet linked to the rest of the field by a chain of wins and losses."
+                      : " — no votes on this board yet."}
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -214,6 +296,32 @@ function CategoryRow({
   );
 }
 
+function MethodTab({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "border px-2.5 py-1 font-mono text-[11.5px] tracking-[0.02em] transition-colors",
+        active
+          ? "border-red text-red"
+          : "border-rule text-graphite hover:bg-paper2 hover:text-ink",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
+
 function RankSpread({ best, worst }: { best: number; worst: number }) {
   // Renders the "1 – 4" rank-range shorthand. When best == worst we just
   // show the single number so unambiguous ranks read cleanly.
@@ -235,12 +343,15 @@ function CiBar({
   high,
   min,
   max,
+  anchored = false,
 }: {
   low: number;
   rating: number;
   high: number;
   min: number;
   max: number;
+  /** Scale anchor: zero-width by construction, so draw a tick, not a bar. */
+  anchored?: boolean;
 }) {
   const span = Math.max(1, max - min);
   const leftPct = ((low - min) / span) * 100;
@@ -248,10 +359,12 @@ function CiBar({
   const markPct = ((rating - min) / span) * 100;
   return (
     <div className="relative h-[7px] w-full border border-rule bg-paper2">
-      <div
-        className="absolute bottom-0 top-0 bg-red/30"
-        style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-      />
+      {!anchored && (
+        <div
+          className="absolute bottom-0 top-0 bg-red/30"
+          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+        />
+      )}
       <div
         className="absolute top-[-3px] h-[11px] w-[2px] bg-red"
         style={{ left: `calc(${markPct}% - 1px)` }}
