@@ -54,11 +54,11 @@ COPY --from=builder /repo/apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile --prod \
  && pnpm store prune
 
-# Bring in the compiled JavaScript + Drizzle migration SQL files.
+# Bring in the compiled JavaScript. (No drizzle/ migration dir — it was
+# removed in f396d62; schema changes are applied with `pnpm db:push` from
+# the repo checkout on the host, never from inside this image.)
 COPY --from=builder /repo/packages/shared-types/dist packages/shared-types/dist
 COPY --from=builder /repo/apps/api/dist apps/api/dist
-COPY --from=builder /repo/apps/api/drizzle apps/api/drizzle
-COPY --from=builder /repo/apps/api/drizzle.config.ts apps/api/
 
 # Non-root user — drops blast radius if the container is ever compromised.
 RUN useradd --create-home --uid 10001 reviewarena

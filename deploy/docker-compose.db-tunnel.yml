@@ -1,0 +1,11 @@
+# Temporary override: publish the prod postgres on 127.0.0.1:15432 so that
+# drizzle-kit push / seed scripts can run from the host checkout.
+# Loopback-only on purpose — never expose 5432 on the VM's public interface.
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/docker-compose.db-tunnel.yml up -d postgres
+#   DATABASE_URL="postgresql://reviewarena:<PW>@127.0.0.1:15432/reviewarena" pnpm --filter @reviewarena/api db:push
+#   docker compose -f docker-compose.prod.yml up -d postgres   # close the tunnel again
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:15432:5432"

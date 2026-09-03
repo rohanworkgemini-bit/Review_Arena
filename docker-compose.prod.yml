@@ -1,0 +1,99 @@
+# Production stack for the UKP VM. Everything the study needs, one command:
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Reads secrets from the repo-root .env (never committed). Two values are
+# compose-level and REQUIRED, the rest are service env — see .env.example:
+#   POSTGRES_PASSWORD  strong random; the DB is never exposed to the host
+#   SITE_ADDRESS       public hostname for Caddy (":80" for firewalled tests)
+#
+# Design notes:
+#   - postgres publishes NO host port: only the compose network reaches it.
+#     Use `docker compose exec postgres psql ...` for a shell.
+#   - every service: restart policy + healthcheck, so the wedge we saw in
+#     dev (process alive, not answering) gets recycled automatically.
+#   - explicit `environment:` entries override the dev values that env_file
+#     drags in from .env (DATABASE_URL -> localhost, etc.).
+#   - backups are NOT part of the stack — deploy/backup.sh + cron, see
+#     docs/UKP_RUNBOOK.md.
+
+name: reviewarena-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: reviewarena
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: reviewarena
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reviewarena -d reviewarena"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 1g
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      API_PORT: 8080
+      DATABASE_URL: postgresql://reviewarena:${POSTGRES_PASSWORD}@postgres:5432/reviewarena
+      REVIEW_GEN_URL: http://review-gen:8080
+      WEB_ORIGIN: https://${SITE_HOST:-localhost}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # node:22-slim ships no curl; node's global fetch does the job.
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+    mem_limit: 1g
+
+  review-gen:
+    build: services/review-gen
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 8080
+      # Default-closed auth: REVIEW_GEN_API_KEY must be in .env or the
+      # service refuses to boot. Never set REVIEWARENA_ENV=development here.
+      REVIEWARENA_ENV: production
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 8s
+      retries: 4
+      start_period: 20s
+    mem_limit: 2g
+
+  caddy:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env (hostname, or ':80')}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

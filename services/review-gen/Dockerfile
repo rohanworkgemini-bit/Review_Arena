@@ -33,15 +33,16 @@ COPY app app
 RUN useradd --create-home --uid 10001 reviewarena
 USER reviewarena
 
-# Cloud Run env contract:
-#   - PORT injected (default 8080), uvicorn binds to it
-#   - REVIEWARENA_ENV=production set via --set-env-vars in the workflow
-#   - REVIEW_GEN_API_KEY mounted via --set-secrets (Secret Manager)
-#   - ANTHROPIC_API_KEY / OPENAI_API_KEY / etc. via --set-secrets too
-# If REVIEWARENA_ENV=production AND REVIEW_GEN_API_KEY is unset, main.py
-# refuses to boot — the deploy fails loudly. Intended.
+# Env contract (docker-compose.prod.yml sets these):
+#   - PORT (default 8080), uvicorn binds to it
+#   - REVIEW_GEN_API_KEY — required; main.py refuses to boot without it
+#     unless REVIEWARENA_ENV=development. The deploy fails loudly. Intended.
+#   - ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY / ... via env_file
 ENV PORT=8080
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 1"]
+# Two workers: with one, a single wedged request (or a worker restart)
+# stalls every student's generation at once. Each worker holds its own
+# 100-token thread pool (see app/main.py startup hook).
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 2"]

@@ -1,0 +1,30 @@
+# ReviewArena edge. SITE_ADDRESS comes from the environment:
+#   - a real hostname (arena.example.tu-darmstadt.de) => automatic HTTPS
+#   - ":80" => plain HTTP (only for a firewalled test run)
+{$SITE_ADDRESS}
+
+encode gzip
+
+# /api/* → the Node API, with the prefix stripped — the API serves routes
+# at /leaderboard, /votes, ... (this mirrors the vite dev proxy's rewrite).
+handle_path /api/* {
+	reverse_proxy api:8080 {
+		# SSE: flush every byte immediately and never time out a read —
+		# reasoning models can sit >60s between tokens, and the API sends
+		# its own 20s heartbeat, so a genuinely dead stream is detected
+		# by the app layer, not by the proxy guessing.
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+# Everything else is the SPA. try_files makes client-side routes
+# (/compare, /reveal, /leaderboard) refresh-safe.
+handle {
+	root * /srv
+	try_files {path} /index.html
+	file_server
+}
