@@ -105,7 +105,10 @@ export function RevealPage() {
     queryFn: () => getReveal(voteId!),
     enabled: !!voteId,
     refetchInterval: (q) => {
-      if (q.state.dataUpdateCount > 60) return false;
+      // Count errors toward the cap too: with a dead API, dataUpdateCount
+      // never advances and 100 tabs would otherwise poll every 3s forever
+      // — a retry storm aimed at a server that's trying to come back.
+      if (q.state.dataUpdateCount + q.state.errorUpdateCount > 60) return false;
       const d = q.state.data;
       const done = !!d?.reviewA.judgeDimensions && !!d?.reviewB.judgeDimensions;
       return done ? false : 3000;
@@ -184,7 +187,12 @@ export function RevealPage() {
         <CardHeader>
           <CardTitle className="text-base">LLM-as-judge dimension scores</CardTitle>
           <CardDescription>
-            {scoringPending ? (
+            {revealQuery.isError ? (
+              <span>
+                Judge scores are unavailable right now — your vote is saved
+                and counted; check the leaderboard later.
+              </span>
+            ) : scoringPending ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 Scoring in progress — updates automatically as the judge finishes.

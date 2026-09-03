@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -22,6 +22,7 @@ import {
   type VoteDimension,
   type PairResponse,
   type StructuredReview,
+  type SubmitVoteResponse,
 } from "@reviewarena/shared-types";
 
 // DEV-ONLY visual fallback. Lets us hit /compare?paperId=... with no
@@ -137,6 +138,17 @@ export function ComparisonPage() {
   // if the HMAC + session match. Cleared in voteMutation.onSuccess so the
   // next round (next paper / explicit "next comparison") picks fresh.
   const PAIR_STORAGE_KEY = `pair-token:${paperId}`;
+  // Wall-clock budget for generation. The old retry loop gave up silently
+  // after ~2 min (rate-limited providers routinely take longer in a bursty
+  // class) and then dead-ended on the skeleton because nothing ever
+  // refetched. refetchInterval keeps polling an errored NotReady query;
+  // past the budget we stop and show an explicit card instead.
+  const GENERATION_BUDGET_MS = 12 * 60_000;
+  const generationStartedAt = useRef(Date.now());
+  useEffect(() => {
+    generationStartedAt.current = Date.now();
+  }, [paperId]);
+
   const pairQuery = useQuery({
     queryKey: ["pair", paperId],
     queryFn: () => {
@@ -147,9 +159,15 @@ export function ComparisonPage() {
       return getPair(paperId, stored);
     },
     enabled: paperId.length > 0,
-    retry: (failureCount, err) =>
-      failureCount < 60 && err instanceof ApiError && err.code === "NotReady",
-    retryDelay: 2000,
+    retry: false,
+    refetchInterval: (q) => {
+      if (q.state.data) return false;
+      const err = q.state.error;
+      const notReady = err instanceof ApiError && err.code === "NotReady";
+      if (!notReady && q.state.errorUpdateCount > 5) return false; // hard errors: stop
+      if (Date.now() - generationStartedAt.current > GENERATION_BUDGET_MS) return false;
+      return 2500;
+    },
   });
 
   useEffect(() => {
@@ -163,17 +181,24 @@ export function ComparisonPage() {
   // NotReady — drive a progress bar from /papers/:id so the user sees
   // generation move along rather than staring at a generic spinner.
   const pairError = pairQuery.error;
+  const notReady = pairError instanceof ApiError && pairError.code === "NotReady";
+  const generationTimedOut =
+    paperId.length > 0 &&
+    !pairQuery.data &&
+    notReady &&
+    Date.now() - generationStartedAt.current > GENERATION_BUDGET_MS;
   const isGenerating =
     paperId.length > 0 &&
     !pairQuery.data &&
-    (pairQuery.isPending ||
-      (pairError instanceof ApiError && pairError.code === "NotReady"));
+    !generationTimedOut &&
+    (pairQuery.isPending || notReady);
 
   const statusQuery = useQuery({
     queryKey: ["paper-status", paperId],
     queryFn: () => getPaperStatus(paperId),
     enabled: isGenerating,
-    refetchInterval: isGenerating ? 1500 : false,
+    refetchInterval: (q) =>
+      isGenerating && q.state.errorUpdateCount < 20 ? 1500 : false,
   });
 
   // Placeholder gating: in DEV we show mock data when no pair is loaded;
@@ -187,7 +212,15 @@ export function ComparisonPage() {
   const pair = pairQuery.data ?? PLACEHOLDER_PAIR;
   const usingPlaceholder = !pairQuery.data && !isGenerating && allowPlaceholder;
   const shouldRedirectToUpload =
-    !pairQuery.data && !isGenerating && !allowPlaceholder && paperId.length > 0;
+    !pairQuery.data &&
+    !isGenerating &&
+    !generationTimedOut &&
+    !allowPlaceholder &&
+    paperId.length > 0;
+
+  // Ref, not state: the keyboard handler's closure captures a stale
+  // `voteMutation.isPending`, so two rapid keypresses could both fire.
+  const voteInFlight = useRef(false);
 
   const voteMutation = useMutation({
     mutationFn: (winner: "A" | "B" | "TIE") =>
@@ -202,34 +235,58 @@ export function ComparisonPage() {
           note: dimensionNotes[dimension as VoteDimension]?.trim() || undefined,
         })),
       }),
-    onSuccess: (data, winner) => {
-      // Vote landed — release the stored pair so the next /compare visit
-      // (from the reveal screen's "Next comparison" button) gets a fresh
-      // sample instead of trying to resume this now-spent round.
-      const state = encodeURIComponent(JSON.stringify(data.reveal));
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(PAIR_STORAGE_KEY);
-        // Remember what was submitted so returning here renders read-only
-        // with the original choices intact.
-        const record: CastVote = {
-          voteId: data.voteId,
-          winner,
-          dimensionValues,
-          dimensionNotes,
-          overallNote,
-          revealState: state,
-        };
-        try {
-          window.sessionStorage.setItem(`vote-cast:${paperId}`, JSON.stringify(record));
-        } catch {
-          /* storage full / disabled — read-only view just won't rehydrate */
+    onSettled: () => {
+      voteInFlight.current = false;
+    },
+    onError: (err, winner) => {
+      // 409 = this session already voted on this pair — usually a first
+      // submit whose response was lost. The server echoes the recorded
+      // voteId + reveal payload, so finish the journey instead of telling
+      // the student to "upload another paper" about their own vote.
+      if (err instanceof ApiError && err.status === 409) {
+        const body = err.body as {
+          voteId?: string | null;
+          reveal?: SubmitVoteResponse["reveal"] | null;
+        } | null;
+        if (body?.voteId && body.reveal) {
+          finishVote({ voteId: body.voteId, reveal: body.reveal }, winner);
         }
       }
-      navigate(
-        `/reveal?voteId=${data.voteId}&paperId=${encodeURIComponent(paperId)}&state=${state}`,
-      );
+    },
+    onSuccess: (data, winner) => {
+      finishVote(data, winner);
     },
   });
+
+  // Shared by the success path and the 409 duplicate-vote recovery path.
+  // Releases the stored pair so the next /compare visit gets a fresh
+  // sample, records what was submitted for the read-only revisit view,
+  // and moves on to the reveal screen.
+  function finishVote(
+    data: { voteId: string; reveal: SubmitVoteResponse["reveal"] },
+    winner: "A" | "B" | "TIE",
+  ) {
+    const state = encodeURIComponent(JSON.stringify(data.reveal));
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(PAIR_STORAGE_KEY);
+      const record: CastVote = {
+        voteId: data.voteId,
+        winner,
+        dimensionValues,
+        dimensionNotes,
+        overallNote,
+        revealState: state,
+      };
+      try {
+        window.sessionStorage.setItem(`vote-cast:${paperId}`, JSON.stringify(record));
+      } catch {
+        /* storage full / disabled — read-only view just won't rehydrate */
+      }
+    }
+    navigate(
+      `/reveal?voteId=${data.voteId}&paperId=${encodeURIComponent(paperId)}&state=${state}`,
+    );
+  }
 
   const refinedCount = Object.keys(dimensionValues).length;
   const allDimensionsFilled = refinedCount === VOTE_DIMENSIONS.length;
@@ -271,7 +328,11 @@ export function ComparisonPage() {
     // No shortcuts once the vote is in — the page is a record, not a form.
     if (readOnly) return;
     if (!bothReady || submitting || isGenerating || !allDimensionsFilled) return;
-    const cast = (winner: "A" | "B" | "TIE") => voteMutation.mutate(winner);
+    const cast = (winner: "A" | "B" | "TIE") => {
+      if (voteInFlight.current) return;
+      voteInFlight.current = true;
+      voteMutation.mutate(winner);
+    };
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
@@ -308,7 +369,30 @@ export function ComparisonPage() {
         </div>
       )}
 
-      {isGenerating ? (
+      {generationTimedOut ? (
+        <div className="border border-rule2 bg-card px-6 py-10 text-center">
+          <p className="font-mono text-sm text-ink">
+            Generation is taking unusually long.
+          </p>
+          <p className="mx-auto mt-2 max-w-prose text-sm text-graphite">
+            The reviewers may be rate-limited right now. Your paper is safe —
+            you can keep waiting or come back to this page later.
+          </p>
+          <div className="mt-5 flex justify-center gap-3">
+            <Button
+              onClick={() => {
+                generationStartedAt.current = Date.now();
+                void pairQuery.refetch();
+              }}
+            >
+              Keep waiting
+            </Button>
+            <Button asChild variant="outline">
+              <a href="/upload">Upload a different paper</a>
+            </Button>
+          </div>
+        </div>
+      ) : isGenerating ? (
         <GeneratingPanel
           completed={statusQuery.data?.completedReviewCount ?? 0}
           expected={statusQuery.data?.expectedReviewCount ?? 0}

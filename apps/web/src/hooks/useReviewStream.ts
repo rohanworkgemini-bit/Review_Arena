@@ -55,6 +55,12 @@ export function useReviewStream(
 
   // Latest stall-watchdog timer; cleared on each token / unmount.
   const stallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Consecutive transport-level failures with zero tokens received.
+  // EventSource reconnects forever on its own; before the first token
+  // that means a dead backend, and 100 tabs silently re-hitting it every
+  // few seconds for 5 minutes is a retry storm that fights recovery.
+  const bareErrors = useRef(0);
+  const gotTokens = useRef(false);
 
   useEffect(() => {
     if (!reviewId) {
@@ -62,6 +68,8 @@ export function useReviewStream(
       return;
     }
     setState(INITIAL);
+    bareErrors.current = 0;
+    gotTokens.current = false;
 
     const es = new EventSource(`/api/reviews/stream/${reviewId}`, {
       withCredentials: true,
@@ -81,6 +89,8 @@ export function useReviewStream(
 
     es.addEventListener("token", (e) => {
       armStall();
+      bareErrors.current = 0;
+      gotTokens.current = true;
       try {
         const payload = JSON.parse((e as MessageEvent).data) as { text?: string };
         if (payload.text) {
@@ -127,6 +137,22 @@ export function useReviewStream(
       if (msg) {
         if (stallTimer.current) clearTimeout(stallTimer.current);
         setState((prev) => ({ ...prev, error: msg }));
+        es.close();
+        return;
+      }
+      // Bare transport error. Before any token has arrived, a handful in
+      // a row means the backend is down — surface it instead of leaving
+      // the user on "waiting for first token…" for the 5-minute watchdog.
+      // Mid-stream, the stall watchdog stays in charge (models pause).
+      bareErrors.current += 1;
+      if (!gotTokens.current && bareErrors.current >= 5) {
+        if (stallTimer.current) clearTimeout(stallTimer.current);
+        setState((prev) => ({
+          ...prev,
+          error:
+            prev.error ??
+            "Can't reach the server — it may be restarting. Use Retry in a moment.",
+        }));
         es.close();
       }
     });

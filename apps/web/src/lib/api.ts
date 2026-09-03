@@ -17,11 +17,16 @@ const BASE = "/api";
 export class ApiError extends Error {
   status: number;
   code: string;
-  constructor(status: number, code: string, message: string) {
+  /** Parsed JSON error body, when the server sent one. Lets callers use
+   *  structured payloads on errors — e.g. the 409 duplicate-vote response
+   *  carries the existing voteId + reveal so the UI can still navigate. */
+  body: unknown;
+  constructor(status: number, code: string, message: string, body: unknown = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -29,14 +34,16 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let code = "";
     let detail = "";
+    let body: unknown = null;
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
-      code = body.error ?? "";
-      detail = body.message ?? "";
+      body = await res.json();
+      const b = body as { error?: string; message?: string };
+      code = b.error ?? "";
+      detail = b.message ?? "";
     } catch {
       /* response not JSON */
     }
-    throw new ApiError(res.status, code, `${res.status} ${res.statusText}: ${detail}`);
+    throw new ApiError(res.status, code, `${res.status} ${res.statusText}: ${detail}`, body);
   }
   return res.json() as Promise<T>;
 }

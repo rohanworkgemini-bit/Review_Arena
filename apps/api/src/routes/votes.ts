@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import {
   SubmitVoteRequestSchema,
   type VoteDimension,
@@ -212,9 +212,45 @@ export function votesRouter(config: Config): Router {
         // browser knows this token has already been spent rather than
         // surfacing a generic 500.
         if (isUniqueViolation(err, "votes_session_pair_sig_uk")) {
+          // A student whose first submit's RESPONSE was lost (network blip
+          // after commit) retries and lands here. Without the voteId +
+          // reveal payload they own a recorded vote they can never reach —
+          // so return everything the success path would have.
+          const existing = await db.query.votes.findFirst({
+            where: and(
+              eq(votes.sessionId, req.sessionId),
+              or(
+                and(eq(votes.reviewAId, payload.reviewAId), eq(votes.reviewBId, payload.reviewBId)),
+                and(eq(votes.reviewAId, payload.reviewBId), eq(votes.reviewBId, payload.reviewAId)),
+              ),
+            ),
+          });
           res.status(409).json({
             error: "Conflict",
             message: "This pair has already been voted on for this session.",
+            voteId: existing?.id ?? null,
+            reveal: existing
+              ? {
+                  reviewA: {
+                    reviewId: reviewA.id,
+                    systemSlug: reviewA.reviewSystem.slug,
+                    systemName: reviewA.reviewSystem.name,
+                    eloBefore: ratingABefore,
+                    eloAfter: ratingAAfter,
+                    btBefore: btBeforeA,
+                    btAfter: btAfterA,
+                  },
+                  reviewB: {
+                    reviewId: reviewB.id,
+                    systemSlug: reviewB.reviewSystem.slug,
+                    systemName: reviewB.reviewSystem.name,
+                    eloBefore: ratingBBefore,
+                    eloAfter: ratingBAfter,
+                    btBefore: btBeforeB,
+                    btAfter: btAfterB,
+                  },
+                }
+              : null,
           });
           return;
         }
