@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
 import { metricScores, papers, reviews } from "../db/schema.js";
@@ -27,6 +27,15 @@ export async function scoreOneReview(
   judge: JudgeClient,
 ): Promise<void> {
   const start = Date.now();
+  // Idempotence guard: SSE reconnects can fire scoreOneReview twice for the
+  // same review. A second run would double the judge cost, and its failure
+  // used to stamp FAILED over a review that already had valid scores
+  // (observed live 2026-09-04). Judged means judged.
+  const existing = await db.query.reviews.findFirst({
+    where: eq(reviews.id, reviewId),
+    columns: { judgeStatus: true },
+  });
+  if (existing?.judgeStatus === "COMPLETE") return;
   const text = renderReviewText(structured);
   let judged;
   try {
@@ -34,11 +43,12 @@ export async function scoreOneReview(
   } catch (err) {
     // Record the failure on the review row: the fairness filter excludes
     // judge-FAILED comparisons from the leaderboard, which only works if
-    // failures are actually written down.
+    // failures are actually written down. Never clobber a COMPLETE row —
+    // a concurrent duplicate run's failure must not erase real scores.
     await db
       .update(reviews)
       .set({ judgeStatus: "FAILED", updatedAt: new Date() })
-      .where(eq(reviews.id, reviewId))
+      .where(and(eq(reviews.id, reviewId), ne(reviews.judgeStatus, "COMPLETE")))
       .catch(() => {/* best effort */});
     throw err;
   }

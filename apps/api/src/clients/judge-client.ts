@@ -24,10 +24,14 @@ export class JudgeClient {
       method: "POST",
       headers,
       body: JSON.stringify({ review_text: reviewText, paper_text: paperText, model }),
-      // Two judge passes with per-call 180s deadlines on the Python side
-      // fit comfortably; without these, a wedged service holds this socket
-      // (and its caller) at undici defaults, quietly stacking retries.
-      headersTimeout: 30_000,
+      // /judge is a BLOCKING endpoint: Python sends response headers only
+      // after both judge passes over the full paper finish, so the headers
+      // deadline must cover the whole judging run, not a socket handshake.
+      // 30s here silently failed every real-sized paper (root-caused
+      // 2026-09-04: tiny probes passed, full papers always aborted at 30s).
+      // Two passes with per-call 180s deadlines + Python-side retries fit
+      // inside 8 min; a wedged service is still bounded by both timeouts.
+      headersTimeout: 8 * 60_000,
       bodyTimeout: 8 * 60_000,
     });
     const text = await body.text();
