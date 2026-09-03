@@ -45,7 +45,14 @@ from app.schemas import ParsedPaper, StructuredReview
 # round. It costs nothing when there is no contention. Retries happen
 # before the first token is emitted, so the streaming path is safe — no
 # duplicated output.
-PROVIDER_MAX_RETRIES = int(os.environ.get("PROVIDER_MAX_RETRIES", "6"))
+PROVIDER_MAX_RETRIES = int(os.environ.get("PROVIDER_MAX_RETRIES", "3"))
+
+# Hard per-attempt deadline for every provider call. Without it the OpenAI/
+# Anthropic SDKs default to 600s per attempt and Gemini to NO deadline at
+# all — one stalled connection then pins a worker thread indefinitely, and
+# enough of them wedge the whole service (observed live: TCP accepted, no
+# response headers, 0%% CPU). Retries times this is the worst-case hold.
+PROVIDER_TIMEOUT_S = float(os.environ.get("PROVIDER_TIMEOUT_S", "180"))
 
 _RATE_LIMIT_RX = re.compile(r"rate.?limit|429|tokens per min|TPM", re.I)
 

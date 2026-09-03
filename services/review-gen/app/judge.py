@@ -220,6 +220,9 @@ def _gemini_judge_pass(
             "temperature": 0,
             "response_mime_type": "application/json",
         },
+        # No SDK default deadline exists for Gemini; without this a stalled
+        # judge call pins a threadpool thread forever (observed live).
+        request_options={"timeout": 180},
     )
     raw = (response.text or "{}").strip()
     data: dict = json.loads(raw)
@@ -323,7 +326,9 @@ def judge_review(
                 "in the environment. There is no mock fallback."
             )
         from openai import OpenAI
-        client = OpenAI()
+        # Explicit deadline: the SDK default is 600s/attempt, which under a
+        # burst quietly pins threadpool threads (see adapters/base.py).
+        client = OpenAI(timeout=180.0, max_retries=3)
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)
 

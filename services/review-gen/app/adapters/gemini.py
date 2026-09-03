@@ -17,6 +17,7 @@ from app.adapters._budget import (
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
+    PROVIDER_TIMEOUT_S,
     Adapter,
     GenerationMetrics,
     GenerationResult,
@@ -79,6 +80,7 @@ class GeminiAdapter(Adapter):
         response = self._model.generate_content(
             prompt,
             generation_config=self._generation_config,
+            request_options={"timeout": PROVIDER_TIMEOUT_S},
         )
         raw = response.text or ""
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
@@ -97,6 +99,7 @@ class GeminiAdapter(Adapter):
                 prompt,
                 generation_config=self._generation_config,
                 stream=True,
+                request_options={"timeout": PROVIDER_TIMEOUT_S},
             ):
                 delta = getattr(chunk, "text", "") or ""
                 if delta:

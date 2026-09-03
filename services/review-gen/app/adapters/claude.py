@@ -31,6 +31,7 @@ from app.adapters._budget import (
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
+    PROVIDER_TIMEOUT_S,
     Adapter,
     GenerationMetrics,
     GenerationResult,
@@ -63,7 +64,11 @@ class ClaudeAdapter(Adapter):
         # anthropic SDK installed.
         from anthropic import Anthropic
 
-        self._client = Anthropic(api_key=api_key, max_retries=PROVIDER_MAX_RETRIES)
+        self._client = Anthropic(
+            api_key=api_key,
+            max_retries=PROVIDER_MAX_RETRIES,
+            timeout=PROVIDER_TIMEOUT_S,
+        )
         self._model = self.config.get("model", "claude-opus-5")
         # Opus 4.6+ supports adaptive thinking; pre-4.6 models don't.
         # Allow the seed to opt out via thinking=False if pointing at an

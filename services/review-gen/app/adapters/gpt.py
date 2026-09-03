@@ -30,6 +30,7 @@ from app.adapters._budget import (
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
+    PROVIDER_TIMEOUT_S,
     Adapter,
     GenerationMetrics,
     GenerationResult,
@@ -62,7 +63,11 @@ class GPTAdapter(Adapter):
         # client installed.
         from openai import OpenAI
 
-        self._client = OpenAI(api_key=api_key, max_retries=PROVIDER_MAX_RETRIES)
+        self._client = OpenAI(
+            api_key=api_key,
+            max_retries=PROVIDER_MAX_RETRIES,
+            timeout=PROVIDER_TIMEOUT_S,
+        )
         self._model = self.config.get("model", "gpt-4o-mini")
         # GPT-5 reasoning models reject any temperature != 1; keep it optional
         # so the seed config can omit it for those models.

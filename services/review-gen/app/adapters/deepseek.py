@@ -33,6 +33,7 @@ from app.adapters._budget import (
 from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
+    PROVIDER_TIMEOUT_S,
     Adapter,
     GenerationMetrics,
     GenerationResult,
@@ -74,6 +75,7 @@ class DeepSeekAdapter(Adapter):
             api_key=api_key,
             base_url=_DEEPSEEK_BASE_URL,
             max_retries=PROVIDER_MAX_RETRIES,
+            timeout=PROVIDER_TIMEOUT_S,
         )
         self._model = self.config.get("model", "deepseek-v4-pro")
         self._temperature = self.config.get("temperature", 0.2)

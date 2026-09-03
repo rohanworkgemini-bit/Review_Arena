@@ -132,9 +132,33 @@ def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
 app = FastAPI(title="ReviewArena · review-gen", version="0.1.0")
 
 
+@app.on_event("startup")
+async def _production_knobs() -> None:
+    # The default anyio limiter gives sync `def` routes and run_in_threadpool
+    # 40 threads TOTAL. Generation, judging, and Chandra parsing each hold a
+    # thread for minutes, so a classroom burst exhausts the pool and every
+    # route — /health included — queues forever (observed live: TCP accepted,
+    # no headers, 0% CPU). 100 threads of headroom + timeouts in the adapters
+    # turn that wedge into individual request failures.
+    import anyio.to_thread
+
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 100
+
+    # Pre-warm the tiktoken encoder: its first use downloads the BPE file
+    # with blocking IO and no timeout, which must never happen on the event
+    # loop mid-request (see _attach_canonical).
+    from app.adapters import _budget
+
+    await run_in_threadpool(_budget._encoder)
+
+
 @app.get("/health")
-def healthz() -> dict[str, object]:
+async def healthz() -> dict[str, object]:
     # No auth — used by load balancers, monitoring, smoke tests.
+    # async def on purpose: it must never need a threadpool token, so it
+    # keeps answering (and healthchecks keep passing) even when the pool
+    # is saturated — a wedged pool then shows up as slow requests, not as
+    # an unreachable service.
     return {"ok": True, "adapters": adapters.known_keys()}
 
 
@@ -161,7 +185,10 @@ async def parse(file: UploadFile = File(...)) -> ParsedPaper:
     filename = file.filename or "paper.pdf"
     try:
         paper = await run_in_threadpool(parse_with_chandra, pdf_bytes, filename)
-        return _attach_canonical(paper)
+        # _attach_canonical renders the full paper twice and tokenizes it —
+        # seconds of pure CPU for a long paper — so it must not run on the
+        # event loop.
+        return await run_in_threadpool(_attach_canonical, paper)
     except ChandraError as e:
         logger.warning("Chandra parse failed: %s", e)
         raise HTTPException(status_code=502, detail=str(e)) from e
