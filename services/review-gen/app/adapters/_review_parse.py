@@ -45,6 +45,17 @@ class ScoreScale(str, Enum):
 
 
 # Canonical field <- heading alias map. Lowercased, punctuation-stripped.
+#
+# The three venue forms (conference_scales.py) use different section names
+# for the same concepts; this map folds them all onto StructuredReview's
+# canonical fields. NeurIPS's Quality/Clarity mirror ICLR's Soundness/
+# Presentation; both venues' Significance plays Contribution's role.
+# Deliberately UNMAPPED headings — "Strengths And Weaknesses" (its content
+# lives in the ### Strengths/### Weaknesses subsections the prompt asks
+# for), "Originality" (StructuredReview has one novelty slot and
+# Significance fills it), "Flag For Ethics Review" — stay visible in
+# rawOutput, which is what raters read; the structured fields feed the
+# judge and analysis.
 _HEADER_MAP = {
     "summary": "summary",
     "strength": "strengths",
@@ -55,12 +66,19 @@ _HEADER_MAP = {
     "limitations": "weaknesses",
     "question": "questions",
     "questions": "questions",
+    "questions for authors": "questions",
+    "key questions for authors": "questions",
+    "questions and suggestions": "questions",
     "soundness": "soundness",
+    "quality": "soundness",
     "presentation": "presentation",
+    "clarity": "presentation",
     "contribution": "contribution",
+    "significance": "contribution",
     "rating": "rating",
     "overall": "rating",
     "overall_rating": "rating",
+    "overall recommendation": "rating",
     "score": "rating",
     "confidence": "confidence",
 }
@@ -134,8 +152,14 @@ def _split_sections(md: str) -> dict[str, str]:
         body_start = h.end()
         body_end = headings[i + 1].start() if i + 1 < len(headings) else len(md)
         body = md[body_start:body_end].strip()
-        # Keep the longest body if a heading appears more than once.
-        if canonical not in out or len(body) > len(out[canonical]):
+        # Two headings can fold onto one canonical field (Weaknesses +
+        # Limitations both → weaknesses). Append rather than keep-longest
+        # so neither section is lost; numeric fields are unaffected
+        # because _first_number only reads the FIRST occurrence's first
+        # line.
+        if canonical in out and body:
+            out[canonical] = f"{out[canonical]}\n{body}".strip()
+        elif canonical not in out:
             out[canonical] = body
     return out
 

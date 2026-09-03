@@ -1,32 +1,42 @@
-"""Per-conference overall-recommendation scales + the shared review-form
-system prompt used by the commercial adapters (Claude/GPT/Gemini/DeepSeek).
+"""Per-venue review forms + rating scales for the review-generation prompts.
 
 The uploader picks a conference at upload time; the choice flows
 paper → API → GenerateRequest.conference → adapter config → this prompt,
-so BOTH systems in a battle review under the same venue's scale (fairness:
-an ICLR-style review is never compared against an ARR-style one).
+so BOTH systems in a battle review under the same venue's form (fairness:
+an ICLR-style review is never compared against a NeurIPS-style one).
 
-Four venue editions: ARR 2025, ICML 2026, NeurIPS 2026, ICLR 2026.
-Scales verified against the live venue guidelines (July 2026):
-  - ICLR 2026 Reviewer Guide — overall rating mapped to {0,2,4,6,8,10}
-    (changed from 2025's {1,3,5,6,8,10}).
-  - NeurIPS 2025/2026 Reviewer Guidelines — 6-point scale (1-6).
-  - ICML 2026 Reviewer Instructions — 6-point scale (1-6).
-  - ACL Rolling Review (ARR) 2025 review form — Overall Assessment 1-5,
-    half points allowed. This is the only *ACL entry: EMNLP, ACL and
-    NAACL all review through the same ARR form, so one "arr" key covers
-    them rather than duplicating the scale per conference.
+Three venue editions — ICLR 2026, ICML 2026, NeurIPS 2026 — and each one
+gets its OWN form, mirroring the venue's real reviewer form (section
+names, section order, scales), not a house hybrid. The UI shows raters
+the model's raw markdown verbatim, so what students read is the venue
+form exactly as the LLM filled it in. Forms verified against the live
+venue pages (September 2026):
 
-Only the ## Rating section varies by venue. The rest of the form
-(Soundness/Presentation/Contribution 1-4, Confidence 1-5, the section
-order) is our fixed output contract — every adapter emits it so one
-parser handles all systems (see _review_parse.parse_markdown_review).
+  - ICLR 2026 Reviewer Guide + OpenReview form — Summary, Soundness/
+    Presentation/Contribution each 1-4, Strengths, Weaknesses, Questions,
+    ethics flag, overall Rating on {0,2,4,6,8,10} (changed from 2025's
+    {1,3,5,6,8,10}), Confidence 1-5.
+  - ICML 2026 Reviewer Instructions — Summary, Strengths & Weaknesses
+    narrative, numeric Soundness/Presentation/Significance/Originality
+    each 1-4, Key Questions For Authors, Limitations, Overall
+    Recommendation 1-6, Confidence 1-5.
+  - NeurIPS 2026 Reviewer Guidelines — Summary, Strengths & Weaknesses
+    narrative over the four core dimensions, numeric Quality/Clarity/
+    Significance/Originality each 1-4, Questions, Limitations, Rating
+    1-6, Confidence 1-5.
 
-Every review system in the study is a commercial LLM prompted by us, so
-the selected conference applies uniformly to all of them — there is no
-adapter that ignores it. This is what makes the fairness claim in
-docs/FAIRNESS.md (B5, prompt symmetry) hold: both sides of a battle are
-built from this same prompt with the same venue scale.
+Reviewer-process fields that only make sense for humans (LLM-usage
+disclosure, code-of-conduct acknowledgement, post-rebuttal justification)
+are deliberately absent: the models are the reviewers here, and those
+fields would be noise in a blind comparison.
+
+Parsing contract: every numeric section must start with a single number
+on its own line (see _review_parse.parse_markdown_review). Section
+headings differ per venue; the parser's alias map folds them onto the
+canonical StructuredReview fields (quality→soundness, clarity→
+presentation, significance→contribution, ...). All three venues score
+their sub-dimensions on 1-4, so ScoreScale.ICLR normalization applies
+uniformly.
 """
 from __future__ import annotations
 
@@ -72,21 +82,6 @@ CONFERENCE_SCALES: Dict[str, Dict] = {
             1: "Strong Reject — well-known results or unaddressed ethical considerations",
         },
     },
-    "arr": {
-        "name": "ARR 2025",
-        "scores": [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5],
-        "labels": {
-            5:   "Consider for Award",
-            4.5: "Borderline Award",
-            4:   "Conference — could be accepted to an *ACL conference",
-            3.5: "Borderline Conference",
-            3:   "Findings — could be accepted to Findings of ACL",
-            2.5: "Borderline Findings",
-            2:   "Resubmit next cycle — needs substantial revisions",
-            1.5: "Resubmit after next cycle — revisions cannot be completed in one cycle",
-            1:   "Do not resubmit — paper has to be fully redone",
-        },
-    },
 }
 
 
@@ -95,63 +90,134 @@ def _fmt_score(v: float) -> str:
     return str(int(v)) if float(v).is_integer() else str(v)
 
 
-def _rating_block(conference: str) -> str:
-    """The venue-specific '## Rating' section of the review form."""
+def _overall_block(conference: str, heading: str) -> str:
+    """The venue's overall-recommendation section, labels spelled out."""
     scale = CONFERENCE_SCALES.get(conference, CONFERENCE_SCALES[DEFAULT_CONFERENCE])
     allowed = ", ".join(_fmt_score(s) for s in scale["scores"])
     labels = "\n".join(
-        f"       {_fmt_score(score)} = {label}"
+        f"   {_fmt_score(score)} = {label}"
         for score, label in sorted(scale["labels"].items(), reverse=True)
     )
     return (
-        f"## Rating\n"
-        f"    (Overall recommendation on the {scale['name']} scale. Answer with a\n"
-        f"    SINGLE NUMBER from this exact set: {{{allowed}}}. Meaning of each score:\n"
+        f"## {heading}\n"
+        f"(Overall recommendation on the {scale['name']} scale. Answer with a\n"
+        f"SINGLE NUMBER on its own line from this exact set: {{{allowed}}},\n"
+        f"then one brief sentence justifying it. Meaning of each score:\n"
         f"{labels})"
     )
 
 
+# The 1-5 confidence wording all three venues share (OpenReview standard).
+_CONFIDENCE_BLOCK = dedent("""\
+    ## Confidence
+    (Integer 1-5 on its own line, then one brief sentence.
+       5 = You are absolutely certain about your assessment
+       4 = You are confident, but not absolutely certain
+       3 = You are fairly confident
+       2 = You are willing to defend your assessment, but it is quite likely
+           you did not understand central parts of the submission
+       1 = Your assessment is an educated guess)""")
+
+_PREAMBLE = dedent("""\
+    You are an experienced peer reviewer for {venue}. Read the paper below
+    and write a full review using the official {venue} review form,
+    reproduced for you here. Use markdown headers EXACTLY as shown, in the
+    EXACT order shown. For each numeric section, begin with a SINGLE
+    NUMBER on its own line, then one brief sentence explaining the score.
+    Plain markdown only — no preamble before the first header, no JSON,
+    no closing commentary.""")
+
+
+def _dim(name: str, guidance: str) -> str:
+    """A 1-4 numeric sub-score section (1=poor, 2=fair, 3=good, 4=excellent)."""
+    return (
+        f"## {name}\n"
+        f"(Integer 1-4 — 1=poor, 2=fair, 3=good, 4=excellent. {guidance})"
+    )
+
+
+def _iclr_form() -> str:
+    return "\n\n".join([
+        _PREAMBLE.format(venue="ICLR 2026"),
+        "## Summary\n"
+        "(Briefly summarize the paper and its contributions in your own\n"
+        "words — a summary the authors would generally agree with. 2-4\n"
+        "sentences.)",
+        _dim("Soundness", "Technical soundness: methodology, support for claims,\nlogical consistency."),
+        _dim("Presentation", "Clarity, structure, and writing quality."),
+        _dim("Contribution", "Novelty and significance of the contribution."),
+        "## Strengths\n(The strong points of the paper. Concise bullet list, 3-5 items.)",
+        "## Weaknesses\n(The weak points of the paper. Concise bullet list, 3-6 items.)",
+        "## Questions\n"
+        "(Questions for the authors — points where a response could change\n"
+        "your opinion. Concise bullet list, 2-5 items.)",
+        "## Flag For Ethics Review\n"
+        "(One line: either 'No ethics review needed.' or name the concern.)",
+        _overall_block("iclr", "Rating"),
+        _CONFIDENCE_BLOCK,
+    ])
+
+
+def _icml_form() -> str:
+    return "\n\n".join([
+        _PREAMBLE.format(venue="ICML 2026"),
+        "## Summary\n"
+        "(Briefly summarize the paper and its contributions in your own\n"
+        "words after reading — not a paste of the abstract. 2-4 sentences.)",
+        "## Strengths And Weaknesses\n"
+        "(A thorough assessment touching on soundness, presentation,\n"
+        "significance, and originality — use the two subsections below.)\n\n"
+        "### Strengths\n(Concise bullet list, 3-5 items.)\n\n"
+        "### Weaknesses\n(Concise bullet list, 3-6 items.)",
+        _dim("Soundness", "Technical correctness; are the central claims adequately\nsupported with evidence?"),
+        _dim("Presentation", "Writing style and clarity, plus contextualization\nrelative to prior work."),
+        _dim("Significance", "Importance of the problem and value to the field or\nto practice."),
+        _dim("Originality", "Novel insights, methods, or creative combinations of\nexisting techniques."),
+        "## Key Questions For Authors\n"
+        "(3-5 substantive, actionable questions, as a numbered list.)",
+        "## Limitations\n"
+        "(Have the authors adequately discussed the limitations and, where\napplicable, the societal impact of their work? 1-3 sentences.)",
+        _overall_block("icml", "Overall Recommendation"),
+        _CONFIDENCE_BLOCK,
+    ])
+
+
+def _neurips_form() -> str:
+    return "\n\n".join([
+        _PREAMBLE.format(venue="NeurIPS 2026"),
+        "## Summary\n"
+        "(Briefly summarize the paper and its contributions in your own\n"
+        "understanding after reading — not a paste of the abstract; the\n"
+        "authors should generally agree with it. 2-4 sentences.)",
+        "## Strengths And Weaknesses\n"
+        "(Your assessment across the four core NeurIPS dimensions — quality,\n"
+        "clarity, significance, originality — using the two subsections\n"
+        "below.)\n\n"
+        "### Strengths\n(Concise bullet list, 3-5 items.)\n\n"
+        "### Weaknesses\n(Concise bullet list, 3-6 items.)",
+        _dim("Quality", "Is the submission technically sound? Are claims well\nsupported by theoretical analysis or experimental results?"),
+        _dim("Clarity", "Is the submission clearly written, well organized, and\ndoes it adequately inform the reader?"),
+        _dim("Significance", "Potential for impact on an important use case and for\nthe broader NeurIPS community."),
+        _dim("Originality", "Novel tasks, framings, metrics, or methods — or a\nwell-motivated novel combination of existing techniques."),
+        "## Questions\n"
+        "(3-5 actionable questions and suggestions for the authors — points\n"
+        "where a response could change your opinion.)",
+        "## Limitations\n"
+        "(Have the authors adequately addressed the limitations and potential\n"
+        "negative societal impact of their work? 1-3 sentences.)",
+        _overall_block("neurips", "Rating"),
+        _CONFIDENCE_BLOCK,
+    ])
+
+
+_FORM_BUILDERS = {
+    "iclr": _iclr_form,
+    "icml": _icml_form,
+    "neurips": _neurips_form,
+}
+
+
 def build_system_prompt(conference: str = DEFAULT_CONFERENCE) -> str:
-    """Full review-form system prompt for the commercial adapters. The
-    section order and the 1-4 / 1-5 sub-scales are fixed (single parser
-    across systems); only the ## Rating semantics track the venue."""
-    scale = CONFERENCE_SCALES.get(conference, CONFERENCE_SCALES[DEFAULT_CONFERENCE])
-    return dedent(f"""
-        You are an experienced peer reviewer for {scale["name"]}. Read the
-        paper below and write a structured peer review using markdown
-        headers, in the EXACT order shown.
-
-        For each numeric section (Soundness, Presentation, Contribution,
-        Rating, Confidence), begin with a SINGLE NUMBER on its own line,
-        then one brief sentence explaining the score.
-
-        ## Summary
-        (2-4 sentences describing what the paper does and your overall impression.)
-
-        ## Soundness
-        (Integer 1-4 — 1=poor, 2=fair, 3=good, 4=excellent. Methodology + logical
-        consistency.)
-
-        ## Presentation
-        (Integer 1-4. Clarity, structure, writing quality.)
-
-        ## Contribution
-        (Integer 1-4. Novelty and significance.)
-
-        {_rating_block(conference)}
-
-        ## Confidence
-        (Integer 1-5. How confident you are in this assessment.)
-
-        ## Strengths
-        (Concise bullet list, 3-5 items.)
-
-        ## Weaknesses
-        (Concise bullet list, 3-6 items.)
-
-        ## Questions
-        (Concise bullet list of questions for the authors, 2-5 items.)
-
-
-        Plain markdown only — no preamble, no JSON, no extra commentary.
-    """).strip()
+    """Full venue-specific review-form system prompt for the adapters."""
+    builder = _FORM_BUILDERS.get(conference, _FORM_BUILDERS[DEFAULT_CONFERENCE])
+    return builder().strip()

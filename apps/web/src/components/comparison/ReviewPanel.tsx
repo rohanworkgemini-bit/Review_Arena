@@ -9,12 +9,13 @@ import type { StructuredReview } from "@reviewarena/shared-types";
  * one column of it. Identical typography on both sides is the point:
  * 14.5px / 1.62, ink-2.
  *
- * When `raw` is provided, a Formatted/Raw toggle lets the rater read
- * the model's verbatim markdown output instead of our parsed sections —
- * transparency about what the LLM actually produced. The parser
- * reorganizes and strips inline markdown emphasis (so one model's bold
- * lead-ins can't out-shout a plain-prose rival in a blind comparison);
- * it never changes the wording. Raw shows the untouched original.
+ * The model's verbatim output is the DEFAULT view (decision 2026-09-04:
+ * raters see exactly what the LLM produced, in the venue's own review-form
+ * layout — the prompt asks each model for the selected conference's real
+ * 2026 form). Both panels render raw with identical typography, so the
+ * presentation-symmetry control now lives in sameness of chrome rather
+ * than emphasis-stripping. The Formatted toggle still offers our parsed,
+ * normalized sections; the judge and analysis continue to consume those.
  */
 export function ReviewPanel({
   label,
@@ -25,8 +26,8 @@ export function ReviewPanel({
   review: StructuredReview;
   raw?: string | null;
 }) {
-  const [view, setView] = useState<"formatted" | "raw">("formatted");
   const hasRaw = !!raw?.trim();
+  const [view, setView] = useState<"formatted" | "raw">(hasRaw ? "raw" : "formatted");
 
   return (
     <div className="px-[17px] pb-[15px] pt-4">
@@ -35,7 +36,7 @@ export function ReviewPanel({
         <span className="flex items-baseline gap-3">
           {hasRaw && (
             <span className="flex items-baseline font-mono text-[11px]">
-              {(["formatted", "raw"] as const).map((v, i) => (
+              {(["raw", "formatted"] as const).map((v, i) => (
                 <button
                   key={v}
                   type="button"
