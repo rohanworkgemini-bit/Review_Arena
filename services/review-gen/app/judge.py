@@ -176,6 +176,10 @@ def _is_gemini(model: str) -> bool:
     return model.lower().startswith("gemini")
 
 
+def _is_deepseek(model: str) -> bool:
+    return model.lower().startswith("deepseek")
+
+
 def _openai_judge_pass(
     client: Any,
     *,
@@ -283,31 +287,25 @@ def _one_judge_pass(
     raise RuntimeError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
 
 
-# Default judge model — Gemini 3.6 Flash (set 2026-07-27).
+# Default judge model — DeepSeek V4 Flash (set 2026-09-03, with the
+# six-system lineup cut; changed BEFORE any study data was collected, so
+# the mid-study-change prohibition below is not violated).
 #
-# KNOWN, ACCEPTED CONFLICT: this is the SAME model id the
-# `gemini-3.6-flash` leaderboard system is pinned to (see
-# apps/api/scripts/seed.ts), and a same-family sibling of
-# `gemini-3.1-pro`. The judge therefore grades its own output for 1 of
-# the 10 systems.
+# Chosen because DeepSeek no longer appears anywhere in the review-system
+# lineup (Google, OpenAI, Anthropic, Mistral, Zhipu, Moonshot) — the
+# judge's vendor is fully disjoint from every system under test, which
+# retires the docs/FAIRNESS.md B3 self-grading conflict the previous
+# Gemini judge carried instead of merely relocating it.
 #
-# This is not an oversight. Since the 2026-07 lineup refresh the board
-# spans five vendors (OpenAI, Anthropic, Google, DeepSeek, Mistral), so
-# no frontier judge is free of vendor overlap — moving the judge would
-# relocate the conflict, not remove it. The thesis's primary claim rests
-# on *human* Elo; the judge is a secondary correlate for RQ1.
+# Flash tier on purpose: the judge runs on EVERY generated review
+# (2 passes each), the highest-volume model call in the system. The trade
+# is a cheaper grader scoring stronger models' output, which biases
+# toward noisier scores rather than toward any one system. Report the
+# human-judge correlation with that caveat.
 #
-# Flash vs Pro: the judge runs on EVERY generated review (2 passes each),
-# so it is the highest-volume model call in the system. Flash is the
-# cheap, low-latency tier; the trade is a weaker grader scoring stronger
-# models' output, which biases toward noisier scores rather than toward
-# any one system. Report the human-judge correlation with that caveat.
-#
-# Required mitigation (docs/FAIRNESS.md B3): report judge scores for the
-# two Google systems separately and check whether judge-human correlation
-# differs for them. Do NOT change this model again mid-study — that would
-# make the RQ1 correlation incomparable across collected data.
-DEFAULT_JUDGE_MODEL = "gemini-3.6-flash"
+# Do NOT change this model mid-study — that would make the RQ1
+# correlation incomparable across collected data.
+DEFAULT_JUDGE_MODEL = "deepseek-v4-flash"
 
 
 def judge_review(
@@ -334,6 +332,23 @@ def judge_review(
                 "in the environment. There is no mock fallback."
             )
         client = None  # not used on the Gemini path
+    elif _is_deepseek(model):
+        # DeepSeek's OpenAI-compatible endpoint: same chat-completions +
+        # response_format shape, different base_url and key.
+        if not os.environ.get("DEEPSEEK_API_KEY"):
+            raise RuntimeError(
+                f"judge_review with model={model!r} requires DEEPSEEK_API_KEY "
+                "in the environment. There is no mock fallback."
+            )
+        from openai import OpenAI
+        # Explicit deadline: the SDK default is 600s/attempt, which under a
+        # burst quietly pins threadpool threads (see adapters/base.py).
+        client = OpenAI(
+            api_key=os.environ["DEEPSEEK_API_KEY"],
+            base_url="https://api.deepseek.com/v1",
+            timeout=180.0,
+            max_retries=3,
+        )
     else:
         if not os.environ.get("OPENAI_API_KEY"):
             raise RuntimeError(
@@ -341,8 +356,6 @@ def judge_review(
                 "in the environment. There is no mock fallback."
             )
         from openai import OpenAI
-        # Explicit deadline: the SDK default is 600s/attempt, which under a
-        # burst quietly pins threadpool threads (see adapters/base.py).
         client = OpenAI(timeout=180.0, max_retries=3)
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)

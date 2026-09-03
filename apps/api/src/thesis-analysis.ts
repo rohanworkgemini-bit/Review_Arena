@@ -49,7 +49,7 @@ const paperRows = await db.select({ id: papers.id }).from(papers);
 
 // Must match RATING_BASELINE_SLUG in config.ts, or the numbers here will not
 // line up with the live board.
-const BASELINE_SLUG = process.env.RATING_BASELINE_SLUG ?? "gpt-5.2";
+const BASELINE_SLUG = process.env.RATING_BASELINE_SLUG ?? "claude-sonnet-5";
 
 // ── RQ2: ratings (overall + per dimension), Bradley-Terry and Elo ─────────
 

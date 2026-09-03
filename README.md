@@ -37,21 +37,18 @@ The thesis benchmarks **frontier commercial LLMs only** — every system is
 reached over its provider's API, so there is no GPU hosting anywhere in
 the stack.
 
-Ten systems: five providers x two tiers, so the leaderboard can separate
-"which lab" from "how much compute".
+Six systems — the controlled study's lineup, one per provider, so no
+vendor fields two entries and the LLM-as-judge (DeepSeek V4 Flash) shares
+a vendor with none of them.
 
-| Slug                 | Backing model id          | Hosting                      | Streams?  |
-|----------------------|---------------------------|------------------------------|-----------|
-| `gpt-5.2`            | `gpt-5.2`                 | OpenAI API                   | yes (SDK) |
-| `gpt-5.4-mini`       | `gpt-5.4-mini`            | OpenAI API                   | yes (SDK) |
-| `claude-opus-4-8`    | `claude-opus-4-8`         | Anthropic API (native SDK)   | yes (SDK) |
-| `claude-sonnet-5`    | `claude-sonnet-5`         | Anthropic API (native SDK)   | yes (SDK) |
-| `gemini-3.1-pro`     | `gemini-3.1-pro-preview`  | Google AI Studio API         | yes (SDK) |
-| `gemini-3.6-flash`   | `gemini-3.6-flash`        | Google AI Studio API         | yes (SDK) |
-| `deepseek-v4-pro`    | `deepseek-v4-pro`         | DeepSeek API (OpenAI-compat) | yes (SDK) |
-| `deepseek-v4-flash`  | `deepseek-v4-flash`       | DeepSeek API (OpenAI-compat) | yes (SDK) |
-| `mistral-large-3`    | `mistral-large-2512`      | Mistral API (OpenAI-compat)  | yes (SDK) |
-| `mistral-medium-3.5` | `mistral-medium-2604`     | Mistral API (OpenAI-compat)  | yes (SDK) |
+| Slug                 | Backing model id      | Hosting                       | Streams?  |
+|----------------------|-----------------------|-------------------------------|-----------|
+| `gemini-3.8-flash`   | `gemini-3.8-flash`    | Google AI Studio API          | yes (SDK) |
+| `gpt-5.6-terra`      | `gpt-5.6-terra`       | OpenAI API                    | yes (SDK) |
+| `claude-sonnet-5`    | `claude-sonnet-5`     | Anthropic API (native SDK)    | yes (SDK) |
+| `mistral-medium-3.5` | `mistral-medium-2604` | Mistral API (OpenAI-compat)   | yes (SDK) |
+| `glm-5.2`            | `glm-5.2`             | Z.ai API (OpenAI-compat)      | yes (SDK) |
+| `kimi-k3`            | `kimi-k3`             | Moonshot API (OpenAI-compat)  | yes (SDK) |
 
 Two slugs differ from their backing id on purpose: Google ships no
 non-preview 3.1 Pro, and Mistral has no literal `mistral-large-3` — we
@@ -83,12 +80,12 @@ so their historical reviews, votes and Elo snapshots remain queryable.
                                                           │
                             ┌───────────────┬─────────────┼──────────────┬───────────────┐
                             │               │             │              │               │
-                    ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌──────▼───────┐
-                    │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  DeepSeek  │ │ Mistral API  │
-                    │              │ │  Studio    │ │    API     │ │    API     │ │              │
-                    │  gpt-5.2     │ │ gemini 3.1 │ │  opus-4.8  │ │ v4-pro     │ │ large-3      │
-                    │  gpt-5.4-mini│ │ /3.6-flash │ │  sonnet-5  │ │ v4-flash   │ │ medium-3.5   │
-                    └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────────┘
+              ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼─────┐ ┌────▼─────┐
+              │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  Mistral   │ │  Z.ai    │ │ Moonshot │
+              │              │ │  Studio    │ │    API     │ │    API     │ │  API     │ │   API    │
+              │ gpt-5.6-terra│ │ gemini 3.8 │ │  sonnet-5  │ │ medium-3.5 │ │ glm-5.2  │ │ kimi-k3  │
+              └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────┘ └──────────┘
+                      (+ DeepSeek API: the V4 Flash LLM-as-judge — judge only, not a system)
                                             (+ Datalab Chandra API for PDF → markdown)
 ```
 
@@ -170,12 +167,14 @@ cp .env.example .env
 pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
 pnpm --filter @reviewarena/api db:seed     # insert review systems
 
-# 4. Provider keys — nothing to deploy, all ten systems are hosted APIs
-#   OPENAI_API_KEY    → gpt-5.2, gpt-5.4-mini
-#   ANTHROPIC_API_KEY → claude-opus-4-8, claude-sonnet-5
-#   GEMINI_API_KEY    → gemini-3.1-pro, gemini-3.6-flash (+ the LLM judge)
-#   DEEPSEEK_API_KEY  → deepseek-v4-pro, deepseek-v4-flash
-#   MISTRAL_API_KEY   → mistral-large-3, mistral-medium-3.5
+# 4. Provider keys — nothing to deploy, all six systems are hosted APIs
+#   GEMINI_API_KEY    → gemini-3.8-flash
+#   OPENAI_API_KEY    → gpt-5.6-terra
+#   ANTHROPIC_API_KEY → claude-sonnet-5
+#   MISTRAL_API_KEY   → mistral-medium-3.5
+#   ZAI_API_KEY       → glm-5.2
+#   MOONSHOT_API_KEY  → kimi-k3
+#   DEEPSEEK_API_KEY  → the LLM-as-judge (DeepSeek V4 Flash), judge only
 #   CHANDRA_API_KEY   → PDF parsing, from https://www.datalab.to
 
 # 5. Run everything
@@ -188,7 +187,7 @@ database** below).
 
 `db:seed` only enables a system when its provider key is present, so a
 partially-filled `.env` gives you a smaller lineup rather than failed
-reviews. The LLM-as-judge needs `GEMINI_API_KEY` and has no mock
+reviews. The LLM-as-judge needs `DEEPSEEK_API_KEY` and has no mock
 fallback.
 
 ### Environment variables
@@ -206,7 +205,7 @@ See [.env.example](.env.example). Required at minimum:
 Optional:
 
 - `RATING_BASELINE_SLUG` — system pinned at 1000 on the Bradley-Terry
-  board (default `gpt-5.2`). BT ratings are only defined up to an additive
+  board (default `claude-sonnet-5`). BT ratings are only defined up to an additive
   constant, so one system fixes the origin. Change it and every BT rating
   renumbers, so pick a high-volume system and leave it: retiring the
   system is fine, since disabled systems keep their battle history.
@@ -345,7 +344,7 @@ estimate where FastChat's own estimate is well-defined:
    the exception.
 
 BT ratings are identified only up to an additive constant, so
-`RATING_BASELINE_SLUG` (default `gpt-5.2`) is pinned at 1000 to keep
+`RATING_BASELINE_SLUG` (default `claude-sonnet-5`) is pinned at 1000 to keep
 snapshots comparable as systems are added and retired — FastChat pins
 `mixtral-8x7b-instruct-v0.1` at 1114 for the same reason. Boards where the
 baseline has not battled are mean-centred instead, recorded per snapshot row

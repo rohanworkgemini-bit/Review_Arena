@@ -35,7 +35,7 @@ const ConfigSchema = z.object({
   // keep their battle history (that is exactly why FastChat's anchor is an
   // old model). Boards where the baseline has not battled mean-centre
   // instead, and record `anchor = 'MEAN'` on the snapshot row.
-  RATING_BASELINE_SLUG: z.string().default("gpt-5.2"),
+  RATING_BASELINE_SLUG: z.string().default("claude-sonnet-5"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 }).superRefine((cfg, ctx) => {
   // Open mode on the Python service means anyone who can reach it can spend

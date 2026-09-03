@@ -38,6 +38,18 @@ import { reviewSystems } from "../src/db/schema.js";
 // Slugs of retired adapters. Disabled (not deleted) so historical
 // reviews / votes / Elo snapshots remain in the DB for thesis analysis.
 const RETIRED_SLUGS = [
+  // 2026-09 six-system study cut: lineup reduced to one system per
+  // provider to match the controlled study design; DeepSeek moved to the
+  // judge role. Rows deleted from the live dev DB (it held no votes);
+  // these entries only matter if an old backup is ever restored.
+  "gpt-5.2",
+  "gpt-5.4-mini",
+  "claude-opus-4-8",
+  "gemini-3.1-pro",
+  "gemini-3.6-flash",
+  "deepseek-v4-pro",
+  "deepseek-v4-flash",
+  "mistral-large-3",
   // Superseded by the 2026-07 lineup refresh (5 providers x 2 tiers).
   "gpt-5.5-pro",            // → gpt-5.4-mini. 50k TPM (10x below every other
                             // OpenAI model), 100-150s buffered TTFT, and
@@ -94,38 +106,29 @@ async function main() {
     config: Record<string, unknown>;
     enabled?: boolean;
   }> = [
-    // ─── OpenAI ────────────────────────────────────────────────────────
+    // ─── The controlled study's six systems (2026-09 lineup cut) ───────
+    // One per provider; DeepSeek deliberately absent — it serves as the
+    // LLM-as-judge (services/review-gen/app/judge.py) with no vendor
+    // overlap against any system under test.
     {
-      slug: "gpt-5.2",
-      name: "GPT-5.2",
+      slug: "gemini-3.8-flash",
+      name: "Gemini 3.8 Flash",
       description:
-        "OpenAI GPT-5.2 (previous-frontier tier) with our zero-shot reviewer " +
-        "prompt. Chosen over GPT-5.5 on cost: $1.75/$14.00 vs $5.00/$30.00 per 1M.",
-      adapterKey: "gpt-5.2",
-      config: { model: "gpt-5.2", use_max_completion_tokens: true },
-      enabled: !!process.env.OPENAI_API_KEY,
+        "Google Gemini 3.8 Flash (current generation) with our zero-shot " +
+        "reviewer prompt.",
+      adapterKey: "gemini-3.8-flash",
+      config: { model: "gemini-3.8-flash", temperature: 0.2 },
+      enabled: !!process.env.GEMINI_API_KEY,
     },
     {
-      slug: "gpt-5.4-mini",
-      name: "GPT-5.4-mini",
-      description: "OpenAI GPT-5.4-mini (small tier) with our zero-shot reviewer prompt.",
-      adapterKey: "gpt-5.4-mini",
-      config: { model: "gpt-5.4-mini", use_max_completion_tokens: true },
-      enabled: !!process.env.OPENAI_API_KEY,
-    },
-    // ─── Anthropic (native SDK, adaptive thinking) ─────────────────────
-    {
-      slug: "claude-opus-4-8",
-      name: "Claude Opus 4.8",
+      slug: "gpt-5.6-terra",
+      name: "GPT-5.6 Terra",
       description:
-        "Anthropic Claude Opus 4.8 (top tier) via the native Anthropic SDK. " +
-        "Adaptive thinking (effort=high) — auto-tuned reasoning depth for " +
-        "peer-review judgment.",
-      adapterKey: "claude-opus-4-8",
-      // Same $5/$25 per 1M as Opus 5 and the same post-4.7 tokenizer, so
-      // this swap changes the model under test, not the cost.
-      config: { model: "claude-opus-4-8", thinking: true },
-      enabled: !!process.env.ANTHROPIC_API_KEY,
+        "OpenAI GPT-5.6 Terra (balanced tier of the 5.6 family) with our " +
+        "zero-shot reviewer prompt.",
+      adapterKey: "gpt-5.6-terra",
+      config: { model: "gpt-5.6-terra", use_max_completion_tokens: true },
+      enabled: !!process.env.OPENAI_API_KEY,
     },
     {
       slug: "claude-sonnet-5",
@@ -137,66 +140,6 @@ async function main() {
       config: { model: "claude-sonnet-5", thinking: true },
       enabled: !!process.env.ANTHROPIC_API_KEY,
     },
-    // ─── Google ────────────────────────────────────────────────────────
-    {
-      slug: "gemini-3.1-pro",
-      name: "Gemini 3.1 Pro",
-      description:
-        "Google Gemini 3.1 Pro (top tier) with our zero-shot reviewer prompt.",
-      adapterKey: "gemini-3.1-pro",
-      // "gemini-3.1-pro-preview" is the ONLY callable id for this tier —
-      // Google ships no non-preview 3.1 Pro. We PIN it so the entire study
-      // uses one model snapshot; switching mid-study would invalidate the
-      // apples-to-apples comparison. Verify currently-callable ids with:
-      //   curl -sS "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" \
-      //     | python3 -c "import json,sys;[print(m['name']) for m in json.load(sys.stdin)['models']]"
-      config: { model: "gemini-3.1-pro-preview", temperature: 0.2 },
-      enabled: !!process.env.GEMINI_API_KEY,
-    },
-    {
-      slug: "gemini-3.6-flash",
-      name: "Gemini 3.6 Flash",
-      description: "Google Gemini 3.6 Flash (fast tier) with our zero-shot reviewer prompt.",
-      adapterKey: "gemini-3.6-flash",
-      config: { model: "gemini-3.6-flash", temperature: 0.2 },
-      enabled: !!process.env.GEMINI_API_KEY,
-    },
-    // ─── DeepSeek (native OpenAI-compatible endpoint) ──────────────────
-    {
-      slug: "deepseek-v4-pro",
-      name: "DeepSeek V4 Pro",
-      description:
-        "DeepSeek V4 Pro zero-shot reviewer via DeepSeek's native " +
-        "OpenAI-compatible endpoint. Strong, low-cost frontier baseline.",
-      adapterKey: "deepseek-v4-pro",
-      config: { model: "deepseek-v4-pro", temperature: 0.2 },
-      enabled: !!process.env.DEEPSEEK_API_KEY,
-    },
-    {
-      slug: "deepseek-v4-flash",
-      name: "DeepSeek V4 Flash",
-      description:
-        "DeepSeek V4 Flash (fast tier) zero-shot reviewer via DeepSeek's " +
-        "OpenAI-compatible endpoint.",
-      adapterKey: "deepseek-v4-flash",
-      config: { model: "deepseek-v4-flash", temperature: 0.2 },
-      enabled: !!process.env.DEEPSEEK_API_KEY,
-    },
-    // ─── Mistral (native OpenAI-compatible endpoint) ───────────────────
-    {
-      slug: "mistral-large-3",
-      name: "Mistral Large 3",
-      description:
-        "Mistral Large 3 (top tier) zero-shot reviewer via Mistral's " +
-        "OpenAI-compatible endpoint.",
-      adapterKey: "mistral-large-3",
-      // Mistral exposes no literal "mistral-large-3" id. The current Large
-      // is "mistral-large-2512" (Dec 2025), which is what the
-      // "mistral-large-latest" alias resolves to. We pin the DATED id so a
-      // silent upgrade mid-study can't invalidate the comparison.
-      config: { model: "mistral-large-2512", temperature: 0.2 },
-      enabled: !!process.env.MISTRAL_API_KEY,
-    },
     {
       slug: "mistral-medium-3.5",
       name: "Mistral Medium 3.5",
@@ -206,9 +149,30 @@ async function main() {
       adapterKey: "mistral-medium-3.5",
       // "mistral-medium-3.5" is callable, but it is an ALIAS that currently
       // resolves to the dated "mistral-medium-2604". Pinning the dated id
-      // for the same snapshot-stability reason as Large above.
+      // so a silent upgrade mid-study can't invalidate the comparison.
       config: { model: "mistral-medium-2604", temperature: 0.2 },
       enabled: !!process.env.MISTRAL_API_KEY,
+    },
+    {
+      slug: "glm-5.2",
+      name: "GLM-5.2",
+      description:
+        "Zhipu GLM-5.2 (744B MoE, open-weight) zero-shot reviewer via " +
+        "Z.ai's OpenAI-compatible endpoint.",
+      adapterKey: "glm-5.2",
+      config: { model: "glm-5.2", temperature: 0.2 },
+      enabled: !!process.env.ZAI_API_KEY,
+    },
+    {
+      slug: "kimi-k3",
+      name: "Kimi K3",
+      description:
+        "Moonshot Kimi K3 (2.8T open-weight reasoning model) zero-shot " +
+        "reviewer via Moonshot's OpenAI-compatible endpoint.",
+      adapterKey: "kimi-k3",
+      // Reasoning model: temperature omitted on purpose (adapter default).
+      config: { model: "kimi-k3" },
+      enabled: !!process.env.MOONSHOT_API_KEY,
     },
   ];
 

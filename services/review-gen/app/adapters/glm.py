@@ -1,25 +1,17 @@
-"""DeepSeek base adapter.
+"""GLM-5.2 reviewer (Zhipu / Z.ai).
 
-Native DeepSeek API access via DeepSeek's OpenAI-compatible endpoint.
-We use the openai SDK pointed at https://api.deepseek.com/v1 — the
-DeepSeek docs explicitly recommend this and their schema matches.
+Z.ai exposes an OpenAI-compatible chat-completions endpoint, so this is
+the same shape as mistral.py: the openai SDK pointed at a different
+base_url. GLM-5.2 (744B MoE, MIT-licensed, released 2026-06-13) is the
+current flagship; the id "glm-5.2" is the documented model parameter.
 
-This is the provider-level base class; the per-system subclasses
-(deepseekv4pro.py, deepseekv4flash.py) only pin a model string and an
-adapter_key.
+Single-file adapter (base + model pin in one) — Z.ai contributes exactly
+one system to the lineup, so a provider base class with one subclass
+would be ceremony.
 
-A dedicated adapter (vs one config-driven generic adapter shared by
-every provider) gives the thesis a clean 1:1 mapping between
-review_systems rows and adapter source, and leaves room for
-DeepSeek-specific behaviour without touching anyone else:
-  - cache-hit pricing (DeepSeek bills cached prefix tokens at a steep
-    discount; logging both separately matters for the cost chapter)
-  - reasoning-mode support when we switch to deepseek-reasoner
-  - any future API quirks specific to DeepSeek
-
-Requires DEEPSEEK_API_KEY in the environment. Falls back loudly if
-missing — no silent mock so a stale leaderboard doesn't accumulate
-fake votes against missing data.
+Requires ZAI_API_KEY in the environment. Raises loudly if missing — no
+silent mock, so a stale leaderboard can't accumulate votes against
+missing data.
 """
 from __future__ import annotations
 
@@ -43,58 +35,53 @@ from app.adapters.base import (
 )
 from app.schemas import ParsedPaper
 
-_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
-
-# The review-form system prompt is built per selected conference in
-# __init__ — see app/conference_scales.py (single source for the form
-# shared by all commercial adapters; only ## Rating varies by venue).
+_ZAI_BASE_URL = "https://api.z.ai/api/paas/v4"
 
 
-class DeepSeekAdapter(Adapter):
-    adapter_key = "deepseek"
+class GLMAdapter(Adapter):
+    adapter_key = "glm-5.2"
 
     def __init__(self, config: dict | None = None) -> None:
         super().__init__(config)
         self._system_prompt = build_system_prompt(
             self.config.get('conference', DEFAULT_CONFERENCE)
         )
-        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        api_key = os.environ.get("ZAI_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "DeepSeekAdapter requires DEEPSEEK_API_KEY. "
-                "Get one at https://platform.deepseek.com/ and add it to .env."
+                "GLMAdapter requires ZAI_API_KEY. "
+                "Get one at https://z.ai/ and add it to .env."
             )
         # Lazy import so the rest of the service starts without the
         # openai SDK installed.
         from openai import OpenAI
 
-        # DeepSeek exposes an OpenAI-compatible endpoint at api.deepseek.com/v1.
-        # Same chat-completions schema, same auth shape — we just point the
-        # client at their base URL instead of OpenAI's.
         self._client = OpenAI(
             api_key=api_key,
-            base_url=_DEEPSEEK_BASE_URL,
+            base_url=_ZAI_BASE_URL,
             max_retries=PROVIDER_MAX_RETRIES,
             timeout=PROVIDER_TIMEOUT_S,
         )
-        self._model = self.config.get("model", "deepseek-v4-pro")
+        self._model = self.config.get("model", "glm-5.2")
         self._temperature = self.config.get("temperature", 0.2)
-        # DeepSeek V4 has a 128k context window per their docs.
-        self._context_window = int(self.config.get("context_window", 128_000))
+        # Z.ai documents a 1M-token window for GLM-5.2; logged for
+        # transparency, not used to size input.
+        self._context_window = int(self.config.get("context_window", 1_000_000))
 
     def _kwargs(self, prompt: str, *, stream: bool) -> dict:
-        return {
+        kwargs: dict = {
             "model": self._model,
             "messages": [
                 {"role": "system", "content": self._system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            # DeepSeek defaults max_tokens to 4k when omitted — sending
-            # the provider maximum so the model is effectively uncapped.
-            "max_tokens": 8_192,
-            "temperature": self._temperature,
+            # max_tokens omitted on purpose — uncapped output (fairness:
+            # caps removed by design).
             "stream": stream,
         }
+        if self._temperature is not None:
+            kwargs["temperature"] = self._temperature
+        return kwargs
 
     def _metrics(self, prompt: str, raw: str) -> GenerationMetrics:
         return GenerationMetrics(
@@ -102,7 +89,7 @@ class DeepSeekAdapter(Adapter):
             output_tokens=count_tokens(raw),
             context_window=self._context_window,
             fair_input_tokens=count_tokens(prompt),
-            fair_output_tokens=0,  # 0 = uncapped (8192 = provider max)
+            fair_output_tokens=0,  # 0 = uncapped
         )
 
     def generate(self, paper: ParsedPaper) -> GenerationResult:
