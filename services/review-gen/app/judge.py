@@ -21,6 +21,7 @@ Methodology references:
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import time
@@ -254,7 +255,21 @@ def _one_judge_pass(
                 user_prompt=user_prompt,
                 model=model,
             )
-        except Exception as e:  # noqa: BLE001 — retry on anything transient-looking
+        except Exception as e:  # noqa: BLE001 — classified below
+            # Only transient failures earn a retry. Auth errors, unknown
+            # models, and context-length rejections fail identically on
+            # every attempt — retrying them just burns ~15s of backoff per
+            # pass while masking a hard config error as flakiness.
+            transient = isinstance(e, json.JSONDecodeError) or bool(
+                re.search(
+                    r"rate.?limit|429|timeout|timed?.?out|connection|unavailable|"
+                    r"overloaded|5\d\d|resource.?exhausted",
+                    str(e),
+                    re.I,
+                )
+            )
+            if not transient:
+                raise
             last_err = e
             if attempt < JUDGE_RETRY_MAX - 1:
                 # Exponential backoff: 1s, 2s, 4s, 8s. Caps total wait

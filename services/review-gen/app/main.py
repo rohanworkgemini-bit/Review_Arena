@@ -13,6 +13,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import os
@@ -135,7 +136,33 @@ def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
 
 
+# Longest tolerated silence between streamed events before the stream is
+# declared dead (matches the Node bridge's idle watchdog).
+STREAM_IDLE_TIMEOUT_S = float(os.environ.get("STREAM_IDLE_TIMEOUT_S", "120"))
+
+# Reject absurd request bodies before reading them: the canonical paper text
+# rides inside /generate | /stream-generate | /judge JSON, so legitimate
+# requests are large-ish, but nothing sane exceeds this — and uvicorn itself
+# imposes no limit at all.
+MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(30 * 1024 * 1024)))
+
 app = FastAPI(title="ReviewArena · review-gen", version="0.1.0")
+
+
+@app.middleware("http")
+async def _reject_oversized_bodies(request: Request, call_next):
+    cl = request.headers.get("content-length")
+    if cl is not None:
+        try:
+            if int(cl) > MAX_BODY_BYTES:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": f"request body exceeds {MAX_BODY_BYTES} bytes"},
+                )
+        except ValueError:
+            pass
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -306,12 +333,13 @@ async def stream_generate(req: GenerateRequest, request: Request):
     async def event_source():
         import json as _json
         start = time.perf_counter()
+        iterator = None
         try:
             # Run the (synchronous) adapter generator in a worker thread
             # via an iterator hop so we can interleave is_disconnected()
             # checks on the asyncio loop. The hop is cheap — one
             # run_in_threadpool per emitted event.
-            iterator = instance.generate_stream(req.paper)
+            iterator = instance.generate_stream(req.paper)  # noqa: F841 — closed in finally
             sentinel = object()
 
             def _next():
@@ -327,7 +355,27 @@ async def stream_generate(req: GenerateRequest, request: Request):
                         req.adapter_key,
                     )
                     return
-                evt = await run_in_threadpool(_next)
+                # Idle deadline on the hop itself: while _next blocks in the
+                # worker thread, is_disconnected() is never polled, so a
+                # quiet model used to hold this thread (and bill tokens)
+                # indefinitely for a browser that left long ago. Provider
+                # timeouts bound each SDK attempt; this bounds the gap the
+                # caller will tolerate between events — mirroring the Node
+                # bridge's own 120s idle watchdog.
+                try:
+                    evt = await asyncio.wait_for(
+                        run_in_threadpool(_next), timeout=STREAM_IDLE_TIMEOUT_S
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "stream-generate idle timeout after %ss (%s)",
+                        STREAM_IDLE_TIMEOUT_S, req.adapter_key,
+                    )
+                    payload = _json.dumps(
+                        {"message": f"model produced no output for {STREAM_IDLE_TIMEOUT_S}s (timeout)"}
+                    )
+                    yield f"event: error\ndata: {payload}\n\n"
+                    return
                 if evt is sentinel:
                     return
                 if evt.type == "token":
@@ -354,6 +402,18 @@ async def stream_generate(req: GenerateRequest, request: Request):
             logger.exception("stream-generate %s failed", req.adapter_key)
             payload = _json.dumps({"message": str(e)}, ensure_ascii=False)
             yield f"event: error\ndata: {payload}\n\n"
+
+        finally:
+            # Abandoning a live provider stream without close() leaves the
+            # HTTP response to nondeterministic GC — and some SDKs keep
+            # billing until the connection actually drops.
+            if iterator is not None:
+                close = getattr(iterator, "close", None)
+                if close is not None:
+                    try:
+                        await run_in_threadpool(close)
+                    except Exception:  # noqa: BLE001 — best-effort cleanup
+                        logger.debug("iterator close failed", exc_info=True)
 
     return StreamingResponse(
         event_source(),
