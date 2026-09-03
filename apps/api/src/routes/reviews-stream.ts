@@ -14,7 +14,7 @@ import { reviews } from "../db/schema.js";
 import { db } from "../db/client.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { JudgeClient } from "../clients/judge-client.js";
-import { renderPaperText, scoreOneReview } from "../pipeline/score-paper.js";
+import { renderPaperText, scorePairIfReady } from "../pipeline/score-paper.js";
 import { logger } from "../logger.js";
 
 // SSE frame schemas for type safety
@@ -281,7 +281,9 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
               const paperText = renderPaperText(
                 paperStructure as unknown as Parameters<typeof renderPaperText>[0],
               );
-              void scoreOneReview(review.id, evt.review, paperText, judge).catch(
+              // Pairwise: no-ops until the pair's other review is also
+              // COMPLETED; the second completion wins the claim and judges.
+              void scorePairIfReady(review.paperId, judge, paperText).catch(
                 (err: unknown) => {
                   logger.warn(
                     { err, reviewId: review.id },

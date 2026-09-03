@@ -33,6 +33,21 @@ async function sweepOnce(): Promise<void> {
   if (swept.length > 0) {
     logger.warn({ count: swept.length, ids: swept.map((r) => r.id) }, "stuck_reviews_swept");
   }
+
+  // Same idea for the pairwise judge claim: RUNNING is held only while a
+  // live scorePairIfReady run owns the pair. A crash mid-judge strands it,
+  // which would block any future claim of that pair forever.
+  const judgeSwept = await db
+    .update(reviews)
+    .set({ judgeStatus: "FAILED", updatedAt: new Date() })
+    .where(and(eq(reviews.judgeStatus, "RUNNING"), lt(reviews.updatedAt, cutoff)))
+    .returning({ id: reviews.id });
+  if (judgeSwept.length > 0) {
+    logger.warn(
+      { count: judgeSwept.length, ids: judgeSwept.map((r) => r.id) },
+      "stuck_judge_claims_swept",
+    );
+  }
 }
 
 export function startStuckReviewSweeper(): () => void {

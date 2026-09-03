@@ -50,6 +50,10 @@ export const judgeStatusEnum = pgEnum("judge_status", [
   "COMPLETE",
   "PARTIAL",
   "FAILED",
+  // Claimed by an in-flight pairwise judge run (both reviews of a pair
+  // are claimed atomically so concurrent completion events can't judge
+  // the same pair twice). The sweeper fails rows stuck here.
+  "RUNNING",
 ]);
 
 export const voteWinnerEnum = pgEnum("vote_winner", ["A", "B", "TIE"]);
@@ -395,6 +399,46 @@ export const metricScores = pgTable(
       t.referenceType,
     ),
     kindIdx: index("metric_scores_kind_idx").on(t.kind),
+  }),
+);
+
+// ─── Pairwise judge verdicts ──────────────────────────────────────────────
+
+export const judgePreferenceEnum = pgEnum("judge_preference", ["A", "B", "TIE"]);
+
+// One row per judged pair: the LLM judge reads the paper + BOTH reviews in
+// one request (order-swapped double pass, Zheng et al. 2023 position-bias
+// control) and emits the same construct humans give — a per-dimension
+// A/B/TIE preference. "A"/"B" are relative to reviewAId/reviewBId ON THIS
+// ROW; the reveal route re-maps them onto the vote's blinded sides. The
+// per-review 1-10 scores from the same request still land in metric_scores
+// (radar chart + fairness filter unchanged).
+export const judgeVerdicts = pgTable(
+  "judge_verdicts",
+  {
+    id: cuid(),
+    paperId: text("paper_id")
+      .notNull()
+      .references(() => papers.id, { onDelete: "cascade" }),
+    reviewAId: text("review_a_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    reviewBId: text("review_b_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    overallPreference: judgePreferenceEnum("overall_preference").notNull(),
+    // {DIMENSION: "A" | "B" | "TIE"} for the 8 vote dimensions.
+    dimensionPreferences: jsonb("dimension_preferences").notNull(),
+    // Audit trail: raw per-pass payloads + passes_used (2 = swap-consistent;
+    // 1 = single valid pass, position-bias control unavailable — the
+    // analysis can filter on this).
+    meta: jsonb("meta"),
+    judgeModel: text("judge_model").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pairUk: uniqueIndex("judge_verdicts_pair_uk").on(t.reviewAId, t.reviewBId),
+    paperIdx: index("judge_verdicts_paper_idx").on(t.paperId),
   }),
 );
 

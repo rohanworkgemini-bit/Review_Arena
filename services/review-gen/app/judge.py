@@ -308,6 +308,43 @@ def _one_judge_pass(
 DEFAULT_JUDGE_MODEL = "deepseek-v4-flash"
 
 
+def _client_for(model: str) -> Any:
+    """Build the provider client for a judge model (None on the Gemini
+    path — it uses the module-global google.generativeai). Raises if the
+    required key is missing; no mock fallback."""
+    if _is_gemini(model):
+        if not os.environ.get("GEMINI_API_KEY"):
+            raise RuntimeError(
+                f"judge with model={model!r} requires GEMINI_API_KEY "
+                "in the environment. There is no mock fallback."
+            )
+        return None
+    if _is_deepseek(model):
+        # DeepSeek's OpenAI-compatible endpoint: same chat-completions +
+        # response_format shape, different base_url and key.
+        if not os.environ.get("DEEPSEEK_API_KEY"):
+            raise RuntimeError(
+                f"judge with model={model!r} requires DEEPSEEK_API_KEY "
+                "in the environment. There is no mock fallback."
+            )
+        from openai import OpenAI
+        # Explicit deadline: the SDK default is 600s/attempt, which under a
+        # burst quietly pins threadpool threads (see adapters/base.py).
+        return OpenAI(
+            api_key=os.environ["DEEPSEEK_API_KEY"],
+            base_url="https://api.deepseek.com/v1",
+            timeout=180.0,
+            max_retries=3,
+        )
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError(
+            f"judge with model={model!r} requires OPENAI_API_KEY "
+            "in the environment. There is no mock fallback."
+        )
+    from openai import OpenAI
+    return OpenAI(timeout=180.0, max_retries=3)
+
+
 def judge_review(
     review_text: str,
     paper_text: str,
@@ -324,39 +361,7 @@ def judge_review(
     reduce stochasticity (even at temperature=0 the model is not
     perfectly deterministic, ~±0.5 variance observed).
     """
-    using_gemini = _is_gemini(model)
-    if using_gemini:
-        if not os.environ.get("GEMINI_API_KEY"):
-            raise RuntimeError(
-                f"judge_review with model={model!r} requires GEMINI_API_KEY "
-                "in the environment. There is no mock fallback."
-            )
-        client = None  # not used on the Gemini path
-    elif _is_deepseek(model):
-        # DeepSeek's OpenAI-compatible endpoint: same chat-completions +
-        # response_format shape, different base_url and key.
-        if not os.environ.get("DEEPSEEK_API_KEY"):
-            raise RuntimeError(
-                f"judge_review with model={model!r} requires DEEPSEEK_API_KEY "
-                "in the environment. There is no mock fallback."
-            )
-        from openai import OpenAI
-        # Explicit deadline: the SDK default is 600s/attempt, which under a
-        # burst quietly pins threadpool threads (see adapters/base.py).
-        client = OpenAI(
-            api_key=os.environ["DEEPSEEK_API_KEY"],
-            base_url="https://api.deepseek.com/v1",
-            timeout=180.0,
-            max_retries=3,
-        )
-    else:
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise RuntimeError(
-                f"judge_review with model={model!r} requires OPENAI_API_KEY "
-                "in the environment. There is no mock fallback."
-            )
-        from openai import OpenAI
-        client = OpenAI(timeout=180.0, max_retries=3)
+    client = _client_for(model)
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)
 
@@ -419,4 +424,216 @@ def judge_review(
     return JudgeResult(
         overall_score=overall,
         dimension_scores=dimension_scores,
+    )
+
+
+# ─── Pairwise judging (2026-09-04) ─────────────────────────────────────────
+#
+# The judge reads the paper + BOTH reviews in one request and emits the
+# same construct the human raters give: a per-dimension A/B/TIE preference
+# (plus per-review 1-10 scores for the radar chart, from the same call).
+# Two calls per pair, with the review order SWAPPED between them — the
+# position-bias control from Zheng et al. 2023 (MT-Bench): a verdict only
+# stands where both orderings agree; disagreement records a TIE.
+#
+# Cost: 2 × (paper + both reviews) ≈ half the input tokens of the previous
+# pointwise scheme (2 reviews × 2 passes, paper sent 4 times), and the
+# shared paper prefix gets provider-side context caching on the second call.
+
+
+@dataclass
+class PairJudgeResult:
+    """Verdict for one (review_a, review_b) pair, in the caller's A/B terms."""
+
+    overall_preference: str                    # "A" | "B" | "TIE"
+    dimension_preferences: dict[str, str]      # DIM -> "A" | "B" | "TIE"
+    review_a: JudgeResult                      # scores averaged over passes
+    review_b: JudgeResult
+    passes_used: int                           # 2 = swap-consistent; 1 = degraded
+    raw_passes: list[dict]                     # audit trail for the meta column
+
+
+def _build_pair_prompts(
+    paper_text: str, first_review: str, second_review: str
+) -> tuple[str, str]:
+    """System + user prompt for one pairwise pass. The caller controls
+    which real review is REVIEW 1 vs REVIEW 2 (order is swapped between
+    passes); the model only ever sees positional labels."""
+    system_prompt = (
+        "You are a strict meta-reviewer comparing two automated peer reviews "
+        "of the same paper. Given the paper and the two candidate reviews, "
+        "return a JSON object with this exact shape:\n"
+        "{\n"
+        '  "reasoning_per_dimension": {DIM: str (1-2 sentences comparing the two reviews) for DIM in ['
+        f'{",".join(repr(d) for d in _DIMENSIONS)}'
+        "]},\n"
+        '  "preference_per_dimension": {DIM: "1" | "2" | "TIE" for the same DIMs},\n'
+        '  "overall_preference": "1" | "2" | "TIE",\n'
+        '  "review_1_scores": {"dimension_scores": {DIM: float in [1,10]}, "overall_score": float in [1,10]},\n'
+        '  "review_2_scores": {"dimension_scores": {DIM: float in [1,10]}, "overall_score": float in [1,10]}\n'
+        "}\n\n"
+        "Dimension definitions — judge each against exactly this rubric:\n"
+        + "".join(f"- {dim}: {_DIMENSION_RUBRIC[dim]}\n" for dim in _DIMENSIONS)
+        + "\n"
+        "Methodology — follow in order:\n"
+        "1. For each dimension, write 1-2 sentences of comparative reasoning "
+        "grounded in specific parts of both reviews and the paper.\n"
+        '2. Then pick "1", "2", or "TIE" per dimension, consistent with your '
+        "reasoning. Prefer TIE only when the reviews are genuinely "
+        "indistinguishable on that dimension.\n"
+        "3. Score each review 1-10 per dimension and overall (1=very poor, "
+        "5=adequate, 8=strong, 10=exemplary; overall is holistic, NOT a "
+        "mean). For EVERY dimension a higher score means better — including "
+        "FALSE_CLAIMS, where 10 means no false or contradictory claims.\n"
+        "4. Judge content, not presentation order: the labels 1 and 2 are "
+        "arbitrary and must not influence any preference.\n"
+        "5. Do NOT reward verbosity. Length without substance should LOWER "
+        "COMPLETENESS_COVERAGE and CRITIQUE_CLARITY, and must never win a "
+        "dimension by itself."
+    )
+    user_prompt = (
+        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n"
+        f"=== REVIEW 1 ===\n{first_review[:REVIEW_CHAR_CAP]}\n\n"
+        f"=== REVIEW 2 ===\n{second_review[:REVIEW_CHAR_CAP]}\n"
+    )
+    return system_prompt, user_prompt
+
+
+def _norm_pref(value: Any) -> str | None:
+    """Accept '1'/'2'/'TIE' (and ints 1/2) → normalized, else None."""
+    s = str(value).strip().upper()
+    if s in ("1", "2", "TIE"):
+        return s
+    return None
+
+
+def _valid_scores_block(block: Any) -> bool:
+    if not isinstance(block, dict):
+        return False
+    try:
+        overall = float(block["overall_score"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not 1.0 <= overall <= 10.0:
+        return False
+    dims = block.get("dimension_scores")
+    if not isinstance(dims, dict):
+        return False
+    for dim in _DIMENSIONS:
+        try:
+            v = float(dims[dim])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not 1.0 <= v <= 10.0:
+            return False
+    return True
+
+
+def _valid_pair_pass(d: dict) -> bool:
+    prefs = d.get("preference_per_dimension")
+    if not isinstance(prefs, dict):
+        return False
+    for dim in _DIMENSIONS:
+        if _norm_pref(prefs.get(dim)) is None:
+            return False
+    if _norm_pref(d.get("overall_preference")) is None:
+        return False
+    return _valid_scores_block(d.get("review_1_scores")) and _valid_scores_block(
+        d.get("review_2_scores")
+    )
+
+
+def judge_pair(
+    review_a_text: str,
+    review_b_text: str,
+    paper_text: str,
+    *,
+    model: str = DEFAULT_JUDGE_MODEL,
+) -> PairJudgeResult:
+    """Compare two reviews of one paper. Two order-swapped passes; a
+    preference stands only where both orderings agree (else TIE). Raises
+    RuntimeError if no pass returns a valid payload."""
+    client = _client_for(model)
+
+    # (first_review, second_review, position of review A in this pass)
+    orders: list[tuple[str, str, str]] = [
+        (review_a_text, review_b_text, "1"),  # pass 0: A is REVIEW 1
+        (review_b_text, review_a_text, "2"),  # pass 1: A is REVIEW 2
+    ]
+
+    valid: list[tuple[dict, str]] = []  # (payload, a_position)
+    raw_passes: list[dict] = []
+    for first, second, a_pos in orders:
+        system_prompt, user_prompt = _build_pair_prompts(paper_text, first, second)
+        try:
+            data = _one_judge_pass(
+                client,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                model=model,
+            )
+        except RuntimeError as e:
+            logger.warning("pairwise judge pass (A as %s) failed: %s", a_pos, e)
+            continue
+        raw_passes.append({"a_position": a_pos, "payload": data})
+        if _valid_pair_pass(data):
+            valid.append((data, a_pos))
+        else:
+            logger.warning(
+                "discarded pairwise judge pass (A as %s): missing or "
+                "out-of-range fields", a_pos,
+            )
+
+    if not valid:
+        raise RuntimeError("both pairwise judge passes failed or returned invalid payloads")
+
+    def to_ab(pref: str, a_pos: str) -> str:
+        """'1'/'2'/'TIE' in pass coordinates → 'A'/'B'/'TIE'."""
+        if pref == "TIE":
+            return "TIE"
+        return "A" if pref == a_pos else "B"
+
+    # Preferences: agreement across passes, else TIE. With a single valid
+    # pass the verdict is that pass alone (passes_used=1 marks the missing
+    # position-bias control for the analysis).
+    per_pass_dim: list[dict[str, str]] = []
+    per_pass_overall: list[str] = []
+    for data, a_pos in valid:
+        per_pass_dim.append({
+            dim: to_ab(_norm_pref(data["preference_per_dimension"][dim]) or "TIE", a_pos)
+            for dim in _DIMENSIONS
+        })
+        per_pass_overall.append(to_ab(_norm_pref(data["overall_preference"]) or "TIE", a_pos))
+
+    def settle(values: list[str]) -> str:
+        return values[0] if all(v == values[0] for v in values) else "TIE"
+
+    dimension_preferences = {
+        dim: settle([p[dim] for p in per_pass_dim]) for dim in _DIMENSIONS
+    }
+    overall_preference = settle(per_pass_overall)
+
+    # Scores: average each review's scores over the valid passes, mapping
+    # positions back to A/B per pass.
+    def scores_for(side: str) -> JudgeResult:
+        overalls: list[float] = []
+        dims: dict[str, list[float]] = {dim: [] for dim in _DIMENSIONS}
+        for data, a_pos in valid:
+            pos = a_pos if side == "A" else ("2" if a_pos == "1" else "1")
+            block = data[f"review_{pos}_scores"]
+            overalls.append(float(block["overall_score"]))
+            for dim in _DIMENSIONS:
+                dims[dim].append(float(block["dimension_scores"][dim]))
+        return JudgeResult(
+            overall_score=sum(overalls) / len(overalls),
+            dimension_scores={dim: sum(v) / len(v) for dim, v in dims.items()},
+        )
+
+    return PairJudgeResult(
+        overall_preference=overall_preference,
+        dimension_preferences=dimension_preferences,
+        review_a=scores_for("A"),
+        review_b=scores_for("B"),
+        passes_used=len(valid),
+        raw_passes=raw_passes,
     )

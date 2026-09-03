@@ -4,7 +4,7 @@ import { db } from "../db/client.js";
 import { reviews, reviewSystems, type Paper, type ReviewSystem } from "../db/schema.js";
 import { ReviewGenClient } from "../clients/review-gen-client.js";
 import { JudgeClient } from "../clients/judge-client.js";
-import { renderPaperText, scoreOneReview } from "./score-paper.js";
+import { renderPaperText, scorePairIfReady } from "./score-paper.js";
 import { logger } from "../logger.js";
 
 // Fan out review generation to every enabled ReviewSystem for a given paper.
@@ -132,17 +132,17 @@ async function generateOne(
       })
       .where(eq(reviews.id, reviewId));
 
-    // Fire judging now, in the background. The review is COMPLETED in the DB
-    // so /pair can already serve it; judging just populates the MetricScores
-    // that the reveal screen polls for. Running per-review here (rather than
-    // after all adapters finish) lets judging overlap with the remaining slow
-    // generations — saves ~tens of seconds end-to-end.
+    // Fire pairwise judging now, in the background. The review is COMPLETED
+    // in the DB so /pair can already serve it; the judge compares both
+    // reviews in one run, so this no-ops until the pair's OTHER review also
+    // completes — whichever completion event lands second wins the claim
+    // and judges (the race is settled by scorePairIfReady's row lock).
     if (judge && paperText) {
-      void scoreOneReview(reviewId, result.review, paperText, judge).catch(
+      void scorePairIfReady(paper.id, judge, paperText).catch(
         (err) =>
           logger.warn(
             { err, reviewId, paperId: paper.id, adapter: system.adapterKey },
-            "judge failed for review; reveal will show no judge scores",
+            "pairwise judge failed; reveal will show no judge verdict",
           ),
       );
     }

@@ -47,9 +47,17 @@ export const RevealReviewSchema = z.object({
   judgeDimensions: z.record(z.number()).nullable(),
 });
 
+// Pairwise judge verdict, mapped onto this vote's blinded sides.
+export const RevealJudgeVerdictSchema = z.object({
+  overall: z.enum(["A", "B", "TIE"]),
+  dimensions: z.record(z.enum(["A", "B", "TIE"])),
+  passesUsed: z.number().int().min(1).max(2),
+});
+
 export const RevealResponseSchema = z.object({
   reviewA: RevealReviewSchema,
   reviewB: RevealReviewSchema,
+  judgeVerdict: RevealJudgeVerdictSchema.nullable(),
 });
 
 export type RevealResponse = z.infer<typeof RevealResponseSchema>;

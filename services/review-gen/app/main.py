@@ -48,7 +48,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.judge import DEFAULT_JUDGE_MODEL, judge_review
+from app.judge import DEFAULT_JUDGE_MODEL, judge_pair, judge_review
 from app.analytics import topic_model, word_frequencies
 from app.parsing import (
     Arxiv2MdError,
@@ -443,6 +443,35 @@ def judge(req: JudgeRequest) -> dict:
     return {
         "overall_score": result.overall_score,
         "dimension_scores": result.dimension_scores,
+    }
+
+
+class JudgePairRequest(BaseModel):
+    review_a: str
+    review_b: str
+    paper_text: str
+    model: str = DEFAULT_JUDGE_MODEL
+
+
+@app.post("/judge-pair", dependencies=[Depends(verify_api_key)])
+def judge_pair_endpoint(req: JudgePairRequest) -> dict:
+    """Pairwise verdict: paper + both reviews in one request per pass, two
+    order-swapped passes (position-bias control). 'A'/'B' in the response
+    refer to review_a/review_b of THIS request."""
+    result = judge_pair(req.review_a, req.review_b, req.paper_text, model=req.model)
+    return {
+        "overall_preference": result.overall_preference,
+        "dimension_preferences": result.dimension_preferences,
+        "review_a": {
+            "overall_score": result.review_a.overall_score,
+            "dimension_scores": result.review_a.dimension_scores,
+        },
+        "review_b": {
+            "overall_score": result.review_b.overall_score,
+            "dimension_scores": result.review_b.dimension_scores,
+        },
+        "passes_used": result.passes_used,
+        "raw_passes": result.raw_passes,
     }
 
 

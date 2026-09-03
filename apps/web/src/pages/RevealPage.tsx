@@ -237,6 +237,49 @@ export function RevealPage() {
               <span className="inline-block h-2.5 w-2.5 bg-graphite" /> Review B
             </span>
           </div>
+
+          {detail?.judgeVerdict && (
+            <div className="mt-5 border-t border-dashed border-rule2 pt-4">
+              <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
+                Judge verdict (same A/B comparison you made)
+              </div>
+              <p className="mb-3 text-sm">
+                {detail.judgeVerdict.overall === "TIE" ? (
+                  <>The judge calls it a tie overall.</>
+                ) : (
+                  <>
+                    The judge preferred{" "}
+                    <span className="font-medium">
+                      Review {detail.judgeVerdict.overall}
+                      {" — "}
+                      {detail.judgeVerdict.overall === "A"
+                        ? header.reviewA.systemName
+                        : header.reviewB.systemName}
+                    </span>{" "}
+                    overall.
+                  </>
+                )}{" "}
+                {detail.judgeVerdict.passesUsed < 2 && (
+                  <span className="text-graphite">
+                    (single-pass verdict; order-swap check unavailable)
+                  </span>
+                )}
+              </p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[11px] sm:grid-cols-4">
+                {VOTE_DIMENSIONS.map((d) => {
+                  const p = detail.judgeVerdict!.dimensions[d];
+                  return (
+                    <span key={d} className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-graphite">{DIMENSION_LABELS[d]}</span>
+                      <span className={p === "TIE" ? "text-graphite" : "font-medium"}>
+                        {p === "TIE" ? "=" : p}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

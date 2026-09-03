@@ -1,99 +1,176 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { metricScores, papers, reviews } from "../db/schema.js";
+import { judgeVerdicts, metricScores, papers, reviews } from "../db/schema.js";
 import { DEFAULT_JUDGE_MODEL, JudgeClient } from "../clients/judge-client.js";
+import type { PairJudgeResult } from "../clients/judge-client.js";
 import { logger } from "../logger.js";
 
-// Backfill MetricScore rows (LLM-judge overall + per-dimension). Two entry
-// points:
+// Pairwise LLM-judge pipeline (2026-09-04, replacing per-review pointwise
+// scoring; changed pre-study so all collected data is one judging regime).
 //
-//   scoreOneReview()  — called by the orchestrator the moment a single review
-//                       is marked COMPLETED, so judging runs concurrently with
-//                       the remaining adapters instead of after them.
-//   scorePaper()      — paper-wide re-score, used by the admin endpoint when
-//                       a manual re-judge is requested.
+// The judge reads the paper + BOTH reviews in one request and returns the
+// same construct human raters give — an A/B/TIE preference per dimension —
+// plus per-review 1-10 scores from the same call. Two order-swapped passes
+// control position bias (Zheng et al. 2023); the paper is sent twice per
+// pair instead of four times, halving judge input cost.
 //
-// Both upsert MetricScores; they're safe to run repeatedly on the same review.
+// Entry points:
+//   scorePairIfReady() — fired whenever a review completes. Claims the
+//                        paper's pair atomically (judge_status RUNNING) so
+//                        the two completion events racing each other can't
+//                        judge the same pair twice; the loser sees the
+//                        claim and returns. No-ops until BOTH reviews of
+//                        the pair are COMPLETED.
+//   scorePaper()       — manual re-judge (admin endpoint / backfill):
+//                        resets the pair's judge status and re-runs.
+//
+// Persisted per pair: one judge_verdicts row (preferences relative to its
+// review_a_id/review_b_id) + the familiar per-review LLM_JUDGE_OVERALL
+// metric rows, so the reveal radar and the fairness filter are unchanged.
 
 /**
- * Judge one review and persist its MetricScores. Throws on judge failure
- * (after retry); callers decide whether to swallow + log.
+ * Judge the paper's pair if both reviews are COMPLETED and unclaimed.
+ * Silently returns when the pair isn't ready or another run owns it.
+ * Throws on judge failure (after retries); callers log-and-swallow.
  */
-export async function scoreOneReview(
-  reviewId: string,
-  structured: unknown,
-  paperText: string,
+export async function scorePairIfReady(
+  paperId: string,
   judge: JudgeClient,
+  paperTextArg?: string,
 ): Promise<void> {
-  const start = Date.now();
-  // Idempotence guard: SSE reconnects can fire scoreOneReview twice for the
-  // same review. A second run would double the judge cost, and its failure
-  // used to stamp FAILED over a review that already had valid scores
-  // (observed live 2026-09-04). Judged means judged.
-  const existing = await db.query.reviews.findFirst({
-    where: eq(reviews.id, reviewId),
-    columns: { judgeStatus: true },
+  // Atomic claim. FOR UPDATE serializes the two completion events that
+  // race when both reviews finish near-simultaneously: the winner flips
+  // both rows PENDING → RUNNING and judges; the loser sees non-PENDING
+  // rows and returns.
+  const claimed = await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: reviews.id,
+        status: reviews.status,
+        judgeStatus: reviews.judgeStatus,
+        structured: reviews.structured,
+        createdAt: reviews.createdAt,
+      })
+      .from(reviews)
+      .where(eq(reviews.paperId, paperId))
+      .for("update");
+
+    const completed = rows
+      .filter((r) => r.status === "COMPLETED")
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    // Judge the paper's newest generation pair. Legacy papers can carry
+    // older review rows; the last two by creation time are the live pair.
+    const pair = completed.slice(-2);
+    if (pair.length < 2) return null;
+    if (!pair.every((r) => r.judgeStatus === "PENDING")) return null;
+
+    await tx
+      .update(reviews)
+      .set({ judgeStatus: "RUNNING", updatedAt: new Date() })
+      .where(inArray(reviews.id, pair.map((r) => r.id)));
+    return pair;
   });
-  if (existing?.judgeStatus === "COMPLETE") return;
-  const text = renderReviewText(structured);
-  let judged;
+  if (!claimed) return;
+
+  const [a, b] = claimed as [typeof claimed[number], typeof claimed[number]];
+  const start = Date.now();
+
+  const paperText = paperTextArg ?? (await loadPaperText(paperId));
+  const textA = renderReviewText(a.structured);
+  const textB = renderReviewText(b.structured);
+
+  let verdict: PairJudgeResult;
   try {
-    judged = await judgeWithRetry(judge, text, paperText);
+    verdict = await judgePairWithRetry(judge, textA, textB, paperText);
   } catch (err) {
-    // Record the failure on the review row: the fairness filter excludes
-    // judge-FAILED comparisons from the leaderboard, which only works if
-    // failures are actually written down. Never clobber a COMPLETE row —
-    // a concurrent duplicate run's failure must not erase real scores.
+    // Written down so the fairness filter can exclude the comparison —
+    // but only over our own claim, never over a COMPLETE row.
     await db
       .update(reviews)
       .set({ judgeStatus: "FAILED", updatedAt: new Date() })
-      .where(and(eq(reviews.id, reviewId), ne(reviews.judgeStatus, "COMPLETE")))
+      .where(
+        and(
+          inArray(reviews.id, [a.id, b.id]),
+          eq(reviews.judgeStatus, "RUNNING"),
+        ),
+      )
       .catch(() => {/* best effort */});
     throw err;
   }
-  const elapsed = Date.now() - start;
+
   logger.info(
-    { reviewId, overallScore: judged.overall_score, elapsed_ms: elapsed },
-    "judge_scoring_complete",
+    {
+      paperId,
+      overallPreference: verdict.overall_preference,
+      passesUsed: verdict.passes_used,
+      elapsed_ms: Date.now() - start,
+    },
+    "judge_pair_complete",
   );
 
-  // Metrics upsert via insert + ON CONFLICT DO UPDATE. The 8 per-dimension
-  // judge scores live in meta on the LLM_JUDGE_OVERALL row rather than as
-  // separate metric_kind enum values — the reveal page only ever needs them
-  // alongside the overall score, so one jsonb payload is the right grain.
-  //
-  // review_chars / review_words are recorded so post-hoc analysis can do
-  // length-controlled scoring (AlpacaEval-style logistic regression on
-  // length to factor out verbosity bias). Free to capture, makes the
-  // dataset defensible against "did longer reviews win?" critique.
-  const reviewChars = text.length;
-  const reviewWords = text.split(/\s+/).filter((w) => w.length > 0).length;
+  await persistPairVerdict(paperId, a.id, b.id, textA, textB, verdict);
+}
 
+async function persistPairVerdict(
+  paperId: string,
+  reviewAId: string,
+  reviewBId: string,
+  textA: string,
+  textB: string,
+  verdict: PairJudgeResult,
+): Promise<void> {
+  // Per-review metric rows keep their historical shape (radar chart,
+  // leaderboard filter and analysis all read them unchanged), with
+  // pairwise provenance added to meta. review_chars / review_words stay
+  // recorded for length-controlled analysis (AlpacaEval-style).
+  const sides = [
+    { reviewId: reviewAId, text: textA, scores: verdict.review_a },
+    { reviewId: reviewBId, text: textB, scores: verdict.review_b },
+  ];
+  for (const side of sides) {
+    const meta = {
+      judge_model: DEFAULT_JUDGE_MODEL,
+      dimension_scores: side.scores.dimension_scores,
+      review_chars: side.text.length,
+      review_words: side.text.split(/\s+/).filter((w) => w.length > 0).length,
+      pairwise: true,
+      passes_used: verdict.passes_used,
+    };
+    await db
+      .insert(metricScores)
+      .values({
+        reviewId: side.reviewId,
+        kind: "LLM_JUDGE_OVERALL",
+        referenceType: "NONE",
+        value: side.scores.overall_score,
+        meta,
+      })
+      .onConflictDoUpdate({
+        target: [metricScores.reviewId, metricScores.kind, metricScores.referenceType],
+        set: { value: side.scores.overall_score, meta, computedAt: new Date() },
+      });
+  }
+
+  // One verdict row per pair; a re-judge replaces it.
   await db
-    .insert(metricScores)
+    .insert(judgeVerdicts)
     .values({
-      reviewId,
-      kind: "LLM_JUDGE_OVERALL",
-      referenceType: "NONE",
-      value: judged.overall_score,
-      meta: {
-        judge_model: DEFAULT_JUDGE_MODEL,
-        dimension_scores: judged.dimension_scores,
-        review_chars: reviewChars,
-        review_words: reviewWords,
-      },
+      paperId,
+      reviewAId,
+      reviewBId,
+      overallPreference: verdict.overall_preference,
+      dimensionPreferences: verdict.dimension_preferences,
+      meta: { passes_used: verdict.passes_used, raw_passes: verdict.raw_passes },
+      judgeModel: DEFAULT_JUDGE_MODEL,
     })
     .onConflictDoUpdate({
-      target: [metricScores.reviewId, metricScores.kind, metricScores.referenceType],
+      target: [judgeVerdicts.reviewAId, judgeVerdicts.reviewBId],
       set: {
-        value: judged.overall_score,
-        meta: {
-          judge_model: DEFAULT_JUDGE_MODEL,
-          dimension_scores: judged.dimension_scores,
-          review_chars: reviewChars,
-          review_words: reviewWords,
-        },
+        overallPreference: verdict.overall_preference,
+        dimensionPreferences: verdict.dimension_preferences,
+        meta: { passes_used: verdict.passes_used, raw_passes: verdict.raw_passes },
+        judgeModel: DEFAULT_JUDGE_MODEL,
         computedAt: new Date(),
       },
     });
@@ -101,12 +178,12 @@ export async function scoreOneReview(
   await db
     .update(reviews)
     .set({ judgeStatus: "COMPLETE", updatedAt: new Date() })
-    .where(eq(reviews.id, reviewId));
+    .where(inArray(reviews.id, [reviewAId, reviewBId]));
 }
 
 /**
- * Paper-wide re-score. Iterates every COMPLETED review and judges each one.
- * Per-review failures are logged and skipped; the batch keeps going.
+ * Manual re-judge for a paper (admin endpoint / backfill). Resets the
+ * pair's judge status to PENDING and runs the pairwise judge again.
  */
 export async function scorePaper(paperId: string, judge: JudgeClient): Promise<void> {
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) });
@@ -114,40 +191,38 @@ export async function scorePaper(paperId: string, judge: JudgeClient): Promise<v
     throw new Error(`paper ${paperId} not parsed yet`);
   }
   const parsed = paper.parsedStructure as unknown as ParsedPaper;
-  const paperText = renderPaperText(parsed);
 
-  const completed = await db.query.reviews.findMany({
-    where: and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")),
-  });
+  await db
+    .update(reviews)
+    .set({ judgeStatus: "PENDING", updatedAt: new Date() })
+    .where(and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")));
 
-  for (const review of completed) {
-    try {
-      await scoreOneReview(review.id, review.structured, paperText, judge);
-    } catch (err) {
-      logger.warn(
-        { err, reviewId: review.id, paperId },
-        "judge failed after retry; review left without judge scores",
-      );
-    }
-  }
+  await scorePairIfReady(paperId, judge, renderPaperText(parsed));
+}
+
+async function loadPaperText(paperId: string): Promise<string> {
+  const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) });
+  if (!paper?.parsedStructure) throw new Error(`paper ${paperId} not parsed yet`);
+  return renderPaperText(paper.parsedStructure as unknown as ParsedPaper);
 }
 
 // The judge is a remote LLM call; transient failures (rate limits, timeouts,
-// the occasional non-JSON response) are the common reason a single review
-// silently ends up with no judge scores. The Python side already retries
-// itself JUDGE_RETRY_MAX times — this layer retries the *Python service*
-// for network-level failures (review-gen restart, bridge timeout, transient
-// 5xx). Exponential backoff: 500ms, 1s, 2s, 4s = ~7.5s total before giving up.
-async function judgeWithRetry(
+// the occasional non-JSON response) are the common reason a pair silently
+// ends up unjudged. The Python side already retries each pass itself —
+// this layer retries the *Python service* for network-level failures
+// (review-gen restart, bridge timeout, transient 5xx). Backoff:
+// 500ms, 1s, 2s, 4s = ~7.5s total before giving up.
+async function judgePairWithRetry(
   judge: JudgeClient,
-  reviewText: string,
+  reviewA: string,
+  reviewB: string,
   paperText: string,
   attempts = 4,
 ) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await judge.judge(reviewText, paperText);
+      return await judge.judgePair(reviewA, reviewB, paperText);
     } catch (err) {
       lastErr = err;
       if (i < attempts - 1) {
@@ -166,6 +241,10 @@ export function renderPaperText(parsed: ParsedPaper): string {
   return parts.join("\n\n");
 }
 
+// The judge reads the normalized review content (summary + bullets),
+// deliberately NOT the raw form: the raw output carries the model's
+// self-assigned Rating/Confidence numbers, and feeding those to the judge
+// would let a generously self-scoring model anchor its own grade.
 function renderReviewText(structured: unknown): string {
   const r = structured as {
     summary?: string;

@@ -150,9 +150,23 @@ export const RevealSideSchema = z.object({
 });
 export type RevealSide = z.infer<typeof RevealSideSchema>;
 
+// Pairwise LLM-judge verdict: the judge compares both reviews in one
+// request (order-swapped double pass) and emits the same construct human
+// raters give. "A"/"B" here are already mapped onto THIS vote's blinded
+// sides. passesUsed: 2 = swap-consistent verdict; 1 = one pass failed, so
+// the position-bias control was unavailable.
+export const JudgeVerdictSchema = z.object({
+  overall: z.enum(["A", "B", "TIE"]),
+  dimensions: z.record(z.string(), z.enum(["A", "B", "TIE"])),
+  passesUsed: z.number().int().min(1).max(2),
+});
+export type JudgeVerdict = z.infer<typeof JudgeVerdictSchema>;
+
 export const RevealDetailResponseSchema = z.object({
   reviewA: RevealSideSchema,
   reviewB: RevealSideSchema,
+  // null until the pairwise judge has run (or when it failed).
+  judgeVerdict: JudgeVerdictSchema.nullable(),
 });
 export type RevealDetailResponse = z.infer<typeof RevealDetailResponseSchema>;
 
