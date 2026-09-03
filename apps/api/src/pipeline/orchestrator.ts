@@ -74,6 +74,10 @@ export function makeOrchestrator(
             paperId: paper.id,
             reviewSystemId: system.id,
             status: "GENERATING",
+            // The judge hasn't seen this review yet; scoreOneReview flips it
+            // to COMPLETE/FAILED. (The column default is COMPLETE only for
+            // legacy rows that predate judge-status tracking.)
+            judgeStatus: "PENDING",
           })
           .returning({ id: reviews.id });
         out.push({ slug, reviewId: created!.id });

@@ -251,7 +251,17 @@ export function pairRouter(config: Config): Router {
   return router;
 }
 
+// Pair selection reads ratings for weighting only — 5s staleness is
+// invisible there, and without this cache a classroom burst of /pair
+// requests would each rescan the full vote history and refit Elo on the
+// event loop.
+let eloMapCache: { at: number; map: Map<string, number> } | null = null;
+const ELO_MAP_TTL_MS = 5_000;
+
 async function currentEloMap(): Promise<Map<string, number>> {
+  if (eloMapCache && Date.now() - eloMapCache.at < ELO_MAP_TTL_MS) {
+    return eloMapCache.map;
+  }
   const history = await db.query.votes.findMany({
     orderBy: asc(votes.createdAt),
     with: {
@@ -271,5 +281,7 @@ async function currentEloMap(): Promise<Map<string, number>> {
       b: v.reviewB.reviewSystem.slug,
       outcome: v.winner === "A" ? 1 : v.winner === "B" ? 0 : 0.5,
     }));
-  return computeElo(battles);
+  const map = computeElo(battles);
+  eloMapCache = { at: Date.now(), map };
+  return map;
 }

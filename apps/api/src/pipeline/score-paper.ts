@@ -28,7 +28,20 @@ export async function scoreOneReview(
 ): Promise<void> {
   const start = Date.now();
   const text = renderReviewText(structured);
-  const judged = await judgeWithRetry(judge, text, paperText);
+  let judged;
+  try {
+    judged = await judgeWithRetry(judge, text, paperText);
+  } catch (err) {
+    // Record the failure on the review row: the fairness filter excludes
+    // judge-FAILED comparisons from the leaderboard, which only works if
+    // failures are actually written down.
+    await db
+      .update(reviews)
+      .set({ judgeStatus: "FAILED", updatedAt: new Date() })
+      .where(eq(reviews.id, reviewId))
+      .catch(() => {/* best effort */});
+    throw err;
+  }
   const elapsed = Date.now() - start;
   logger.info(
     { reviewId, overallScore: judged.overall_score, elapsed_ms: elapsed },
@@ -74,6 +87,11 @@ export async function scoreOneReview(
         computedAt: new Date(),
       },
     });
+
+  await db
+    .update(reviews)
+    .set({ judgeStatus: "COMPLETE", updatedAt: new Date() })
+    .where(eq(reviews.id, reviewId));
 }
 
 /**

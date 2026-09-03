@@ -10,6 +10,7 @@ import {
   eloSnapshots,
   reviewSystems,
   reviews,
+  voteDimensionEnum,
   votes,
 } from "../db/schema.js";
 import { verifyPairToken } from "./pair.js";
@@ -132,8 +133,8 @@ export function votesRouter(config: Config): Router {
       const countsTowardBoard =
         reviewA.status === "COMPLETED" &&
         reviewB.status === "COMPLETED" &&
-        reviewA.judgeStatus === "COMPLETE" &&
-        reviewB.judgeStatus === "COMPLETE" &&
+        reviewA.judgeStatus !== "FAILED" &&
+        reviewB.judgeStatus !== "FAILED" &&
         !qualityFlagged;
       const afterBattles: Battle[] = countsTowardBoard
         ? [
@@ -166,18 +167,16 @@ export function votesRouter(config: Config): Router {
         "vote_submitted: before snapshot",
       );
 
-      // Single transaction wraps:
-      //   1. advisory xact-lock (serialises with other writers so
-      //      bootstrap CI / snapshot rows don't race),
-      //   2. insert vote row + dimension votes,
-      //   3. recompute + write the overall + per-dimension snapshots.
-      // If anything throws after the vote insert, the whole tx rolls
-      // back: no orphaned snapshot rows, no half-applied state.
+      // The transaction is deliberately insert-only. Snapshot recompute
+      // (9 boards x 200 bootstrap rounds) used to run in here behind a
+      // global advisory lock, which serialised every voter behind seconds
+      // of synchronous compute at scale — each waiter pinning a pool
+      // connection. Votes now commit immediately; ratings are recomputed
+      // by the coalescing worker below, and the leaderboard's own 5s cache
+      // means nobody can tell the difference.
       let voteId: string;
       try {
         voteId = await db.transaction(async (tx) => {
-          await tx.execute(sql`SELECT pg_advisory_xact_lock(${ELO_WRITER_LOCK})`);
-
           const [created] = await tx
             .insert(votes)
             .values({
@@ -203,11 +202,7 @@ export function votesRouter(config: Config): Router {
             })),
           );
 
-          await snapshotLeaderboard(tx, newId, null, config.RATING_BASELINE_SLUG);
-          for (const d of body.dimensions) {
-            await snapshotLeaderboard(tx, newId, d.dimension, config.RATING_BASELINE_SLUG);
-          }
-          logger.info({ voteId: newId, paperId: payload.paperId }, "vote_persisted_and_snapshotted");
+          logger.info({ voteId: newId, paperId: payload.paperId }, "vote_persisted");
           return newId;
         });
       } catch (err) {
@@ -226,8 +221,9 @@ export function votesRouter(config: Config): Router {
         throw err;
       }
 
-      // Invalidate leaderboard cache for all dimensions since Elo changed
-      invalidateLeaderboardCache();
+      // Recompute all boards off the request path (coalesced under the
+      // advisory lock) and drop the read cache once fresh rows land.
+      scheduleSnapshotRecompute(voteId, config.RATING_BASELINE_SLUG);
 
       res.status(201).json({
         voteId,
@@ -287,8 +283,12 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
       (v) =>
         v.reviewA.status === "COMPLETED" &&
         v.reviewB.status === "COMPLETED" &&
-        v.reviewA.judgeStatus === "COMPLETE" &&
-        v.reviewB.judgeStatus === "COMPLETE" &&
+        // Judge FAILED = we could not score this review; exclude it so a
+        // silent judge failure can't corrupt the human-vs-judge analysis.
+        // PENDING (not yet judged) still counts — the human vote is valid
+        // regardless of whether the judge has caught up.
+        v.reviewA.judgeStatus !== "FAILED" &&
+        v.reviewB.judgeStatus !== "FAILED" &&
         !v.qualityFlagged,
     )
     .map((v) => ({
@@ -296,6 +296,46 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
       b: v.reviewB.reviewSystem.slug,
       outcome: v.winner === "A" ? 1 : v.winner === "B" ? 0 : 0.5,
     }));
+}
+
+// ─── Snapshot worker ──────────────────────────────────────────────────────
+// One recompute at a time per process; a vote landing mid-recompute is
+// coalesced into exactly one follow-up run (its snapshot includes every vote
+// committed by then — the recompute always reads the full history). The
+// advisory lock still serialises across processes.
+let snapshotWorkerRunning = false;
+let pendingSnapshotTrigger: { voteId: string; baselineSlug: string } | null = null;
+
+export function scheduleSnapshotRecompute(voteId: string, baselineSlug: string): void {
+  pendingSnapshotTrigger = { voteId, baselineSlug };
+  if (snapshotWorkerRunning) return;
+  snapshotWorkerRunning = true;
+  void (async () => {
+    while (pendingSnapshotTrigger) {
+      const trigger = pendingSnapshotTrigger;
+      pendingSnapshotTrigger = null;
+      const started = Date.now();
+      try {
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(${ELO_WRITER_LOCK})`);
+          await snapshotLeaderboard(tx, trigger.voteId, null, trigger.baselineSlug);
+          for (const d of voteDimensionEnum.enumValues) {
+            await snapshotLeaderboard(tx, trigger.voteId, d, trigger.baselineSlug);
+          }
+        });
+        invalidateLeaderboardCache();
+        logger.info(
+          { voteId: trigger.voteId, elapsedMs: Date.now() - started },
+          "leaderboard_snapshots_recomputed",
+        );
+      } catch (err) {
+        // The vote itself is committed; a failed recompute is repaired by
+        // the next vote's run. Never let this reject unhandled.
+        logger.error({ err, voteId: trigger.voteId }, "snapshot_recompute_failed");
+      }
+    }
+    snapshotWorkerRunning = false;
+  })();
 }
 
 async function snapshotLeaderboard(

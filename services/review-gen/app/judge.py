@@ -345,20 +345,48 @@ def judge_review(
             ))
         except RuntimeError as e:
             logger.warning("judge pass %d/%d failed: %s", pass_idx + 1, JUDGE_PASSES, e)
-    if not pass_data:
-        raise RuntimeError(f"all {JUDGE_PASSES} judge passes failed")
+    # A pass only counts if it is COMPLETE and in range. The old behaviour
+    # defaulted every missing value to 5 — so a judge pass that returned
+    # `{}` produced a clean-looking all-5.0 row that silently polluted the
+    # human-vs-judge correlation. Better no score (the review is excluded
+    # by judge_status=FAILED) than a fabricated one.
+    def _valid_pass(d: dict) -> bool:
+        try:
+            overall = float(d["overall_score"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        if not 1.0 <= overall <= 10.0:
+            return False
+        dims = d.get("dimension_scores")
+        if not isinstance(dims, dict):
+            return False
+        for dim in _DIMENSIONS:
+            try:
+                v = float(dims[dim])
+            except (KeyError, TypeError, ValueError):
+                return False
+            if not 1.0 <= v <= 10.0:
+                return False
+        return True
 
-    # Average numeric scores across successful passes.
+    valid = [d for d in pass_data if _valid_pass(d)]
+    if len(valid) < len(pass_data):
+        logger.warning(
+            "discarded %d/%d judge passes with missing or out-of-range scores",
+            len(pass_data) - len(valid), len(pass_data),
+        )
+    if not valid:
+        raise RuntimeError(
+            f"all {JUDGE_PASSES} judge passes failed or returned invalid scores"
+        )
+
     def _avg(values: list[float]) -> float:
-        return sum(values) / len(values) if values else 5.0
+        return sum(values) / len(values)
 
-    overall = _avg([float(d.get("overall_score", 5)) for d in pass_data])
+    overall = _avg([float(d["overall_score"]) for d in valid])
     dimension_scores: dict[str, float] = {}
     for dim in _DIMENSIONS:
-        dimension_scores[dim] = _avg([
-            float(d.get("dimension_scores", {}).get(dim, 5))
-            for d in pass_data
-        ])
+        dimension_scores[dim] = _avg([float(d["dimension_scores"][dim]) for d in valid])
 
     return JudgeResult(
         overall_score=overall,

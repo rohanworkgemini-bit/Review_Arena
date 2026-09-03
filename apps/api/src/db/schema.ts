@@ -43,6 +43,10 @@ export const reviewStatusEnum = pgEnum("review_status", [
 ]);
 
 export const judgeStatusEnum = pgEnum("judge_status", [
+  // Not yet judged. New review rows start here; the column default stays
+  // COMPLETE only so legacy rows (which predate judge-status tracking)
+  // keep counting on the leaderboard.
+  "PENDING",
   "COMPLETE",
   "PARTIAL",
   "FAILED",

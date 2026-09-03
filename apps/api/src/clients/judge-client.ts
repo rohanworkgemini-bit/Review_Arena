@@ -24,6 +24,11 @@ export class JudgeClient {
       method: "POST",
       headers,
       body: JSON.stringify({ review_text: reviewText, paper_text: paperText, model }),
+      // Two judge passes with per-call 180s deadlines on the Python side
+      // fit comfortably; without these, a wedged service holds this socket
+      // (and its caller) at undici defaults, quietly stacking retries.
+      headersTimeout: 30_000,
+      bodyTimeout: 8 * 60_000,
     });
     const text = await body.text();
     if (statusCode >= 400) throw new Error(`judge ${statusCode}: ${text}`);

@@ -7,6 +7,7 @@ import * as schema from "./schema.js";
 // imports complete — so if we built the Pool eagerly, `DATABASE_URL` would
 // still be undefined and we'd silently connect to localhost.
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let _pool: Pool | null = null;
 
 function build() {
   if (!process.env.DATABASE_URL) {
@@ -24,6 +25,15 @@ function build() {
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   });
+  // An idle client losing its socket (Postgres restart, network blip)
+  // emits 'error' on the pool. With no listener, Node treats that as an
+  // uncaught exception and kills the process — turning a database hiccup
+  // into a full API outage.
+  pool.on("error", (err) => {
+    // eslint-disable-next-line no-console
+    console.error("[db] idle pool client error (recovering):", err.message);
+  });
+  _pool = pool;
   return drizzle(pool, { schema });
 }
 
@@ -36,6 +46,15 @@ export const db = new Proxy({} as ReturnType<typeof drizzle<typeof schema>>, {
     return Reflect.get(_db, prop);
   },
 });
+
+/** Graceful-shutdown hook: drain and close the pg pool. */
+export async function closeDbPool(): Promise<void> {
+  if (_pool) {
+    await _pool.end().catch(() => {/* already closing */});
+    _pool = null;
+    _db = null;
+  }
+}
 
 export type DB = typeof db;
 export { schema };

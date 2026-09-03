@@ -59,7 +59,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
   const router = Router();
   const { reviewGen, judge } = deps;
 
-  router.get("/reviews/stream/:reviewId", async (req, res) => {
+  router.get("/reviews/stream/:reviewId", async (req, res, next) => {
     const { reviewId } = req.params;
 
     const sendHeaders = () => {
@@ -75,10 +75,18 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
-    const review = await db.query.reviews.findFirst({
-      where: eq(reviews.id, reviewId),
-      with: { reviewSystem: true, paper: true },
-    });
+    let review;
+    try {
+      review = await db.query.reviews.findFirst({
+        where: eq(reviews.id, reviewId),
+        with: { reviewSystem: true, paper: true },
+      });
+    } catch (err) {
+      // Pre-stream failures (DB down, bad id) go through the normal JSON
+      // error handler — headers have not been sent yet.
+      next(err);
+      return;
+    }
     if (!review) {
       res.status(404).json({ error: "NotFound", message: `review ${reviewId}` });
       return;
@@ -163,11 +171,49 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
 
     sendHeaders();
 
+    // Heartbeat: reverse proxies (and some browsers) kill an SSE socket
+    // that stays silent past their read timeout, and reasoning models can
+    // legitimately think for >60s before the first token. A comment line
+    // every 20s keeps the pipe visibly alive without polluting the event
+    // stream.
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {/* socket gone; the close handler tears everything down */}
+    }, 20_000);
+
     // Browser-disconnect → abort upstream. Without this the model keeps
     // generating tokens nobody is reading, on a billed GPU.
     const abortController = new AbortController();
     const onClose = () => abortController.abort();
     req.on("close", onClose);
+
+    // Watchdogs. The upstream request deliberately has no undici
+    // bodyTimeout (a healthy stream can run minutes), so hangs must be
+    // caught here: `idle` fires when the model goes quiet mid-stream —
+    // the exact zombie we saw when the Python service wedged — and
+    // `absolute` caps a stream that trickles forever. Both abort the
+    // upstream and record why, so the catch block below can tell a
+    // watchdog abort (mark FAILED) from a browser disconnect (leave
+    // GENERATING for the next opener).
+    const IDLE_TIMEOUT_MS = 120_000;
+    const ABSOLUTE_TIMEOUT_MS = 15 * 60_000;
+    let watchdogReason: string | null = null;
+    let idleTimer = setTimeout(() => {
+      watchdogReason = `no output from the model for ${IDLE_TIMEOUT_MS / 1000}s`;
+      abortController.abort();
+    }, IDLE_TIMEOUT_MS);
+    const absoluteTimer = setTimeout(() => {
+      watchdogReason = `generation exceeded ${ABSOLUTE_TIMEOUT_MS / 60_000} minutes`;
+      abortController.abort();
+    }, ABSOLUTE_TIMEOUT_MS);
+    const punchWatchdog = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        watchdogReason = `no output from the model for ${IDLE_TIMEOUT_MS / 1000}s`;
+        abortController.abort();
+      }, IDLE_TIMEOUT_MS);
+    };
 
     if (review.status !== "GENERATING") {
       await db
@@ -189,6 +235,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
           review.paper?.conference,
         );
         for await (const evt of stream) {
+          punchWatchdog();
           if (evt.kind === "token") {
             if (firstTokenMs === null) firstTokenMs = Date.now() - startedAt;
             accumulated += evt.text;
@@ -279,16 +326,20 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       } catch (err) {
         // If the abort came from the browser disconnecting, leave the
         // row in GENERATING — another opener can retry. Only flip to
-        // FAILED for genuine upstream errors.
-        if (abortController.signal.aborted) {
+        // FAILED for genuine upstream errors. A watchdog abort is NOT a
+        // disconnect: the model went quiet or overran, and leaving the
+        // row GENERATING would strand it (and its voters) forever.
+        if (abortController.signal.aborted && !watchdogReason) {
           logger.info({ reviewId }, "stream_aborted_by_client_disconnect");
           return;
         }
 
-        const message = err instanceof Error ? err.message : String(err);
-        const code = message.includes("timeout")
-          ? "GENERATION_TIMEOUT"
-          : "UNKNOWN_ERROR";
+        const message =
+          watchdogReason ?? (err instanceof Error ? err.message : String(err));
+        const code =
+          watchdogReason || message.includes("timeout")
+            ? "GENERATION_TIMEOUT"
+            : "UNKNOWN_ERROR";
 
         const errorFrame = SSEErrorFrameSchema.parse({
           type: "error",
@@ -311,13 +362,24 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
         try {
           sse("error", errorFrame);
         } catch {/* socket already closed */}
-        throw err;
+        // Deliberately NOT rethrown: the failure is already persisted and
+        // surfaced. Rethrowing out of an async Express 4 handler becomes an
+        // unhandled rejection, and Node kills the whole process for those —
+        // one bad stream must never take down every student's session.
+      } finally {
+        clearTimeout(idleTimer);
+        clearTimeout(absoluteTimer);
+        clearInterval(heartbeat);
       }
     })();
 
     inFlightStreams.set(reviewId, work);
     try {
       await work;
+    } catch (err) {
+      // Belt and braces — `work` handles its own errors above. Anything
+      // that still escapes gets logged, never rethrown (see above).
+      logger.error({ err, reviewId }, "stream_handler_escaped_error");
     } finally {
       inFlightStreams.delete(reviewId);
       req.off("close", onClose);

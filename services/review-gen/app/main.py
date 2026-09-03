@@ -13,6 +13,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import time
@@ -99,23 +100,28 @@ logging.basicConfig(level=logging.INFO)
 #   at startup. Refusing to boot is much safer than silently accepting
 #   unauthenticated traffic that drains the LLM budget.
 _REVIEW_GEN_API_KEY = os.environ.get("REVIEW_GEN_API_KEY", "").strip()
-_IS_PRODUCTION = os.environ.get("REVIEWARENA_ENV", "").strip().lower() == "production"
+# Default CLOSED: open mode must be asked for by name. The old gate only
+# fired when REVIEWARENA_ENV was exactly "production", so a VM deploy that
+# forgot the variable (or spelled it "prod") served every billable endpoint
+# unauthenticated with nothing but a log line to show for it.
+_IS_DEV = os.environ.get("REVIEWARENA_ENV", "").strip().lower() in (
+    "development",
+    "dev",
+    "test",
+)
 
 if not _REVIEW_GEN_API_KEY:
-    if _IS_PRODUCTION:
-        # Fail fast — uvicorn never finishes startup. Cloud Run will
-        # surface this in the revision logs immediately.
+    if not _IS_DEV:
+        # Fail fast — uvicorn never finishes startup.
         raise RuntimeError(
-            "REVIEW_GEN_API_KEY is required in production "
-            "(REVIEWARENA_ENV=production). "
+            "REVIEW_GEN_API_KEY is required unless REVIEWARENA_ENV=development. "
             "Refusing to boot — would otherwise serve unauthenticated "
             "requests that bill OpenAI / Anthropic / Google / DeepSeek / Datalab."
         )
     logger.warning(
-        "REVIEW_GEN_API_KEY not set — running in OPEN mode (dev). "
-        "Any caller can trigger billable LLM endpoints. "
-        "Set REVIEW_GEN_API_KEY in env (and REVIEWARENA_ENV=production) "
-        "before deploying."
+        "REVIEW_GEN_API_KEY not set — running in OPEN mode "
+        "(REVIEWARENA_ENV=development). Any caller can trigger billable "
+        "LLM endpoints."
     )
 
 
@@ -124,8 +130,8 @@ def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
     No-op when REVIEW_GEN_API_KEY is unset (dev mode only — prod refuses
     to boot in that state, see above)."""
     if not _REVIEW_GEN_API_KEY:
-        return  # open mode — dev only; prod is gated at startup
-    if not x_api_key or x_api_key != _REVIEW_GEN_API_KEY:
+        return  # open mode — explicit dev only; everything else is gated at startup
+    if not x_api_key or not hmac.compare_digest(x_api_key, _REVIEW_GEN_API_KEY):
         raise HTTPException(status_code=401, detail="invalid or missing X-API-Key")
 
 

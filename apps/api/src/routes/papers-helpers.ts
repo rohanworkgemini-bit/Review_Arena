@@ -48,6 +48,17 @@ const UPLOADS_WINDOW_MS = 60_000;
 export const UPLOADS_PER_WINDOW = 10;
 const uploadHits = new Map<string, number[]>();
 
+// Old sessions otherwise accumulate forever (one array per sid ever seen).
+const uploadSweep = setInterval(() => {
+  const cutoff = Date.now() - UPLOADS_WINDOW_MS;
+  for (const [sid, hits] of uploadHits) {
+    const live = hits.filter((t) => t > cutoff);
+    if (live.length === 0) uploadHits.delete(sid);
+    else uploadHits.set(sid, live);
+  }
+}, UPLOADS_WINDOW_MS * 5);
+uploadSweep.unref();
+
 export function recordUpload(sessionId: string): boolean {
   const now = Date.now();
   const cutoff = now - UPLOADS_WINDOW_MS;

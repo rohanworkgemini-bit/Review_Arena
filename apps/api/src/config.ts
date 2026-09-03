@@ -37,6 +37,16 @@ const ConfigSchema = z.object({
   // instead, and record `anchor = 'MEAN'` on the snapshot row.
   RATING_BASELINE_SLUG: z.string().default("gpt-5.2"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+}).superRefine((cfg, ctx) => {
+  // Open mode on the Python service means anyone who can reach it can spend
+  // the LLM budget. Tolerable on localhost; never in production.
+  if (cfg.NODE_ENV === "production" && cfg.REVIEW_GEN_API_KEY.length < 16) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["REVIEW_GEN_API_KEY"],
+      message: "REVIEW_GEN_API_KEY (>=16 chars) is required when NODE_ENV=production",
+    });
+  }
 });
 
 export type Config = z.infer<typeof ConfigSchema>;

@@ -16,7 +16,9 @@ procs:
   db-ui:
     shell: pnpm --filter @reviewarena/api db:browser
   review-gen:
-    shell: services/review-gen/.venv/bin/python -m uvicorn app.main:app --reload --port 8001 --app-dir services/review-gen --reload-dir services/review-gen/app
+    # REVIEWARENA_ENV=development = run the billable endpoints in open mode.
+    # The service now refuses to boot keyless in any other env (default-closed).
+    shell: REVIEWARENA_ENV=development services/review-gen/.venv/bin/python -m uvicorn app.main:app --reload --port 8001 --app-dir services/review-gen --reload-dir services/review-gen/app
   api:
     shell: pnpm --filter @reviewarena/api dev
   web:

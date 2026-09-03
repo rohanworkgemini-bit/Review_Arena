@@ -17,6 +17,9 @@ import { reviewsStreamRouter } from "./routes/reviews-stream.js";
 import { pairRouter } from "./routes/pair.js";
 import { votesRouter } from "./routes/votes.js";
 import { leaderboardRouter } from "./routes/leaderboard.js";
+import { startStuckReviewSweeper } from "./pipeline/sweeper.js";
+import { closeDbPool } from "./db/client.js";
+import multer from "multer";
 import { revealRouter } from "./routes/reveal.js";
 import { adminRouter } from "./routes/admin.js";
 import { ReviewGenClient } from "./clients/review-gen-client.js";
@@ -114,40 +117,65 @@ app.use(
 );
 app.use(cookieParser());
 app.use(express.json({ limit: "1mb" }));
-app.use(sessionMiddleware);
+app.use(sessionMiddleware(config.PAIR_TOKEN_SECRET));
 
-// Rate limiting — protect against abuse
-// Per-session limits: most endpoints are generous (for legitimate users),
-// but uploads + votes are stricter to prevent DOS.
+// Rate limiting — protect against abuse.
+// Dual-keyed: per-session (the polite limit) AND per-IP at 3x (the
+// backstop). The session cookie is HMAC-signed, but a client can always
+// throw it away and be minted a new one — the IP key is what stops a
+// cookie-shedding curl loop from becoming unlimited billable traffic.
+// Entries are swept on an interval so months of one-off sessions can't
+// accumulate into unbounded memory.
 const createRateLimiter = (maxRequests: number, windowMs: number) => {
   const stores = new Map<string, { count: number; resetAt: number }>();
+  const sweep = setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of stores) if (now >= v.resetAt) stores.delete(k);
+  }, windowMs * 2);
+  sweep.unref();
 
-  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const key = req.sessionId ?? "";
-    if (!key) return next(); // No session = skip rate limit
-
+  const bump = (key: string): { count: number; resetAt: number } => {
     const now = Date.now();
     let entry = stores.get(key);
-
     if (!entry || now >= entry.resetAt) {
       entry = { count: 0, resetAt: now + windowMs };
       stores.set(key, entry);
     }
-
     entry.count++;
-    res.set("RateLimit-Limit", maxRequests.toString());
-    res.set("RateLimit-Remaining", Math.max(0, maxRequests - entry.count).toString());
-    res.set("RateLimit-Reset", Math.ceil(entry.resetAt / 1000).toString());
+    return entry;
+  };
 
-    if (entry.count > maxRequests) {
+  const ipLimit = maxRequests * 3;
+
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Health must stay observable even under a limiter-tripping flood —
+    // it's what the container healthcheck and the runbook look at.
+    if (req.path === "/health") return next();
+
+    const now = Date.now();
+    const sessionEntry = bump(`s:${req.sessionId ?? ""}`);
+    const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+    const ipEntry = bump(`i:${ip}`);
+
+    res.set("RateLimit-Limit", maxRequests.toString());
+    res.set("RateLimit-Remaining", Math.max(0, maxRequests - sessionEntry.count).toString());
+    res.set("RateLimit-Reset", Math.ceil(sessionEntry.resetAt / 1000).toString());
+
+    const tripped =
+      sessionEntry.count > maxRequests
+        ? sessionEntry
+        : ipEntry.count > ipLimit
+          ? ipEntry
+          : null;
+    if (tripped) {
       logger.warn(
-        { sessionId: key, endpoint: req.path, limit: maxRequests },
+        { sessionId: req.sessionId, ip, endpoint: req.path, limit: maxRequests },
         "rate_limit_exceeded",
       );
       res.status(429).json({
         error: "TooManyRequests",
         message: `Rate limit exceeded (${maxRequests} requests per ${windowMs / 1000}s)`,
-        retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+        retryAfter: Math.ceil((tripped.resetAt - now) / 1000),
       });
       return;
     }
@@ -199,6 +227,24 @@ app.use(leaderboardRouter(config));
 app.use(revealRouter());
 app.use(adminRouter(config, { reviewGen, judge, orchestrator }));
 
+// Upload errors deserve a real status + message: without this branch a
+// too-large PDF surfaces as an opaque 500 "unexpected error".
+app.use(
+  (err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof multer.MulterError) {
+      const tooBig = err.code === "LIMIT_FILE_SIZE";
+      res.status(tooBig ? 413 : 400).json({
+        error: tooBig ? "FileTooLarge" : "UploadError",
+        message: tooBig
+          ? "The PDF is larger than the upload limit (10MB)."
+          : `Upload failed: ${err.code}`,
+      });
+      return;
+    }
+    next(err);
+  },
+);
+
 // Final error handler — converts thrown errors into JSON envelopes so the
 // frontend's jsonOrThrow() can show something useful.
 //
@@ -220,6 +266,8 @@ const server = app.listen(config.API_PORT, "0.0.0.0", () => {
   console.log(`[ReviewArena api] listening on :${config.API_PORT}`);
 });
 
+startStuckReviewSweeper();
+
 // Graceful shutdown: on SIGTERM/SIGINT, stop accepting new connections,
 // let in-flight requests (including SSE streams) finish for up to 30s,
 // then exit. Without this, `kill <pid>` (or container orchestrator
@@ -233,7 +281,7 @@ function shutdown(signal: string) {
   logger.info({ signal }, "shutdown: closing server");
   server.close((err) => {
     if (err) logger.error({ err }, "shutdown: server.close failed");
-    process.exit(err ? 1 : 0);
+    void closeDbPool().finally(() => process.exit(err ? 1 : 0));
   });
   setTimeout(() => {
     logger.warn({ signal }, "shutdown: timed out, exiting hard");
@@ -242,5 +290,19 @@ function shutdown(signal: string) {
 }
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// Last-resort guards. Node's default for an unhandled rejection is to KILL
+// the process — with 100 students on live SSE streams, one forgotten await
+// must not become a full outage. Log loudly and keep serving; state-machine
+// hygiene (FAILED rows, sweeper) handles the fallout. A genuinely uncaught
+// synchronous exception still exits, but through the graceful path so
+// in-flight requests get their 30s to drain.
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "unhandled_rejection_survived");
+});
+process.on("uncaughtException", (err) => {
+  logger.fatal({ err }, "uncaught_exception_shutting_down");
+  shutdown("uncaughtException");
+});
 
 export { app };
