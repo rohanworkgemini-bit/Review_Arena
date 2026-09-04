@@ -224,11 +224,13 @@ export async function studyUploadPdf(
   code: string,
   file: File,
   title?: string,
+  conference?: Conference,
 ): Promise<{ paperId: string; paperIndex: number }> {
   const form = new FormData();
   form.append("file", file);
   form.append("code", code);
   if (title) form.append("title", title);
+  if (conference) form.append("conference", conference);
   const res = await fetch(`${BASE}/study/papers`, {
     method: "POST",
     body: form,
@@ -241,11 +243,12 @@ export async function studyUploadArxiv(
   code: string,
   url: string,
   title?: string,
+  conference?: Conference,
 ): Promise<{ paperId: string; paperIndex: number }> {
   const res = await fetch(`${BASE}/study/papers/arxiv`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, url, title }),
+    body: JSON.stringify({ code, url, title, conference }),
     credentials: "include",
   });
   return jsonOrThrow(res);

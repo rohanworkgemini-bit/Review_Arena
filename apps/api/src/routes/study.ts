@@ -37,7 +37,7 @@ import { lengthBandFor, normalizeArxivId } from "./papers-helpers.js";
 import { stripNullBytes } from "./papers.js";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
-import type { ParsedPaper } from "@reviewarena/shared-types";
+import { ConferenceSchema, type ParsedPaper } from "@reviewarena/shared-types";
 import {
   PAIRS_PER_PAPER,
   PAPERS_PER_PARTICIPANT,
@@ -155,7 +155,8 @@ export function studyRouter(
   async function beginStudyPaper(
     participantId: string,
     contentHash: string,
-    userTitle?: string,
+    userTitle: string | undefined,
+    conference: string,
   ) {
     // All six systems must be enabled or the design is unfillable —
     // refuse loudly rather than silently generating a subset.
@@ -207,7 +208,9 @@ export function studyRouter(
         contentHash,
         userTitle: userTitle || null,
         status: "PARSING",
-        conference: "iclr",
+        // The participant picks the venue exactly as on the arena upload
+        // page; all six generated reviews follow that venue's form.
+        conference,
         participantId,
         paperIndex,
         rotationId,
@@ -312,10 +315,12 @@ export function studyRouter(
         return;
       }
       const contentHash = createHash("sha256").update(file.buffer).digest("hex");
+      const conference = ConferenceSchema.catch("iclr").parse(req.body.conference);
       const paper = await beginStudyPaper(
         participant.id,
         contentHash,
         typeof req.body.title === "string" ? req.body.title : undefined,
+        conference,
       );
       void runStudyPipeline(paper.id, () =>
         reviewGen.parsePdf(file.buffer, file.originalname),
@@ -339,10 +344,12 @@ export function studyRouter(
         return;
       }
       const contentHash = createHash("sha256").update(`arxiv:${arxivId}`).digest("hex");
+      const conference = ConferenceSchema.catch("iclr").parse(req.body.conference);
       const paper = await beginStudyPaper(
         participant.id,
         contentHash,
         typeof req.body.title === "string" ? req.body.title : undefined,
+        conference,
       );
       void runStudyPipeline(paper.id, () => reviewGen.parseArxiv(arxivId));
       res.status(202).json({ paperId: paper.id, paperIndex: paper.paperIndex });

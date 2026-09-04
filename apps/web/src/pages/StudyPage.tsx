@@ -1,8 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { FileText, Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
+import { cn } from "@/lib/cn";
+import {
+  CONFERENCE_OPTIONS,
+  SOURCE_OPTIONS,
+  StyledDropdown,
+  type UploadSource,
+} from "@/components/ui/styled-dropdown";
+import type { Conference } from "@reviewarena/shared-types";
 import {
   ApiError,
   studyPairFetch,
@@ -243,6 +252,13 @@ function Progress({ state, paperIndex }: { state: StudyState; paperIndex: number
   );
 }
 
+// Mirrors the arena UploadPage exactly — same dropzone, review-format
+// picker, title field, consent notice, and bottom bar — so participants
+// see the platform's normal upload experience.
+const MAX_SIZE = 10 * 1024 * 1024;
+const ARXIV_HINT_RE =
+  /^(?:https?:\/\/arxiv\.org\/(?:abs|pdf|html)\/)?\d{4}\.\d{4,5}(?:v\d+)?$/i;
+
 function UploadScreen({
   code,
   state,
@@ -256,74 +272,205 @@ function UploadScreen({
   failedMessage?: string;
   onDone: () => void;
 }) {
-  const [tab, setTab] = useState<"pdf" | "arxiv">("pdf");
+  const [source, setSource] = useState<UploadSource>("pdf");
   const [file, setFile] = useState<File | null>(null);
   const [arxivUrl, setArxivUrl] = useState("");
   const [title, setTitle] = useState("");
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (tab === "pdf") {
-        if (!file) throw new Error("Choose a PDF first.");
-        return studyUploadPdf(code, file, title || undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [consented, setConsented] = useState(false);
+  const [conference, setConference] = useState<Conference>("iclr");
+
+  const onDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
+    setError(null);
+    const r = rejected[0];
+    if (r) {
+      if (r.errors.some((e) => e.code === "file-too-large")) {
+        setError("File exceeds 10 MB.");
+      } else {
+        setError("Only PDFs are accepted.");
       }
-      if (!arxivUrl.trim()) throw new Error("Paste an arXiv link first.");
-      return studyUploadArxiv(code, arxivUrl.trim(), title || undefined);
-    },
+      return;
+    }
+    if (accepted[0]) setFile(accepted[0]);
+  }, []);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: { "application/pdf": [".pdf"] },
+    maxSize: MAX_SIZE,
+    multiple: false,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      source === "pdf"
+        ? studyUploadPdf(code, file!, title || undefined, conference)
+        : studyUploadArxiv(code, arxivUrl.trim(), title || undefined, conference),
     onSuccess: onDone,
   });
 
-  return (
-    <div className="mx-auto max-w-xl">
-      <Progress state={state} paperIndex={paperIndex} />
-      <h1 className="mb-2 font-serif text-2xl font-semibold">
-        Upload paper {paperIndex}
-      </h1>
-      <p className="mb-5 text-sm text-ink2">
-        Six systems will each write a review of this paper. You will then judge
-        three anonymous head-to-head comparisons.
-      </p>
-      {failedMessage && <p className="mb-4 text-sm text-red">{failedMessage}</p>}
+  const submitting = mutation.isPending;
+  const arxivLooksValid = ARXIV_HINT_RE.test(arxivUrl.trim());
+  const canSubmit =
+    !submitting && consented && (source === "pdf" ? !!file : arxivLooksValid);
 
-      <div className="mb-4 flex font-mono text-xs">
-        {(["pdf", "arxiv"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`border border-rule px-3 py-1.5 ${tab === t ? "bg-ink text-paper" : "text-graphite"}`}
-          >
-            {t === "pdf" ? "PDF file" : "arXiv link"}
-          </button>
-        ))}
+  return (
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div>
+        <Progress state={state} paperIndex={paperIndex} />
+        <div className="eyebrow mb-3">Submit a manuscript</div>
+        <h1 className="text-3xl font-semibold tracking-[-0.01em]">
+          Upload paper {paperIndex}
+        </h1>
+        <p className="text-graphite mt-1">
+          Six systems will each review this paper in the venue format you pick.
+          You will then judge three anonymous head-to-head comparisons.
+        </p>
       </div>
 
-      {tab === "pdf" ? (
-        <input
-          type="file"
-          accept="application/pdf"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="mb-3 block w-full text-sm"
-        />
-      ) : (
-        <input
-          value={arxivUrl}
-          onChange={(e) => setArxivUrl(e.target.value)}
-          placeholder="https://arxiv.org/abs/…"
-          className="mb-3 w-full border border-rule bg-white px-3 py-2 font-mono text-sm"
-        />
-      )}
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Title (optional)"
-        className="mb-4 w-full border border-rule bg-white px-3 py-2 text-sm"
+      {failedMessage && <p className="text-sm text-red">{failedMessage}</p>}
+
+      {/* Review format — every generated review for this paper follows the
+          selected venue's form and rating scale (all six share the scale). */}
+      <div>
+        <div className="text-sm font-medium">Review format</div>
+        <div className="mt-1 flex flex-wrap items-baseline gap-3">
+          <StyledDropdown
+            value={conference}
+            onChange={setConference}
+            options={CONFERENCE_OPTIONS}
+            ariaLabel="Review format"
+            idPrefix="study-conf"
+          />
+          <span className="font-mono text-xs text-graphite">
+            All six reviews follow this venue&rsquo;s form and rating scale.
+          </span>
+        </div>
+      </div>
+
+      <StyledDropdown
+        value={source}
+        onChange={setSource}
+        options={SOURCE_OPTIONS}
+        ariaLabel="Source"
+        idPrefix="study-source"
       />
-      <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-        {mutation.isPending ? "Uploading…" : "Upload & generate reviews"}
-      </Button>
-      {mutation.error && (
-        <p className="mt-3 text-sm text-red">{(mutation.error as Error).message}</p>
+
+      <div className="border-y border-rule py-6">
+        <div className="space-y-4">
+          {source === "pdf" ? (
+            <div
+              {...getRootProps()}
+              className={cn(
+                "flex flex-col items-center justify-center border border-dashed border-rule2 p-12 text-center cursor-pointer transition-colors",
+                isDragActive && "border-red bg-paper2",
+                file && "border-red/50 bg-paper2/60",
+              )}
+            >
+              <input {...getInputProps()} />
+              {file ? (
+                <div className="flex items-center gap-3 text-sm">
+                  <FileText className="h-8 w-8 text-graphite" />
+                  <div className="text-left">
+                    <div className="font-medium">{file.name}</div>
+                    <div className="font-mono text-xs text-graphite">
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · click to replace
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-graphite">
+                  <UploadCloud className="h-10 w-10" />
+                  <div className="font-mono text-xs tracking-[0.02em]">
+                    {isDragActive ? "Release to upload" : "Drag a PDF here, or click to browse"}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-sm font-medium" htmlFor="study-arxiv">
+                arXiv URL or ID
+              </label>
+              <input
+                id="study-arxiv"
+                value={arxivUrl}
+                onChange={(e) => setArxivUrl(e.target.value)}
+                placeholder="2312.00752  or  https://arxiv.org/abs/2312.00752"
+                className="w-full border border-rule2 bg-paper px-3 py-2 font-mono text-sm"
+              />
+              <p className="font-mono text-xs text-graphite">
+                Parsed via arxiv2md.org — works for arXiv papers with HTML
+                rendering.
+              </p>
+            </div>
+          )}
+          {error && <p className="text-sm text-red">{error}</p>}
+          <div>
+            <label className="text-sm font-medium" htmlFor="study-title">
+              Title <span className="text-graphite">(optional)</span>
+            </label>
+            <input
+              id="study-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={
+                source === "pdf"
+                  ? "Falls back to the title extracted from the PDF."
+                  : "Falls back to the title from arXiv."
+              }
+              className="mt-1 w-full border border-rule2 bg-paper px-3 py-2 text-sm"
+            />
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 border-t border-rule pt-4">
+            <input
+              type="checkbox"
+              checked={consented}
+              onChange={(e) => setConsented(e.target.checked)}
+              className="mt-[3px] h-4 w-4 shrink-0 cursor-pointer accent-[#9d2b22]"
+              aria-describedby="study-consent-hint"
+            />
+            <span id="study-consent-hint" className="text-[13px] leading-relaxed text-graphite">
+              I understand that this paper will be processed by{" "}
+              <span className="text-ink">commercial AI model APIs</span> and
+              parsed via the Datalab Marker API, as described in the study's
+              data-processing notice.
+            </span>
+          </label>
+        </div>
+      </div>
+
+      {mutation.isError && (
+        <p className="text-sm text-red">{(mutation.error as Error).message}</p>
       )}
+
+      <div className="flex items-center gap-4 py-3">
+        {submitting ? (
+          <div className="flex flex-1 items-center gap-2 font-mono text-xs text-graphite">
+            <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+            <span>Uploading…</span>
+          </div>
+        ) : (
+          <div className="flex-1 font-mono text-xs text-graphite">
+            {source === "pdf" && !file
+              ? "Select a PDF to continue."
+              : source === "arxiv" && !arxivLooksValid
+              ? "Paste an arXiv URL or ID to continue."
+              : !consented
+              ? "Accept the data-processing notice to continue."
+              : `Ready: ${source === "pdf" ? file!.name : arxivUrl.trim()}`}
+          </div>
+        )}
+        <Button
+          onClick={() => mutation.mutate()}
+          disabled={!canSubmit}
+          size="lg"
+          className="shrink-0"
+        >
+          {submitting ? "Working…" : "Upload and generate reviews"}
+        </Button>
+      </div>
     </div>
   );
 }
