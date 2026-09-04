@@ -1,7 +1,7 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { judgeVerdicts, metricScores, papers, reviews } from "../db/schema.js";
+import { judgeVerdicts, metricScores, papers, reviews, studyComparisons } from "../db/schema.js";
 import { DEFAULT_JUDGE_MODEL, JudgeClient } from "../clients/judge-client.js";
 import type { PairJudgeResult } from "../clients/judge-client.js";
 import { logger } from "../logger.js";
@@ -29,54 +29,104 @@ import { logger } from "../logger.js";
 // review_a_id/review_b_id) + the familiar per-review LLM_JUDGE_OVERALL
 // metric rows, so the reveal radar and the fairness filter are unchanged.
 
+interface ClaimedReview {
+  id: string;
+  structured: unknown;
+}
+
 /**
- * Judge the paper's pair if both reviews are COMPLETED and unclaimed.
- * Silently returns when the pair isn't ready or another run owns it.
- * Throws on judge failure (after retries); callers log-and-swallow.
+ * Atomically claim a specific review pair for judging. FOR UPDATE
+ * serializes racing completion events: the winner flips both rows
+ * PENDING → RUNNING and judges; every other caller sees non-PENDING
+ * rows and returns null.
  */
-export async function scorePairIfReady(
-  paperId: string,
-  judge: JudgeClient,
-  paperTextArg?: string,
-): Promise<void> {
-  // Atomic claim. FOR UPDATE serializes the two completion events that
-  // race when both reviews finish near-simultaneously: the winner flips
-  // both rows PENDING → RUNNING and judges; the loser sees non-PENDING
-  // rows and returns.
-  const claimed = await db.transaction(async (tx) => {
+async function claimPair(ids: [string, string]): Promise<ClaimedReview[] | null> {
+  return db.transaction(async (tx) => {
     const rows = await tx
       .select({
         id: reviews.id,
         status: reviews.status,
         judgeStatus: reviews.judgeStatus,
         structured: reviews.structured,
-        createdAt: reviews.createdAt,
       })
       .from(reviews)
-      .where(eq(reviews.paperId, paperId))
+      .where(inArray(reviews.id, ids))
       .for("update");
-
-    const completed = rows
-      .filter((r) => r.status === "COMPLETED")
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    // Judge the paper's newest generation pair. Legacy papers can carry
-    // older review rows; the last two by creation time are the live pair.
-    const pair = completed.slice(-2);
-    if (pair.length < 2) return null;
-    if (!pair.every((r) => r.judgeStatus === "PENDING")) return null;
-
+    if (rows.length !== 2) return null;
+    if (!rows.every((r) => r.status === "COMPLETED" && r.judgeStatus === "PENDING")) {
+      return null;
+    }
     await tx
       .update(reviews)
       .set({ judgeStatus: "RUNNING", updatedAt: new Date() })
-      .where(inArray(reviews.id, pair.map((r) => r.id)));
-    return pair;
+      .where(inArray(reviews.id, ids));
+    // Return in the caller's (A, B) order, not row order.
+    return ids.map((id) => rows.find((r) => r.id === id)!);
   });
-  if (!claimed) return;
+}
 
-  const [a, b] = claimed as [typeof claimed[number], typeof claimed[number]];
+/**
+ * Judge whatever of the paper's pair(s) is ready and unclaimed.
+ *
+ * Study papers (rows in study_comparisons) judge each of the three
+ * rotation pairs as soon as both of its reviews are COMPLETED — pairs are
+ * judged sequentially so the shared paper prefix stays warm in the
+ * provider's context cache. Arena papers judge the newest two completed
+ * reviews. Silently returns when nothing is ready or another run owns the
+ * claim. Throws on judge failure (after retries); callers log-and-swallow.
+ */
+export async function scorePairIfReady(
+  paperId: string,
+  judge: JudgeClient,
+  paperTextArg?: string,
+): Promise<void> {
+  const comparisons = await db.query.studyComparisons.findMany({
+    where: eq(studyComparisons.paperId, paperId),
+    orderBy: asc(studyComparisons.pairIndex),
+  });
+
+  const pairs: Array<[string, string]> = comparisons.length
+    ? comparisons.map((c) => [c.reviewAId, c.reviewBId])
+    : [await latestArenaPair(paperId)].filter((p): p is [string, string] => p !== null);
+
+  let paperText: string | undefined = paperTextArg;
+  let lastErr: unknown = null;
+  for (const ids of pairs) {
+    const claimed = await claimPair(ids);
+    if (!claimed) continue;
+    paperText ??= await loadPaperText(paperId);
+    try {
+      await scoreClaimedPair(paperId, claimed, judge, paperText);
+    } catch (err) {
+      // Keep judging the remaining ready pairs; rethrow the last failure
+      // so callers still log it.
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+}
+
+/** Arena papers: the newest two COMPLETED reviews are the live pair. */
+async function latestArenaPair(paperId: string): Promise<[string, string] | null> {
+  const rows = await db.query.reviews.findMany({
+    where: and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")),
+    columns: { id: true, createdAt: true },
+  });
+  const pair = rows
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .slice(-2);
+  return pair.length === 2 ? [pair[0]!.id, pair[1]!.id] : null;
+}
+
+async function scoreClaimedPair(
+  paperId: string,
+  claimed: ClaimedReview[],
+  judge: JudgeClient,
+  paperText: string,
+): Promise<void> {
+  const [a, b] = claimed as [ClaimedReview, ClaimedReview];
   const start = Date.now();
 
-  const paperText = paperTextArg ?? (await loadPaperText(paperId));
   const textA = renderReviewText(a.structured);
   const textB = renderReviewText(b.structured);
 

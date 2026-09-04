@@ -32,6 +32,10 @@ const AdminPage = lazy(() =>
 const ConsentPage = lazy(() =>
   import("@/pages/ConsentPage").then((m) => ({ default: m.ConsentPage })),
 );
+// Standalone (default export) — the study flow ships its own chrome and
+// deliberately hides the app shell: participants must not see the
+// leaderboard while judging.
+const StudyPage = lazy(() => import("@/pages/StudyPage"));
 
 function RouteFallback() {
   // Page-level Suspense fallback. Single muted card so the layout
@@ -151,6 +155,8 @@ export function App() {
                   </AppShell>
                 }
               />
+              {/* Controlled study — full-bleed, no AppShell (no leaderboard nav). */}
+              <Route path="/study" element={<StudyPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

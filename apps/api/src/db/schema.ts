@@ -58,6 +58,11 @@ export const judgeStatusEnum = pgEnum("judge_status", [
 
 export const voteWinnerEnum = pgEnum("vote_winner", ["A", "B", "TIE"]);
 
+// Which collection regime produced a vote. ARENA = the open app (8-dim
+// form, live leaderboard); STUDY = the controlled 20-participant design
+// (single axis, deterministic rotation pairs, offline analysis).
+export const voteModeEnum = pgEnum("vote_mode", ["ARENA", "STUDY"]);
+
 // Both rating systems are computed on every vote and stored side by side.
 // BT (Bradley-Terry MLE) is what the leaderboard shows by default and what
 // LMArena reports publicly; ELO is the online, order-dependent system kept
@@ -92,6 +97,17 @@ export const metricReferenceTypeEnum = pgEnum("metric_reference_type", [
 
 // ─── Papers ───────────────────────────────────────────────────────────────
 
+// ─── Study participants ───────────────────────────────────────────────────
+
+// The 20 pre-assigned participants of the controlled study. `id` is the
+// public label (P01..P20) fixing the rotation schedule; `code` is the
+// secret they type to enter /study (capability token — no PII anywhere).
+export const participants = pgTable("participants", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const papers = pgTable(
   "papers",
   {
@@ -112,6 +128,14 @@ export const papers = pgTable(
     pageCount: integer("page_count"),
     status: paperStatusEnum("status").notNull().default("UPLOADED"),
     errorMessage: text("error_message"),
+    // Study mode: set on papers uploaded through /study. participantId
+    // links to the pre-assigned participant, paperIndex is 1 or 2 within
+    // their schedule, rotationId (1-5) fixes which three system pairs
+    // this paper's comparisons use (see src/study/rotation.ts). All null
+    // for arena uploads.
+    participantId: text("participant_id").references(() => participants.id),
+    paperIndex: integer("paper_index"),
+    rotationId: integer("rotation_id"),
     // Typed JSON shape lives in packages/shared-types/parsed-paper.ts.
     parsedStructure: jsonb("parsed_structure"),
     parserRawXml: text("parser_raw_xml"),
@@ -272,6 +296,14 @@ export const votes = pgTable(
     reviewAId: text("review_a_id").notNull().references(() => reviews.id),
     reviewBId: text("review_b_id").notNull().references(() => reviews.id),
     winner: voteWinnerEnum("winner").notNull(),
+    // ARENA votes carry the 8-dimension form and feed the live leaderboard;
+    // STUDY votes are single-axis, tied to a participant, analysed offline
+    // (mean-centred BT + participant-level cluster bootstrap) and NEVER
+    // included in live snapshots — a mid-study public board would leak
+    // standings back to participants and bias later votes.
+    mode: voteModeEnum("mode").notNull().default("ARENA"),
+    // Set on STUDY votes only — the clustering unit for the bootstrap.
+    participantId: text("participant_id").references(() => participants.id),
     // Optional free-text rationale for the overall verdict (mirrors the
     // per-dimension note; qualitative signal for thesis analysis).
     note: text("note"),
@@ -439,6 +471,35 @@ export const judgeVerdicts = pgTable(
   (t) => ({
     pairUk: uniqueIndex("judge_verdicts_pair_uk").on(t.reviewAId, t.reviewBId),
     paperIdx: index("judge_verdicts_paper_idx").on(t.paperId),
+  }),
+);
+
+// ─── Study comparisons ────────────────────────────────────────────────────
+
+// The deterministic replacement for the arena pair sampler: three rows per
+// study paper, created when generation is dispatched, one per rotation
+// pair. reviewAId/reviewBId already carry the blinding coin flip (which
+// side each system landed on is decided at creation and stored). voteId
+// links the participant's single-axis vote once cast.
+export const studyComparisons = pgTable(
+  "study_comparisons",
+  {
+    id: cuid(),
+    paperId: text("paper_id")
+      .notNull()
+      .references(() => papers.id, { onDelete: "cascade" }),
+    pairIndex: integer("pair_index").notNull(), // 1..3, display order
+    reviewAId: text("review_a_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    reviewBId: text("review_b_id")
+      .notNull()
+      .references(() => reviews.id, { onDelete: "cascade" }),
+    voteId: text("vote_id").references(() => votes.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    paperPairUk: uniqueIndex("study_comparisons_paper_pair_uk").on(t.paperId, t.pairIndex),
   }),
 );
 

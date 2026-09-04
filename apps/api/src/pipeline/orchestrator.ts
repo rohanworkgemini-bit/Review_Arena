@@ -105,10 +105,30 @@ async function generateOne(
       paperId: paper.id,
       reviewSystemId: system.id,
       status: "GENERATING",
+      // Without this the column default (COMPLETE, a legacy-rows-only
+      // accommodation) would make the pairwise judge skip the pair.
+      judgeStatus: "PENDING",
     })
     .returning({ id: reviews.id });
-  const reviewId = created!.id;
+  await generateIntoReview(created!.id, paper, parsed, system, client, judge, paperText);
+}
 
+/**
+ * Run one adapter into an EXISTING review row (GENERATING → COMPLETED or
+ * FAILED) and fire the pairwise judge on completion. The study flow
+ * precreates its six rows (so the rotation's comparison pairs can be
+ * fixed before generation starts) and dispatches them through here —
+ * same generation + judging path as the arena, minus the SSE trigger.
+ */
+export async function generateIntoReview(
+  reviewId: string,
+  paper: Paper,
+  parsed: ParsedPaper,
+  system: ReviewSystem,
+  client: ReviewGenClient,
+  judge?: JudgeClient,
+  paperText?: string,
+): Promise<void> {
   try {
     const result = await client.generate(
       system.adapterKey,

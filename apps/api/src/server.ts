@@ -21,6 +21,7 @@ import { startStuckReviewSweeper } from "./pipeline/sweeper.js";
 import { closeDbPool } from "./db/client.js";
 import multer from "multer";
 import { revealRouter } from "./routes/reveal.js";
+import { studyRouter } from "./routes/study.js";
 import { adminRouter } from "./routes/admin.js";
 import { ReviewGenClient } from "./clients/review-gen-client.js";
 import { JudgeClient } from "./clients/judge-client.js";
@@ -225,6 +226,7 @@ app.use(pairRouter(config));
 app.use(votesRouter(config));
 app.use(leaderboardRouter(config));
 app.use(revealRouter());
+app.use(studyRouter(config, reviewGen, judge));
 app.use(adminRouter(config, { reviewGen, judge, orchestrator }));
 
 // Upload errors deserve a real status + message: without this branch a

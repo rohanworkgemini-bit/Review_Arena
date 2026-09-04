@@ -33,7 +33,7 @@ const MAX_BYTES = 10 * 1024 * 1024;
  * (rasterized figures, font subsets). Strip them defensively before any
  * DB write. Pure NUL has no meaning in our markdown / metadata anyway.
  */
-function stripNullBytes<T>(value: T): T {
+export function stripNullBytes<T>(value: T): T {
   if (typeof value === "string") {
     return value.replace(/\x00/g, "") as unknown as T;
   }

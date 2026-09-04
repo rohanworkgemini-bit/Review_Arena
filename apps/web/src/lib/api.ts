@@ -1,6 +1,7 @@
 import type {
   Conference,
   PairResponse,
+  StructuredReview,
   RevealDetailResponse,
   SubmitVoteRequest,
   SubmitVoteResponse,
@@ -158,4 +159,145 @@ export async function getLeaderboard(
   if (method) url.searchParams.set("method", method);
   const res = await fetch(url.toString(), { credentials: "include" });
   return jsonOrThrow<LeaderboardResponse>(res);
+}
+
+// ─── Controlled study (/study/*) ────────────────────────────────────────────
+// Types are local: the study API is participant-facing only and its shapes
+// live in apps/api/src/routes/study.ts.
+
+export interface StudyComparisonState {
+  comparisonId: string;
+  pairIndex: number;
+  ready: boolean;
+  failed: boolean;
+  voted: boolean;
+}
+
+export interface StudyPaperState {
+  paperIndex: number;
+  paperId: string | null;
+  status?: string;
+  title?: string | null;
+  reviewsCompleted?: number;
+  reviewsFailed?: number;
+  reviewsTotal?: number;
+  comparisons?: StudyComparisonState[];
+  votesCast?: number;
+  done?: boolean;
+}
+
+export interface StudyState {
+  participantId: string;
+  papersPerParticipant: number;
+  pairsPerPaper: number;
+  papers: StudyPaperState[];
+  totalVotes: number;
+  studyDone: boolean;
+}
+
+export interface StudyPair {
+  comparisonId: string;
+  pairIndex: number;
+  paperId: string;
+  paperTitle: string | null;
+  conference: Conference;
+  alreadyVoted: boolean;
+  reviewA: { reviewId: string; structured: StructuredReview | null; rawOutput: string | null };
+  reviewB: { reviewId: string; structured: StructuredReview | null; rawOutput: string | null };
+}
+
+export interface StudyRevealComparison {
+  pairIndex: number;
+  systemA: { slug: string; name: string };
+  systemB: { slug: string; name: string };
+  winner: "A" | "B" | "TIE";
+}
+
+export async function studyState(code: string): Promise<StudyState> {
+  const res = await fetch(`${BASE}/study/state?code=${encodeURIComponent(code)}`, {
+    credentials: "include",
+  });
+  return jsonOrThrow<StudyState>(res);
+}
+
+export async function studyUploadPdf(
+  code: string,
+  file: File,
+  title?: string,
+): Promise<{ paperId: string; paperIndex: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("code", code);
+  if (title) form.append("title", title);
+  const res = await fetch(`${BASE}/study/papers`, {
+    method: "POST",
+    body: form,
+    credentials: "include",
+  });
+  return jsonOrThrow(res);
+}
+
+export async function studyUploadArxiv(
+  code: string,
+  url: string,
+  title?: string,
+): Promise<{ paperId: string; paperIndex: number }> {
+  const res = await fetch(`${BASE}/study/papers/arxiv`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, url, title }),
+    credentials: "include",
+  });
+  return jsonOrThrow(res);
+}
+
+export async function studyPairFetch(code: string, comparisonId: string): Promise<StudyPair> {
+  const res = await fetch(
+    `${BASE}/study/pair?code=${encodeURIComponent(code)}&comparisonId=${encodeURIComponent(comparisonId)}`,
+    { credentials: "include" },
+  );
+  return jsonOrThrow<StudyPair>(res);
+}
+
+export async function studyVote(body: {
+  code: string;
+  comparisonId: string;
+  winner: "A" | "B" | "TIE";
+  note?: string;
+  decisionMs?: number;
+}): Promise<{
+  ok: boolean;
+  votesOnPaper: number;
+  paperDone: boolean;
+  paperIndex: number;
+  studyDone: boolean;
+}> {
+  const res = await fetch(`${BASE}/study/votes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    credentials: "include",
+  });
+  return jsonOrThrow(res);
+}
+
+export async function studyReveal(
+  code: string,
+  paperId: string,
+): Promise<{ paperIndex: number; comparisons: StudyRevealComparison[] }> {
+  const res = await fetch(
+    `${BASE}/study/reveal?code=${encodeURIComponent(code)}&paperId=${encodeURIComponent(paperId)}`,
+    { credentials: "include" },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function studyRetry(code: string, paperId: string): Promise<{ ok: boolean; retried: number }> {
+  const res = await fetch(`${BASE}/study/retry`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code, paperId }),
+    credentials: "include",
+  });
+  return jsonOrThrow(res);
 }
