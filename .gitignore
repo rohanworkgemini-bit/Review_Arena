@@ -68,3 +68,8 @@ apps/api/prisma/generated/
 *.docx
 *.pptx
 /*.pdf
+
+# Private working documents — thesis drafts, runbooks, internal notes.
+# Deliberately never committed: purged from history 2026-09-07 and kept
+# local only. Back them up outside the repo.
+docs/

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:blog.iclr.cc)",
+      "WebFetch(domain:www.nature.com)",
+      "WebFetch(domain:aclrollingreview.org)",
+      "WebFetch(domain:www.pangram.com)",
+      "WebFetch(domain:iclr.cc)",
+      "WebFetch(domain:blog.icml.cc)",
+      "WebFetch(domain:neurips.cc)",
+      "WebFetch(domain:icml.cc)",
+      "WebFetch(domain:www.lmsys.org)",
+      "WebFetch(domain:www.semanticscholar.org)",
+      "WebFetch(domain:aclanthology.org)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
