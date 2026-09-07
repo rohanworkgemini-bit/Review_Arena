@@ -40,24 +40,57 @@ export type LeaderboardResponse = z.infer<typeof LeaderboardResponseSchema>;
 
 // ─── GET /reveal ────────────────────────────────────────────────────────────
 
+// Keep in sync with RevealSideSchema / JudgeVerdictSchema /
+// RevealDetailResponseSchema in packages/shared-types/src/api.ts.
 export const RevealReviewSchema = z.object({
   reviewId: CuidSchema,
   systemName: z.string(),
+  // Panel means across the judges that returned; null until any did.
   judgeOverall: z.number().nullable(),
   judgeDimensions: z.record(z.number()).nullable(),
+  judgeCount: z.number().int().min(0),
 });
 
-// Pairwise judge verdict, mapped onto this vote's blinded sides.
-export const RevealJudgeVerdictSchema = z.object({
-  overall: z.enum(["A", "B", "TIE"]),
-  dimensions: z.record(z.enum(["A", "B", "TIE"])),
+const JudgePreferenceSchema = z.enum(["A", "B", "TIE"]);
+
+// One panel member's verdict, mapped onto this vote's blinded sides.
+export const RevealJudgeEntrySchema = z.object({
+  judge: z.string(),
+  judgeName: z.string(),
+  overall: JudgePreferenceSchema,
+  dimensions: z.record(JudgePreferenceSchema),
   passesUsed: z.number().int().min(1).max(2),
+  // This judge generated one of the two reviews it compared.
+  selfJudging: z.boolean(),
+  scoreA: z.number().nullable(),
+  scoreB: z.number().nullable(),
 });
+
+// Panel majority (TIE votes count for neither side; an even split is TIE).
+export const RevealJudgeVerdictSchema = z.object({
+  overall: JudgePreferenceSchema,
+  dimensions: z.record(JudgePreferenceSchema),
+  counts: z.object({ A: z.number().int(), B: z.number().int(), TIE: z.number().int() }),
+  judgesReturned: z.number().int().min(0),
+  judgesExpected: z.number().int().min(0),
+  judges: z.array(RevealJudgeEntrySchema),
+});
+
+export const RevealJudgeStatusSchema = z.enum([
+  "PENDING",
+  "RUNNING",
+  "COMPLETE",
+  "PARTIAL",
+  "FAILED",
+]);
 
 export const RevealResponseSchema = z.object({
   reviewA: RevealReviewSchema,
   reviewB: RevealReviewSchema,
   judgeVerdict: RevealJudgeVerdictSchema.nullable(),
+  // PENDING = not judged (arena papers never are); RUNNING = panel in
+  // flight; COMPLETE/PARTIAL/FAILED = settled.
+  judgeStatus: RevealJudgeStatusSchema,
 });
 
 export type RevealResponse = z.infer<typeof RevealResponseSchema>;
@@ -143,6 +176,8 @@ export const AdminExportResponseSchema = z.object({
   papers: z.array(z.any()),
   votes: z.array(z.any()),
   metrics: z.array(z.any()),
+  // One judge_verdicts row per (study pair, panel member) — the RQ2 raw data.
+  verdicts: z.array(z.any()),
   snapshots: z.array(z.any()),
 });
 

@@ -95,32 +95,32 @@ export function RevealPage() {
     }
   }, [params]);
 
-  // Per-dimension judge scores are fetched by voteId. The score job may
-  // still be running when the user lands here. A and B are scored
-  // independently — so keep polling until BOTH sides have judgeDimensions
-  // (previously we stopped on first partial data, forcing a manual refresh).
-  // Cap at ~3 min of polling in case the judge failed and scores never land.
+  // Judge-panel output is fetched by voteId. The panel may still be running
+  // when the user lands here, so poll until judgeStatus settles. Only
+  // study pairs are judged: an arena vote comes back PENDING with no
+  // scores, which is final — never poll for a judge that will not come.
+  // Cap at ~10 min of polling in case the panel is slow or wedged.
   const revealQuery = useQuery({
     queryKey: ["reveal", voteId],
     queryFn: () => getReveal(voteId!),
     enabled: !!voteId,
     refetchInterval: (q) => {
       // Count errors toward the cap too: with a dead API, dataUpdateCount
-      // never advances and 100 tabs would otherwise poll every 3s forever
-      // — a retry storm aimed at a server that's trying to come back.
-      if (q.state.dataUpdateCount + q.state.errorUpdateCount > 60) return false;
+      // never advances and 100 tabs would otherwise poll forever — a retry
+      // storm aimed at a server that's trying to come back.
+      if (q.state.dataUpdateCount + q.state.errorUpdateCount > 120) return false;
       const d = q.state.data;
-      const done = !!d?.reviewA.judgeDimensions && !!d?.reviewB.judgeDimensions;
-      return done ? false : 3000;
+      if (!d) return 5000;
+      return d.judgeStatus === "RUNNING" ? 5000 : false;
     },
     retry: 1,
   });
 
   const usingPlaceholder = !params.get("state");
   const detail = revealQuery.data;
-  const scoringPending =
-    !!voteId &&
-    (!detail || !detail.reviewA.judgeDimensions || !detail.reviewB.judgeDimensions);
+  const scoringPending = !!voteId && (!detail || detail.judgeStatus === "RUNNING");
+  const notJudged = !!detail && detail.judgeStatus === "PENDING";
+  const panelSize = detail?.judgeVerdict?.judgesExpected ?? 0;
   // Guard: in prod, require state param (no mocking system IDs)
   const hasMissingState = !header.reviewA.reviewId && !import.meta.env.DEV;
   if (hasMissingState) {
@@ -157,8 +157,8 @@ export function RevealPage() {
           <div className="eyebrow">Vote recorded · you preferred</div>
           <h1 className="text-3xl font-semibold tracking-[-0.01em] mt-2">{winnerLabel}</h1>
           <p className="text-graphite mt-2">
-            Systems revealed below, along with how the LLM-as-judge sees the same
-            reviews.
+            Systems revealed below, along with how the LLM judge panel sees the
+            same reviews.
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -185,20 +185,25 @@ export function RevealPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">LLM-as-judge dimension scores</CardTitle>
+          <CardTitle className="text-base">Judge-panel dimension scores</CardTitle>
           <CardDescription>
-            {revealQuery.isError ? (
+            {revealQuery.isError || detail?.judgeStatus === "FAILED" ? (
               <span>
-                Judge scores are unavailable right now — your vote is saved
-                and counted; check the leaderboard later.
+                Judge scores are unavailable — your vote is saved and counted;
+                check the leaderboard later.
+              </span>
+            ) : notJudged ? (
+              <span>
+                This comparison was not scored by the judge panel (judging runs
+                for study papers only). Your vote is saved and counted.
               </span>
             ) : scoringPending ? (
               <span className="inline-flex items-center gap-2">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                Scoring in progress — updates automatically as the judge finishes.
+                Judge panel in progress — updates automatically as judges finish.
               </span>
             ) : (
-              "0–10 per dimension from the judge model. Higher is better."
+              `0–10 per dimension, mean across the ${detail?.reviewA.judgeCount ?? 0}-model judge panel. Higher is better.`
             )}
           </CardDescription>
         </CardHeader>
@@ -241,14 +246,18 @@ export function RevealPage() {
           {detail?.judgeVerdict && (
             <div className="mt-5 border-t border-dashed border-rule2 pt-4">
               <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
-                Judge verdict (same A/B comparison you made)
+                Panel verdict (same A/B comparison you made)
               </div>
               <p className="mb-3 text-sm">
                 {detail.judgeVerdict.overall === "TIE" ? (
-                  <>The judge calls it a tie overall.</>
+                  <>
+                    The panel is split overall ({detail.judgeVerdict.counts.A}–
+                    {detail.judgeVerdict.counts.B}, {detail.judgeVerdict.counts.TIE} ties).
+                  </>
                 ) : (
                   <>
-                    The judge preferred{" "}
+                    {detail.judgeVerdict.counts[detail.judgeVerdict.overall]} of{" "}
+                    {detail.judgeVerdict.judgesReturned} judges preferred{" "}
                     <span className="font-medium">
                       Review {detail.judgeVerdict.overall}
                       {" — "}
@@ -259,12 +268,32 @@ export function RevealPage() {
                     overall.
                   </>
                 )}{" "}
-                {detail.judgeVerdict.passesUsed < 2 && (
+                {detail.judgeVerdict.judgesReturned < panelSize && (
                   <span className="text-graphite">
-                    (single-pass verdict; order-swap check unavailable)
+                    ({detail.judgeVerdict.judgesReturned} of {panelSize} judges responded)
                   </span>
                 )}
               </p>
+              <ul className="mb-4 space-y-0.5 font-mono text-[11px]">
+                {detail.judgeVerdict.judges.map((j) => (
+                  <li key={j.judge} className="flex items-baseline gap-2">
+                    <span className="w-44 truncate text-graphite">{j.judgeName}</span>
+                    <span className={j.overall === "TIE" ? "text-graphite" : "font-medium"}>
+                      {j.overall === "TIE" ? "tie" : `Review ${j.overall}`}
+                    </span>
+                    {j.selfJudging && (
+                      <span className="text-graphite" title="This judge wrote one of the two reviews">
+                        · judged own review
+                      </span>
+                    )}
+                    {j.passesUsed < 2 && (
+                      <span className="text-graphite" title="Order-swap check unavailable">
+                        · single pass
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
               <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[11px] sm:grid-cols-4">
                 {VOTE_DIMENSIONS.map((d) => {
                   const p = detail.judgeVerdict!.dimensions[d];
@@ -378,7 +407,7 @@ function RevealCard({
         {detail?.judgeOverall != null && (
           <div className="border-t border-dashed border-rule2 px-1 pt-3 text-sm">
             <div className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">
-              Judge overall
+              Judge overall (panel mean, n={detail.judgeCount})
             </div>
             <div className="font-mono">{detail.judgeOverall.toFixed(1)} / 10</div>
           </div>

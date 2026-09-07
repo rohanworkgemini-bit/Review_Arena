@@ -140,33 +140,64 @@ export type SubmitVoteResponse = z.infer<typeof SubmitVoteResponseSchema>;
 
 // ─── GET /reveal/:voteId ────────────────────────────────────────────────────
 
+// Keep in sync with apps/api/src/routes/schemas.ts (Reveal*).
 export const RevealSideSchema = z.object({
   reviewId: CuidSchema,
   systemName: z.string(),
+  // Mean overall score (0..10) across the judge-panel members that
+  // returned. null until any did.
   judgeOverall: z.number().nullable(),
-  // Per-dimension judge scores in 0..10, keyed by VoteDimension. null until
-  // scoring runs.
+  // Per-dimension panel-mean scores in 0..10, keyed by VoteDimension.
   judgeDimensions: z.record(z.string(), z.number()).nullable(),
+  // How many judges the means are over.
+  judgeCount: z.number().int().min(0),
 });
 export type RevealSide = z.infer<typeof RevealSideSchema>;
 
-// Pairwise LLM-judge verdict: the judge compares both reviews in one
-// request (order-swapped double pass) and emits the same construct human
-// raters give. "A"/"B" here are already mapped onto THIS vote's blinded
-// sides. passesUsed: 2 = swap-consistent verdict; 1 = one pass failed, so
-// the position-bias control was unavailable.
-export const JudgeVerdictSchema = z.object({
-  overall: z.enum(["A", "B", "TIE"]),
-  dimensions: z.record(z.string(), z.enum(["A", "B", "TIE"])),
+const JudgePreferenceSchema = z.enum(["A", "B", "TIE"]);
+export type JudgePreference = z.infer<typeof JudgePreferenceSchema>;
+
+// One judge-panel member's pairwise verdict: it compared both reviews in
+// one request (order-swapped double pass) and emitted the same construct
+// human raters give. "A"/"B" are already mapped onto THIS vote's blinded
+// sides. passesUsed: 2 = swap-consistent; 1 = one pass failed, so the
+// position-bias control was unavailable. selfJudging: the judge generated
+// one of the two reviews.
+export const JudgeEntrySchema = z.object({
+  judge: z.string(),
+  judgeName: z.string(),
+  overall: JudgePreferenceSchema,
+  dimensions: z.record(z.string(), JudgePreferenceSchema),
   passesUsed: z.number().int().min(1).max(2),
+  selfJudging: z.boolean(),
+  scoreA: z.number().nullable(),
+  scoreB: z.number().nullable(),
+});
+export type JudgeEntry = z.infer<typeof JudgeEntrySchema>;
+
+// Panel majority: the side with more judge votes; TIE votes count for
+// neither side and an even split is TIE.
+export const JudgeVerdictSchema = z.object({
+  overall: JudgePreferenceSchema,
+  dimensions: z.record(z.string(), JudgePreferenceSchema),
+  counts: z.object({ A: z.number().int(), B: z.number().int(), TIE: z.number().int() }),
+  judgesReturned: z.number().int().min(0),
+  judgesExpected: z.number().int().min(0),
+  judges: z.array(JudgeEntrySchema),
 });
 export type JudgeVerdict = z.infer<typeof JudgeVerdictSchema>;
+
+export const JudgeStatusSchema = z.enum(["PENDING", "RUNNING", "COMPLETE", "PARTIAL", "FAILED"]);
+export type JudgeStatus = z.infer<typeof JudgeStatusSchema>;
 
 export const RevealDetailResponseSchema = z.object({
   reviewA: RevealSideSchema,
   reviewB: RevealSideSchema,
-  // null until the pairwise judge has run (or when it failed).
+  // null until at least one panel member has returned.
   judgeVerdict: JudgeVerdictSchema.nullable(),
+  // PENDING = not judged (arena papers never are); RUNNING = panel in
+  // flight; COMPLETE / PARTIAL / FAILED = settled.
+  judgeStatus: JudgeStatusSchema,
 });
 export type RevealDetailResponse = z.infer<typeof RevealDetailResponseSchema>;
 

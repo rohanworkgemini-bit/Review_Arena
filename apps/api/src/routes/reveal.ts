@@ -1,12 +1,17 @@
 import { Router } from "express";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { judgeVerdicts, votes, type MetricScore } from "../db/schema.js";
+import { judgeVerdicts, reviewSystems, votes, type MetricScore } from "../db/schema.js";
+import type { JudgePreference } from "../clients/judge-client.js";
+import { aggregateVerdicts, meanScores, type VerdictRow } from "../pipeline/judge-panel.js";
+import { STUDY_SLUGS } from "../study/rotation.js";
 import { RevealResponseSchema } from "./schemas.js";
 
-// GET /reveal/:voteId — LLM-judge scores (overall + per-dimension) for both
-// reviews. Populated by /admin/papers/:id/score (Checkpoint 7) — nulls if
-// scoring hasn't run yet.
+// GET /reveal/:voteId — judge-panel output for both reviews: per-side panel
+// means (overall + per-dimension), the panel-majority verdict mapped onto
+// this vote's blinded sides, and every member's own verdict. Only study
+// pairs are judged; arena votes come back with judgeStatus PENDING, no
+// scores and no verdict.
 
 export function revealRouter(): Router {
   const router = Router();
@@ -31,25 +36,28 @@ export function revealRouter(): Router {
       }
 
       type ReviewSide = NonNullable<typeof vote>["reviewA"];
+      const judgeRows = (review: ReviewSide) =>
+        review.metricScores.filter((m: MetricScore) => m.kind === "LLM_JUDGE_OVERALL");
+      const dimsOf = (m: MetricScore) =>
+        (m.meta as { dimension_scores?: Record<string, number> } | null)?.dimension_scores ??
+        null;
       const pack = (review: ReviewSide) => {
-        const overallRow = review.metricScores.find(
-          (m: MetricScore) => m.kind === "LLM_JUDGE_OVERALL",
-        );
-        const dimensionScores =
-          (overallRow?.meta as { dimension_scores?: Record<string, number> } | null)
-            ?.dimension_scores ?? null;
+        const rows = judgeRows(review);
+        const mean = meanScores(rows.map((m) => ({ value: m.value, dimensionScores: dimsOf(m) })));
         return {
           reviewId: review.id,
           systemName: review.reviewSystem.name,
-          judgeOverall: overallRow?.value ?? null,
-          judgeDimensions: dimensionScores,
+          judgeOverall: mean.overall,
+          judgeDimensions: mean.dimensions,
+          judgeCount: rows.length,
         };
       };
 
-      // Pairwise verdict, if judged. The judge_verdicts row stores A/B
-      // relative to its own (review_a_id, review_b_id) ordering, which is
-      // independent of this vote's blinded coin flip — remap when swapped.
-      const verdictRow = await db.query.judgeVerdicts.findFirst({
+      // Every panel member's verdict for this pair. A judge_verdicts row
+      // stores A/B relative to its own (review_a_id, review_b_id) ordering,
+      // which is independent of this vote's blinded coin flip — remap
+      // swapped rows before taking the majority.
+      const verdictRows = await db.query.judgeVerdicts.findMany({
         where: or(
           and(
             eq(judgeVerdicts.reviewAId, vote.reviewAId),
@@ -61,19 +69,55 @@ export function revealRouter(): Router {
           ),
         ),
       });
+
       let judgeVerdict = null;
-      if (verdictRow) {
-        const swapped = verdictRow.reviewAId !== vote.reviewAId;
-        const map = (p: string) =>
-          p === "TIE" ? "TIE" : swapped ? (p === "A" ? "B" : "A") : p;
-        const dims = verdictRow.dimensionPreferences as Record<string, string>;
+      if (verdictRows.length > 0) {
+        const nameBySlug = new Map(
+          (
+            await db
+              .select({ slug: reviewSystems.slug, name: reviewSystems.name })
+              .from(reviewSystems)
+              .where(inArray(reviewSystems.slug, verdictRows.map((r) => r.judgeModel)))
+          ).map((s) => [s.slug, s.name]),
+        );
+        const scoreBy = (review: ReviewSide, judge: string) =>
+          judgeRows(review).find((m) => m.judgeModel === judge)?.value ?? null;
+        const rows: VerdictRow[] = verdictRows.map((r) => ({
+          judgeModel: r.judgeModel,
+          overallPreference: r.overallPreference as JudgePreference,
+          dimensionPreferences: r.dimensionPreferences as Record<string, JudgePreference>,
+          swapped: r.reviewAId !== vote.reviewAId,
+          passesUsed: (r.meta as { passes_used?: number } | null)?.passes_used ?? 2,
+        }));
+        const agg = aggregateVerdicts(rows);
+        const judges = rows.map((row, i) => {
+          const src = verdictRows[i]!;
+          const flip = (p: JudgePreference) =>
+            p === "TIE" || !row.swapped ? p : p === "A" ? "B" : "A";
+          return {
+            judge: row.judgeModel,
+            judgeName: nameBySlug.get(row.judgeModel) ?? row.judgeModel,
+            overall: flip(row.overallPreference),
+            dimensions: Object.fromEntries(
+              Object.entries(row.dimensionPreferences).map(([d, p]) => [d, flip(p)]),
+            ),
+            passesUsed: row.passesUsed,
+            selfJudging:
+              (src.meta as { self_judging?: boolean } | null)?.self_judging ??
+              (row.judgeModel === vote.reviewA.reviewSystem.slug ||
+                row.judgeModel === vote.reviewB.reviewSystem.slug),
+            scoreA: scoreBy(vote.reviewA, row.judgeModel),
+            scoreB: scoreBy(vote.reviewB, row.judgeModel),
+          };
+        });
+        const panelSize = (verdictRows[0]!.meta as { panel_size?: number } | null)?.panel_size;
         judgeVerdict = {
-          overall: map(verdictRow.overallPreference),
-          dimensions: Object.fromEntries(
-            Object.entries(dims).map(([dim, p]) => [dim, map(p)]),
-          ),
-          passesUsed:
-            (verdictRow.meta as { passes_used?: number } | null)?.passes_used ?? 2,
+          overall: agg.overall,
+          dimensions: agg.dimensions,
+          counts: agg.counts,
+          judgesReturned: rows.length,
+          judgesExpected: panelSize ?? STUDY_SLUGS.length,
+          judges,
         };
       }
 
@@ -81,6 +125,8 @@ export function revealRouter(): Router {
         reviewA: pack(vote.reviewA),
         reviewB: pack(vote.reviewB),
         judgeVerdict,
+        // Both sides of a pair are always set together.
+        judgeStatus: vote.reviewA.judgeStatus,
       };
       const validated = RevealResponseSchema.parse(payload);
       res.json(validated);
