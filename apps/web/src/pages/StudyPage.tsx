@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
+import { DimensionProgress, DimensionRow, HighlightToolbar } from "@/components/comparison";
+import { addHighlights, type Highlight } from "@/lib/highlight";
 import { cn } from "@/lib/cn";
 import {
   CONFERENCE_OPTIONS,
@@ -11,7 +14,13 @@ import {
   StyledDropdown,
   type UploadSource,
 } from "@/components/ui/styled-dropdown";
-import type { Conference } from "@reviewarena/shared-types";
+import {
+  DIMENSION_DESCRIPTIONS,
+  DIMENSION_LABELS,
+  VOTE_DIMENSIONS,
+  type Conference,
+  type VoteDimension,
+} from "@reviewarena/shared-types";
 import {
   ApiError,
   studyPairFetch,
@@ -27,12 +36,18 @@ import {
 
 /**
  * The controlled study's single-page flow (/study). Standalone — no app
- * shell, no leaderboard link: participants must not see live standings.
+ * shell and no leaderboard nav *during* the session, so a participant
+ * can't check standings between their own comparisons. The board is
+ * unlocked on the final reveal, once every vote of theirs is recorded.
+ *
+ * Voting is identical to the arena: all eight dimensions required, same
+ * widgets and wording. The deterministic rotation is the only difference.
  *
  * Screens, driven entirely by GET /study/state:
  *   code entry → upload paper N → "reviews generating" progress →
- *   3 blind comparisons (single-axis vote) → per-paper celebration +
- *   identity reveal → next paper → final thank-you.
+ *   3 blind comparisons (8 dimensions + overall verdict) → per-paper
+ *   celebration + identity reveal → next paper → final thank-you +
+ *   leaderboard.
  */
 
 const CODE_KEY = "ra-study-code";
@@ -533,6 +548,33 @@ function ComparisonScreen({
 }) {
   const startedAt = useRef(Date.now());
   const [note, setNote] = useState("");
+  // Per-dimension picks, identical to the arena's ComparisonPage:
+  // -1 = A better, 0 = tie, +1 = B better. All eight are REQUIRED.
+  const [dimensionValues, setDimensionValues] = useState<
+    Partial<Record<VoteDimension, -1 | 0 | 1>>
+  >({});
+  const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>({});
+  const refinedCount = Object.keys(dimensionValues).length;
+  const allDimensionsPicked = refinedCount === VOTE_DIMENSIONS.length;
+
+  // Highlighter: a reading aid, never submitted. Kept per panel so the same
+  // block index in A and B can't collide.
+  const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
+  const [marksA, setMarksA] = useState<Highlight[]>([]);
+  const [marksB, setMarksB] = useState<Highlight[]>([]);
+
+  // Each comparison is a fresh survey — clear picks when the pair changes,
+  // otherwise comparison 2 inherits comparison 1's answers.
+  useEffect(() => {
+    setDimensionValues({});
+    setDimensionNotes({});
+    setNote("");
+    setMarksA([]);
+    setMarksB([]);
+    setHighlighter(null);
+    startedAt.current = Date.now();
+  }, [comparisonId]);
+
   const pairQuery = useQuery({
     queryKey: ["study-pair", comparisonId],
     queryFn: () => studyPairFetch(code, comparisonId),
@@ -546,6 +588,11 @@ function ComparisonScreen({
         winner,
         note: note.trim() || undefined,
         decisionMs: Date.now() - startedAt.current,
+        dimensions: VOTE_DIMENSIONS.map((d) => ({
+          dimension: d,
+          value: dimensionValues[d] as -1 | 0 | 1,
+          note: dimensionNotes[d]?.trim() || undefined,
+        })),
       }),
     onSuccess: onVoted,
   });
@@ -571,17 +618,79 @@ function ComparisonScreen({
         authors more. The systems stay anonymous until you finish this paper.
       </p>
 
+      <HighlightToolbar
+        className="mb-3"
+        active={highlighter}
+        onChange={setHighlighter}
+        highlights={[...marksA, ...marksB]}
+        onClear={() => {
+          setMarksA([]);
+          setMarksB([]);
+        }}
+      />
+
       <div className="mb-6 grid grid-cols-1 divide-y divide-rule2 border border-rule2 bg-white md:grid-cols-2 md:divide-x md:divide-y-0">
         <ReviewPanel
           label="REVIEW A"
           review={pair.reviewA.structured ?? EMPTY_REVIEW}
           raw={pair.reviewA.rawOutput}
+          highlights={marksA}
+          highlighterArmed={highlighter !== null}
+          onSelectRanges={(r) =>
+            highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
+          }
+          onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
         />
         <ReviewPanel
           label="REVIEW B"
           review={pair.reviewB.structured ?? EMPTY_REVIEW}
           raw={pair.reviewB.rawOutput}
+          highlights={marksB}
+          highlighterArmed={highlighter !== null}
+          onSelectRanges={(r) =>
+            highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
+          }
+          onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
         />
+      </div>
+
+      {/* Per-dimension picks — the same eight axes, wording and widget the
+          arena uses, so study and arena votes are directly comparable. */}
+      <div className="mb-6 border border-rule2 bg-card">
+        <div className="flex items-center justify-between gap-3 bg-paper2 px-4 py-3">
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
+              Rate every dimension
+            </span>
+            <span className="font-mono text-[11px] text-red">required</span>
+          </div>
+          <DimensionProgress count={refinedCount} total={VOTE_DIMENSIONS.length} />
+        </div>
+        <div className="border-t border-rule px-4 py-4">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
+            {VOTE_DIMENSIONS.map((d) => (
+              <DimensionRow
+                key={d}
+                label={DIMENSION_LABELS[d]}
+                question={DIMENSION_DESCRIPTIONS[d]}
+                value={dimensionValues[d]}
+                note={dimensionNotes[d] ?? ""}
+                onPick={(next) =>
+                  setDimensionValues((prev) => {
+                    const copy = { ...prev };
+                    // Click the selected side again to deselect.
+                    if (copy[d] === next) delete copy[d];
+                    else copy[d] = next;
+                    return copy;
+                  })
+                }
+                onChangeNote={(text) =>
+                  setDimensionNotes((prev) => ({ ...prev, [d]: text }))
+                }
+              />
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="mx-auto max-w-xl text-center">
@@ -589,16 +698,32 @@ function ComparisonScreen({
           Which review is better overall?
         </p>
         <div className="mb-4 flex justify-center gap-3">
-          <Button onClick={() => vote.mutate("A")} disabled={vote.isPending}>
+          <Button
+            onClick={() => vote.mutate("A")}
+            disabled={vote.isPending || !allDimensionsPicked}
+          >
             A is better
           </Button>
-          <Button variant="outline" onClick={() => vote.mutate("TIE")} disabled={vote.isPending}>
+          <Button
+            variant="outline"
+            onClick={() => vote.mutate("TIE")}
+            disabled={vote.isPending || !allDimensionsPicked}
+          >
             Tie
           </Button>
-          <Button onClick={() => vote.mutate("B")} disabled={vote.isPending}>
+          <Button
+            onClick={() => vote.mutate("B")}
+            disabled={vote.isPending || !allDimensionsPicked}
+          >
             B is better
           </Button>
         </div>
+        {!allDimensionsPicked && (
+          <p className="mb-3 font-mono text-xs text-graphite">
+            Rate all {VOTE_DIMENSIONS.length} dimensions above to submit —{" "}
+            {VOTE_DIMENSIONS.length - refinedCount} left.
+          </p>
+        )}
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -686,10 +811,19 @@ function RevealScreen({
       {onContinue && (
         <Button onClick={onContinue}>Continue to paper {paperIndex + 1} →</Button>
       )}
+      {/* The leaderboard is unlocked ONLY here, after the final vote is
+          already recorded. Showing it mid-study would let a participant on
+          paper 2 see which system is ahead and vote to match it — the
+          votes would stop being independent. */}
       {isFinal && (
-        <p className="font-mono text-xs text-graphite">
-          You can close this window now.
-        </p>
+        <div className="mt-2">
+          <Link to="/leaderboard">
+            <Button variant="outline">See the leaderboard →</Button>
+          </Link>
+          <p className="mt-4 font-mono text-xs text-graphite">
+            You can close this window now.
+          </p>
+        </div>
       )}
     </div>
   );

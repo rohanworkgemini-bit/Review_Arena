@@ -8,6 +8,7 @@ import type {
   LeaderboardResponse,
   RatingMethod,
   UploadPaperResponse,
+  VoteDimension,
 } from "@reviewarena/shared-types";
 
 // Thin fetch wrapper. TanStack Query handles caching, retries, status.
@@ -268,6 +269,13 @@ export async function studyVote(body: {
   winner: "A" | "B" | "TIE";
   note?: string;
   decisionMs?: number;
+  // All eight, same contract as the arena's submitVote — the server
+  // rejects anything sparser.
+  dimensions: {
+    dimension: VoteDimension;
+    value: -1 | 0 | 1;
+    note?: string;
+  }[];
 }): Promise<{
   ok: boolean;
   votesOnPaper: number;

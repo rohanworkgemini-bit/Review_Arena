@@ -8,13 +8,26 @@
  *
  * Flow per paper: upload → ALL six systems generate server-side → the
  * rotation's three comparisons unlock as their reviews complete → three
- * single-axis votes → per-paper reveal (identities only — no ratings, no
- * judge output, so later votes aren't anchored on scores).
+ * votes on the SAME eight dimensions the arena uses → per-paper reveal
+ * (identities only — no ratings, no judge output, so later votes aren't
+ * anchored on scores).
  *
- * Study votes are mode=STUDY: excluded from live leaderboard snapshots
- * (a public board mid-study would leak standings back to participants);
- * analysed offline with mean-centred BT + participant-level cluster
- * bootstrap.
+ * Voting is deliberately identical to the arena (all eight dimensions
+ * required, one `dimension_votes` row each). The rotation's deterministic
+ * pairing is the *only* intended difference between the two modes, so
+ * study data drops straight into the same per-dimension BT analysis.
+ *
+ * Study votes are tagged mode=STUDY but COUNT TOWARD THE LIVE LEADERBOARD
+ * exactly like arena votes — loadBattles (routes/votes.ts) filters on
+ * review/judge status and qualityFlagged only, never on mode. The tag is
+ * for offline analysis (mean-centred BT + participant-level cluster
+ * bootstrap), not for excluding them from the board.
+ *
+ * Participants still don't see standings mid-session: the study flow has
+ * no leaderboard nav, and the link is unlocked only on the final reveal,
+ * after their last vote is recorded. Note this is a per-session guard, not
+ * a global one — a later participant's board does include earlier
+ * participants' votes.
  */
 import { Router } from "express";
 import multer from "multer";
@@ -22,6 +35,7 @@ import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
+  dimensionVotes,
   papers,
   participants,
   reviews,
@@ -32,12 +46,20 @@ import {
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { JudgeClient } from "../clients/judge-client.js";
 import { generateIntoReview } from "../pipeline/orchestrator.js";
+import { scheduleSnapshotRecompute } from "./votes.js";
 import { renderPaperText } from "../pipeline/score-paper.js";
 import { lengthBandFor, normalizeArxivId } from "./papers-helpers.js";
 import { stripNullBytes } from "./papers.js";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
-import { ConferenceSchema, type ParsedPaper } from "@reviewarena/shared-types";
+import {
+  ConferenceSchema,
+  VOTE_DIMENSIONS,
+  VoteDimensionSchema,
+  type ParsedPaper,
+  type VoteDimension,
+} from "@reviewarena/shared-types";
+import { z } from "zod";
 import {
   PAIRS_PER_PAPER,
   PAPERS_PER_PARTICIPANT,
@@ -51,8 +73,31 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 },
 });
 
+/**
+ * Per-dimension picks for a study vote. Mirrors SubmitVoteRequestSchema's
+ * `dimensions` field exactly — all eight, no duplicates, value -1 (A) /
+ * 0 (tie) / 1 (B). Enforced server-side for the same reason the arena
+ * does it: a non-UI client must not be able to write sparse rows that
+ * would skew the per-dimension boards.
+ */
+const StudyDimensionsSchema = z
+  .array(
+    z.object({
+      dimension: VoteDimensionSchema,
+      value: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+      note: z.string().max(1000).optional(),
+    }),
+  )
+  .length(VOTE_DIMENSIONS.length)
+  .refine((arr) => new Set(arr.map((d) => d.dimension)).size === arr.length, {
+    message: "Each dimension may appear at most once.",
+  })
+  .refine((arr) => VOTE_DIMENSIONS.every((d) => arr.some((x) => x.dimension === d)), {
+    message: "All voting dimensions must be provided.",
+  });
+
 export function studyRouter(
-  _config: Config,
+  config: Config,
   reviewGen: ReviewGenClient,
   judge?: JudgeClient,
 ): Router {
@@ -446,7 +491,7 @@ export function studyRouter(
     }
   });
 
-  // ── POST /study/votes — single-axis ──────────────────────────────────
+  // ── POST /study/votes — overall verdict + all eight dimensions ───────
   router.post("/study/votes", async (req, res, next) => {
     try {
       const participant = await participantFor(req.body.code);
@@ -460,6 +505,17 @@ export function studyRouter(
         res.status(400).json({ error: "BadRequest", message: "winner must be A, B or TIE." });
         return;
       }
+      const parsedDimensions = StudyDimensionsSchema.safeParse(req.body.dimensions);
+      if (!parsedDimensions.success) {
+        res.status(400).json({
+          error: "BadRequest",
+          message:
+            parsedDimensions.error.issues[0]?.message ??
+            `All ${VOTE_DIMENSIONS.length} voting dimensions must be provided.`,
+        });
+        return;
+      }
+      const dimensions = parsedDimensions.data;
       const comp = await db.query.studyComparisons.findFirst({
         where: eq(studyComparisons.id, comparisonId),
       });
@@ -499,6 +555,16 @@ export function studyRouter(
             participantId: participant.id,
           })
           .returning({ id: votes.id });
+        // Same shape the arena writes (routes/votes.ts) — the schema above
+        // guarantees all eight are present, so study rows are never sparse.
+        await tx.insert(dimensionVotes).values(
+          dimensions.map((d) => ({
+            voteId: v!.id,
+            dimension: d.dimension,
+            value: d.value,
+            note: d.note?.trim() ? d.note.trim() : null,
+          })),
+        );
         const linked = await tx
           .update(studyComparisons)
           .set({ voteId: v!.id })
@@ -508,6 +574,12 @@ export function studyRouter(
         if (linked.length === 0) throw Object.assign(new Error("already voted"), { statusCode: 409 });
         return v!;
       });
+
+      // Study votes count toward the live boards exactly like arena votes,
+      // so they must trigger the same recompute. Without this the snapshot
+      // tables only ever advance on an ARENA vote, and a study-only run
+      // leaves the leaderboard frozen at whatever the last arena vote saw.
+      scheduleSnapshotRecompute(vote.id, config.RATING_BASELINE_SLUG);
 
       const comps = await db.query.studyComparisons.findMany({
         where: eq(studyComparisons.paperId, paper.id),
