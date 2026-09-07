@@ -16,12 +16,20 @@ function build() {
     );
   }
   // Cap connections so a request spike (or a leak) can't exhaust
-  // Postgres's max_connections (100 by default). 20 is comfortable for
-  // our small-N concurrent voter load; raise if the soak test starves
-  // under contention.
+  // Postgres's max_connections (100 by default).
+  //
+  // 50, not 20: the controlled study puts 20 participants on the app at
+  // once, and each one is more than a single connection. While reviews
+  // generate, every study client polls /study/state on a timer, and the
+  // sweeper + the snapshot worker draw from the same pool. At max=20 the
+  // pool was exhausted well before 20 concurrent participants, and an
+  // exhausted pool does not queue politely — connectionTimeoutMillis
+  // makes the request throw after 5s. 50 leaves Postgres's default 100
+  // half free for psql, db:browser and the tunnel.
+  const poolMax = Number(process.env.DB_POOL_MAX ?? 50);
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 20,
+    max: Number.isFinite(poolMax) && poolMax > 0 ? Math.floor(poolMax) : 50,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
   });
