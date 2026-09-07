@@ -1,6 +1,16 @@
 /**
- * One-off thesis analysis: pulls the live vote + judge data and prints
- * the RQ1/RQ2 result tables (markdown).
+ * One-off thesis analysis: pulls the live vote + judge-panel data and
+ * prints the RQ1/RQ2 result tables (markdown).
+ *
+ * The judge is a PANEL of the six study systems, each of which judges every
+ * study pair — including pairs it wrote a side of. Every judge table is
+ * therefore reported in three variants:
+ *   all     — every panel member's verdict / score
+ *   noSelf  — excluding rows where the judge generated one of the reviews
+ *             (the primary variant: no self-enhancement bias)
+ *   per judge — one column per panel member
+ * The Judge × System matrix makes self-enhancement itself visible (diagonal
+ * vs. off-diagonal).
  *
  * Run:  pnpm --filter @reviewarena/api exec tsx src/thesis-analysis.ts
  */
@@ -14,9 +24,11 @@ const { computeElo, bootstrapEloCI } = await import("./elo/elo.js");
 const { computeBT, bootstrapBTCI } = await import("./elo/bt.js");
 const { asc, eq } = await import("drizzle-orm");
 const schema = await import("./db/schema.js");
-const { votes, dimensionVotes, reviews, reviewSystems, metricScores, papers } = schema;
+const { votes, dimensionVotes, reviews, reviewSystems, metricScores, judgeVerdicts, papers } =
+  schema;
 
 type Battle = { a: string; b: string; outcome: 0 | 0.5 | 1 };
+type Pref = "A" | "B" | "TIE";
 
 // ── Load raw data ──────────────────────────────────────────────────────────
 
@@ -39,11 +51,12 @@ for (const dv of allDimVotes) {
   dimsByVote.set(dv.voteId, arr);
 }
 
+// One metric row per (review, judge); one verdict row per (pair, judge).
 const judgeRows = await db
   .select()
   .from(metricScores)
   .where(eq(metricScores.kind, "LLM_JUDGE_OVERALL"));
-const judgeByReview = new Map(judgeRows.map((m) => [m.reviewId, m]));
+const verdictRows = await db.select().from(judgeVerdicts);
 
 const paperRows = await db.select({ id: papers.id }).from(papers);
 
@@ -51,7 +64,31 @@ const paperRows = await db.select({ id: papers.id }).from(papers);
 // line up with the live board.
 const BASELINE_SLUG = process.env.RATING_BASELINE_SLUG ?? "claude-sonnet-5";
 
-// ── RQ2: ratings (overall + per dimension), Bradley-Terry and Elo ─────────
+// ── Judge variants ─────────────────────────────────────────────────────────
+
+type ScoreRow = (typeof judgeRows)[number];
+type VerdictRow = (typeof verdictRows)[number];
+
+const isSelfScore = (m: ScoreRow) => m.judgeModel === reviewSys.get(m.reviewId);
+const isSelfVerdict = (v: VerdictRow) =>
+  v.judgeModel === reviewSys.get(v.reviewAId) || v.judgeModel === reviewSys.get(v.reviewBId);
+
+const judgeSlugs = [...new Set(judgeRows.map((m) => m.judgeModel))].sort();
+const systemSlugs = [...new Set([...reviewSys.values()])].filter((s) => s !== "?").sort();
+
+type Variant = { name: string; score: (m: ScoreRow) => boolean; verdict: (v: VerdictRow) => boolean };
+const VARIANTS: Variant[] = [
+  { name: "all", score: () => true, verdict: () => true },
+  { name: "noSelf", score: (m) => !isSelfScore(m), verdict: (v) => !isSelfVerdict(v) },
+  ...judgeSlugs.map((j) => ({
+    name: `judge:${j}`,
+    score: (m: ScoreRow) => m.judgeModel === j,
+    verdict: (v: VerdictRow) => v.judgeModel === j,
+  })),
+];
+const PRIMARY = VARIANTS[1]!; // noSelf
+
+// ── RQ1: ratings (overall + per dimension), Bradley-Terry and Elo ─────────
 
 const overallBattles: Battle[] = cleanVotes.map((v) => ({
   a: reviewSys.get(v.reviewAId)!,
@@ -106,30 +143,69 @@ function maxRankShift(a: string[], b: string[]): number {
   return worst;
 }
 
-// ── Judge means per system (overall + per dimension from meta) ────────────
+// ── Judge means per system (overall + per dimension), per variant ─────────
 
 type JudgeAgg = { n: number; sum: number; dims: Map<string, { n: number; sum: number }> };
-const judgeAgg = new Map<string, JudgeAgg>();
-let sampleMeta: unknown = null;
-for (const m of judgeRows) {
-  const slug = reviewSys.get(m.reviewId);
-  if (!slug) continue;
-  const agg = judgeAgg.get(slug) ?? { n: 0, sum: 0, dims: new Map() };
-  agg.n++;
-  agg.sum += m.value;
-  const meta = m.meta as Record<string, unknown> | null;
-  if (!sampleMeta && meta) sampleMeta = meta;
-  const dimsObj = meta?.dimension_scores as Record<string, number> | undefined;
-  if (dimsObj) {
-    for (const [k, val] of Object.entries(dimsObj)) {
+
+function aggregateScores(filter: (m: ScoreRow) => boolean): Map<string, JudgeAgg> {
+  const agg = new Map<string, JudgeAgg>();
+  for (const m of judgeRows) {
+    if (!filter(m)) continue;
+    const slug = reviewSys.get(m.reviewId);
+    if (!slug) continue;
+    const a = agg.get(slug) ?? { n: 0, sum: 0, dims: new Map() };
+    a.n++;
+    a.sum += m.value;
+    const dimsObj = (m.meta as { dimension_scores?: Record<string, number> } | null)
+      ?.dimension_scores;
+    for (const [k, val] of Object.entries(dimsObj ?? {})) {
       if (typeof val !== "number") continue;
-      const d = agg.dims.get(k) ?? { n: 0, sum: 0 };
+      const d = a.dims.get(k) ?? { n: 0, sum: 0 };
       d.n++;
       d.sum += val;
-      agg.dims.set(k, d);
+      a.dims.set(k, d);
     }
+    agg.set(slug, a);
   }
-  judgeAgg.set(slug, agg);
+  return agg;
+}
+
+const aggByVariant = new Map(VARIANTS.map((v) => [v.name, aggregateScores(v.score)]));
+const meanOf = (agg: Map<string, JudgeAgg>, slug: string) => {
+  const a = agg.get(slug);
+  return a && a.n > 0 ? a.sum / a.n : undefined;
+};
+const dimMeanOf = (agg: Map<string, JudgeAgg>, slug: string, dim: string) => {
+  const d = agg.get(slug)?.dims.get(dim);
+  return d && d.n > 0 ? d.sum / d.n : undefined;
+};
+
+// ── Verdicts per pair, per variant ─────────────────────────────────────────
+
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const verdictsByPair = new Map<string, VerdictRow[]>();
+for (const v of verdictRows) {
+  const k = pairKey(v.reviewAId, v.reviewBId);
+  const arr = verdictsByPair.get(k) ?? [];
+  arr.push(v);
+  verdictsByPair.set(k, arr);
+}
+
+/** A verdict row's overall preference expressed relative to (sideA, sideB). */
+function prefFor(v: VerdictRow, sideA: string): Pref {
+  const p = v.overallPreference as Pref;
+  if (p === "TIE" || v.reviewAId === sideA) return p;
+  return p === "A" ? "B" : "A";
+}
+
+/** Panel majority for a pair relative to (sideA, sideB); null if no rows. */
+function panelMajority(sideA: string, sideB: string, filter: (v: VerdictRow) => boolean) {
+  const rows = (verdictsByPair.get(pairKey(sideA, sideB)) ?? []).filter(filter);
+  if (rows.length === 0) return null;
+  const counts = { A: 0, B: 0, TIE: 0 };
+  for (const v of rows) counts[prefFor(v, sideA)]++;
+  const overall: Pref = counts.A > counts.B ? "A" : counts.B > counts.A ? "B" : "TIE";
+  return { overall, counts, n: rows.length };
 }
 
 // ── Correlation helpers ────────────────────────────────────────────────────
@@ -177,22 +253,41 @@ function kendall(x: number[], y: number[]): number {
   return pairs ? (concordant - discordant) / pairs : NaN;
 }
 
+/** Correlate a per-system rating map with a per-system judge mean; n = overlap. */
+function corrRow(rating: Map<string, number>, judgeMean: (slug: string) => number | undefined) {
+  const pts: Array<[number, number]> = [];
+  for (const [slug, r] of rating) {
+    const j = judgeMean(slug);
+    if (j !== undefined) pts.push([r, j]);
+  }
+  if (pts.length < 3) return { n: pts.length, rho: NaN, tau: NaN, r: NaN };
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return { n: pts.length, rho: spearman(xs, ys), tau: kendall(xs, ys), r: pearson(xs, ys) };
+}
+
 // ── Print ──────────────────────────────────────────────────────────────────
 
 const f = (n: number) => n.toFixed(1);
+const f3 = (n: number) => (Number.isNaN(n) ? "n/a" : n.toFixed(3));
+const f2 = (n: number | undefined) => (n === undefined ? "—" : n.toFixed(2));
 const out: string[] = [];
 
+const selfVerdicts = verdictRows.filter(isSelfVerdict).length;
 out.push(`# ReviewArena — thesis data snapshot`);
 out.push(``);
 out.push(
-  `Papers: ${paperRows.length} · Votes: ${allVotes.length} (${cleanVotes.length} clean, ${allVotes.length - cleanVotes.length} quality-flagged) · Dimension votes: ${allDimVotes.length} · Judge-scored reviews: ${judgeRows.length}`,
+  `Papers: ${paperRows.length} · Votes: ${allVotes.length} (${cleanVotes.length} clean, ${allVotes.length - cleanVotes.length} quality-flagged) · Dimension votes: ${allDimVotes.length}`,
+);
+out.push(
+  `Judge panel: ${judgeSlugs.length} judges (${judgeSlugs.join(", ")}) · judged pairs: ${verdictsByPair.size} · verdict rows: ${verdictRows.length} (${selfVerdicts} self-judging) · score rows: ${judgeRows.length}`,
 );
 out.push(``);
 
 const bt = btTable(overallBattles);
 const btOverall = bt.rows;
 out.push(
-  `## RQ2a — Overall human leaderboard (Bradley-Terry MLE, 100-round bootstrap 95% CI)`,
+  `## RQ1a — Overall human leaderboard (Bradley-Terry MLE, 100-round bootstrap 95% CI)`,
 );
 out.push(``);
 out.push(
@@ -214,7 +309,7 @@ if (bt.unranked.length > 0) {
 }
 out.push(``);
 
-out.push(`## RQ2a-ii — Same battles under online Elo (K=4, 100-round bootstrap 95% CI)`);
+out.push(`## RQ1a-ii — Same battles under online Elo (K=4, 100-round bootstrap 95% CI)`);
 out.push(``);
 out.push(`| Rank | System | Elo | 95% CI | Battles |`);
 out.push(`|---|---|---|---|---|`);
@@ -226,22 +321,22 @@ out.push(``);
 
 // How much the choice of rating system actually changes the answer. Elo is
 // order-dependent and BT is not, so this is the headline robustness check.
+const btRating = new Map(btOverall.map((e) => [e.slug, e.rating]));
+const eloRating = new Map(overall.map((e) => [e.slug, e.rating]));
 {
   const btRanked = btOverall.map((e) => e.slug);
-  const eloRanked = overall.map((e) => e.slug).filter((slug) => btOverall.some((b) => b.slug === slug));
-  const btRating = new Map(btOverall.map((e) => [e.slug, e.rating]));
-  const eloRating = new Map(overall.map((e) => [e.slug, e.rating]));
+  const eloRanked = overall.map((e) => e.slug).filter((slug) => btRating.has(slug));
   const shared = btRanked.filter((slug) => eloRating.has(slug));
-  out.push(`## RQ2a-iii — Bradley-Terry vs Elo agreement (n=${shared.length} systems)`);
+  out.push(`## RQ1a-iii — Bradley-Terry vs Elo agreement (n=${shared.length} systems)`);
   out.push(``);
   if (shared.length >= 3) {
     const bx = shared.map((slug) => btRating.get(slug)!);
     const ex = shared.map((slug) => eloRating.get(slug)!);
     out.push(`| Statistic | Value |`);
     out.push(`|---|---|`);
-    out.push(`| Spearman ρ (BT vs Elo ranking) | ${spearman(bx, ex).toFixed(3)} |`);
-    out.push(`| Kendall τ | ${kendall(bx, ex).toFixed(3)} |`);
-    out.push(`| Pearson r (rating scales) | ${pearson(bx, ex).toFixed(3)} |`);
+    out.push(`| Spearman ρ (BT vs Elo ranking) | ${f3(spearman(bx, ex))} |`);
+    out.push(`| Kendall τ | ${f3(kendall(bx, ex))} |`);
+    out.push(`| Pearson r (rating scales) | ${f3(pearson(bx, ex))} |`);
     out.push(`| Max rank displacement | ${maxRankShift(btRanked, eloRanked)} |`);
   } else {
     out.push(`Not enough systems on both boards (${shared.length}).`);
@@ -249,7 +344,7 @@ out.push(``);
   out.push(``);
 }
 
-out.push(`## RQ2b — Per-dimension Bradley-Terry (rank per dimension)`);
+out.push(`## RQ1b — Per-dimension Bradley-Terry (rank per dimension)`);
 out.push(``);
 out.push(`"—" = the dimension's votes do not place that system (no votes, or not connected to the field).`);
 out.push(``);
@@ -275,99 +370,199 @@ for (const d of DIMS) {
 }
 out.push(``);
 
-out.push(`## Judge scores per system (LLM_JUDGE_OVERALL, mean over reviews)`);
+// ── Judge panel descriptives ───────────────────────────────────────────────
+
+out.push(`## Judge × System — mean overall score (LLM_JUDGE_OVERALL, 0–10)`);
 out.push(``);
-out.push(`| System | n reviews | Mean judge overall (0–10) |`);
-out.push(`|---|---|---|`);
-const judgeMean = new Map<string, number>();
-for (const [slug, a] of [...judgeAgg.entries()].sort((x, y) => y[1].sum / y[1].n - x[1].sum / x[1].n)) {
-  judgeMean.set(slug, a.sum / a.n);
-  out.push(`| ${slug} | ${a.n} | ${(a.sum / a.n).toFixed(2)} |`);
+out.push(`Rows = judge, columns = system judged. The diagonal is self-judging; compare it with the row's off-diagonal to read self-enhancement.`);
+out.push(``);
+out.push(`| Judge ↓ / System → | ${systemSlugs.join(" | ")} | off-diag mean | self − off-diag |`);
+out.push(`|---|${systemSlugs.map(() => "---").join("|")}|---|---|`);
+for (const j of judgeSlugs) {
+  const agg = aggByVariant.get(`judge:${j}`)!;
+  const cells = systemSlugs.map((s) => meanOf(agg, s));
+  const off = systemSlugs
+    .map((s, i) => (s === j ? undefined : cells[i]))
+    .filter((x): x is number => x !== undefined);
+  const offMean = off.length ? off.reduce((a, b) => a + b, 0) / off.length : undefined;
+  const self = meanOf(agg, j);
+  const delta = self !== undefined && offMean !== undefined ? self - offMean : undefined;
+  out.push(
+    `| ${j} | ${cells.map(f2).join(" | ")} | ${f2(offMean)} | ${delta === undefined ? "—" : (delta >= 0 ? "+" : "") + delta.toFixed(2)} |`,
+  );
 }
 out.push(``);
-if (sampleMeta) out.push(`<!-- sample judge meta keys: ${Object.keys(sampleMeta as object).join(", ")} -->`);
+
+out.push(`## Panel mean per system (all judges vs. self-excluded)`);
+out.push(``);
+out.push(`| System | n rows (all) | Mean (all) | n rows (noSelf) | Mean (noSelf) |`);
+out.push(`|---|---|---|---|---|`);
+const aggAll = aggByVariant.get("all")!;
+const aggNoSelf = aggByVariant.get("noSelf")!;
+for (const s of [...systemSlugs].sort(
+  (x, y) => (meanOf(aggNoSelf, y) ?? -1) - (meanOf(aggNoSelf, x) ?? -1),
+)) {
+  out.push(
+    `| ${s} | ${aggAll.get(s)?.n ?? 0} | ${f2(meanOf(aggAll, s))} | ${aggNoSelf.get(s)?.n ?? 0} | ${f2(meanOf(aggNoSelf, s))} |`,
+  );
+}
 out.push(``);
 
-// RQ1 level 1: system-level correlation (systems present in both rankings)
-const common = overall.filter((e) => judgeMean.has(e.slug));
-if (common.length >= 3) {
-  const hx = common.map((e) => e.rating);
-  const jx = common.map((e) => judgeMean.get(e.slug)!);
-  out.push(`## RQ1a — System-level ranking correlation (n=${common.length} systems)`);
+// Inter-judge agreement on the overall preference, pair by pair.
+{
+  out.push(`## Inter-judge agreement (overall preference, per judged pair)`);
   out.push(``);
-  out.push(`| Statistic | Value |`);
+  const agree = new Map<string, { same: number; n: number }>();
+  const vsMajority = new Map<string, { same: number; n: number }>();
+  for (const [, rows] of verdictsByPair) {
+    const sideA = rows[0]!.reviewAId;
+    const byJudge = new Map(rows.map((v) => [v.judgeModel, prefFor(v, sideA)]));
+    const js = [...byJudge.keys()].sort();
+    for (let i = 0; i < js.length; i++)
+      for (let k = i + 1; k < js.length; k++) {
+        const key = `${js[i]} × ${js[k]}`;
+        const a = agree.get(key) ?? { same: 0, n: 0 };
+        a.n++;
+        if (byJudge.get(js[i]!) === byJudge.get(js[k]!)) a.same++;
+        agree.set(key, a);
+      }
+    // Majority of the OTHER judges (leave-one-out, self-excluded), so a
+    // judge is never compared against a majority it helped form.
+    for (const j of js) {
+      const others = rows.filter((v) => v.judgeModel !== j && !isSelfVerdict(v));
+      if (others.length === 0) continue;
+      const counts = { A: 0, B: 0, TIE: 0 };
+      for (const v of others) counts[prefFor(v, sideA)]++;
+      const maj: Pref = counts.A > counts.B ? "A" : counts.B > counts.A ? "B" : "TIE";
+      const a = vsMajority.get(j) ?? { same: 0, n: 0 };
+      a.n++;
+      if (byJudge.get(j) === maj) a.same++;
+      vsMajority.set(j, a);
+    }
+  }
+  out.push(`| Judge pair | Agreement | n pairs |`);
+  out.push(`|---|---|---|`);
+  for (const [key, a] of [...agree].sort()) {
+    out.push(`| ${key} | ${a.n ? ((100 * a.same) / a.n).toFixed(1) + "%" : "n/a"} | ${a.n} |`);
+  }
+  out.push(``);
+  out.push(`| Judge | Agreement with leave-one-out majority (noSelf) | n pairs |`);
+  out.push(`|---|---|---|`);
+  for (const [j, a] of [...vsMajority].sort()) {
+    out.push(`| ${j} | ${a.n ? ((100 * a.same) / a.n).toFixed(1) + "%" : "n/a"} | ${a.n} |`);
+  }
+  out.push(``);
+}
+
+// ── RQ2a — system-level ranking correlation ────────────────────────────────
+
+out.push(`## RQ2a — System-level correlation: human rating vs. mean judge score`);
+out.push(``);
+out.push(`Primary row is **noSelf** (panel mean excluding self-judgements). Per-judge rows show how much each member alone would recover the human ranking.`);
+out.push(``);
+out.push(`| Judge variant | n systems | Spearman ρ (BT) | Kendall τ (BT) | Pearson r (BT) | Spearman ρ (Elo) | Kendall τ (Elo) |`);
+out.push(`|---|---|---|---|---|---|---|`);
+for (const v of VARIANTS) {
+  const agg = aggByVariant.get(v.name)!;
+  const btC = corrRow(btRating, (s) => meanOf(agg, s));
+  const eloC = corrRow(eloRating, (s) => meanOf(agg, s));
+  const bold = v.name === PRIMARY.name ? "**" : "";
+  out.push(
+    `| ${bold}${v.name}${bold} | ${btC.n} | ${bold}${f3(btC.rho)}${bold} | ${f3(btC.tau)} | ${f3(btC.r)} | ${f3(eloC.rho)} | ${f3(eloC.tau)} |`,
+  );
+}
+out.push(``);
+
+// ── RQ2b — battle-level agreement ──────────────────────────────────────────
+
+// Primary: the panel's majority verdict vs the human winner — the same
+// construct on both sides, no tie band needed. Secondary: the score-delta
+// method on panel means, kept for comparability with the pointwise era.
+out.push(`## RQ2b — Battle-level human–judge agreement`);
+out.push(``);
+out.push(`### Panel majority vs. human winner`);
+out.push(``);
+out.push(`| Variant | Agree | Disagree | Panel tie (excluded) | Human tie (excluded) | No verdict | **Agreement rate** |`);
+out.push(`|---|---|---|---|---|---|---|`);
+for (const v of VARIANTS) {
+  let agree = 0, disagree = 0, panelTie = 0, humanTie = 0, missing = 0;
+  for (const vote of cleanVotes) {
+    const m = panelMajority(vote.reviewAId, vote.reviewBId, v.verdict);
+    if (!m) { missing++; continue; }
+    if (vote.winner === "TIE") { humanTie++; continue; }
+    if (m.overall === "TIE") { panelTie++; continue; }
+    if (m.overall === vote.winner) agree++;
+    else disagree++;
+  }
+  const decisive = agree + disagree;
+  const bold = v.name === PRIMARY.name ? "**" : "";
+  out.push(
+    `| ${bold}${v.name}${bold} | ${agree} | ${disagree} | ${panelTie} | ${humanTie} | ${missing} | ${bold}${decisive ? ((100 * agree) / decisive).toFixed(1) + "%" : "n/a"} (${agree}/${decisive})${bold} |`,
+  );
+}
+out.push(``);
+
+{
+  const TIE_BAND = 0.5;
+  out.push(`### Score-delta method on panel means (noSelf, tie band |Δ| < ${TIE_BAND})`);
+  out.push(``);
+  // Mean judge score per review over the noSelf rows.
+  const meanByReview = new Map<string, { n: number; sum: number }>();
+  for (const m of judgeRows) {
+    if (!PRIMARY.score(m)) continue;
+    const a = meanByReview.get(m.reviewId) ?? { n: 0, sum: 0 };
+    a.n++;
+    a.sum += m.value;
+    meanByReview.set(m.reviewId, a);
+  }
+  const scoreOf = (id: string) => {
+    const a = meanByReview.get(id);
+    return a && a.n > 0 ? a.sum / a.n : undefined;
+  };
+  let agree = 0, disagree = 0, judgeTie = 0, humanTie = 0, missing = 0;
+  for (const v of cleanVotes) {
+    const ja = scoreOf(v.reviewAId);
+    const jb = scoreOf(v.reviewBId);
+    if (ja === undefined || jb === undefined) { missing++; continue; }
+    if (v.winner === "TIE") { humanTie++; continue; }
+    const d = ja - jb;
+    if (Math.abs(d) < TIE_BAND) { judgeTie++; continue; }
+    if ((d > 0 ? "A" : "B") === v.winner) agree++;
+    else disagree++;
+  }
+  const decisive = agree + disagree;
+  out.push(`| Category | Count |`);
   out.push(`|---|---|`);
-  const btCommon = common.map((e) => btOverall.find((b) => b.slug === e.slug)?.rating);
-  const bothRated = btCommon.every((r) => r !== undefined);
-  if (bothRated) {
-    const bx = btCommon as number[];
-    out.push(`| **Spearman ρ (human BT vs mean judge score)** | **${spearman(bx, jx).toFixed(3)}** |`);
-    out.push(`| Kendall τ (BT) | ${kendall(bx, jx).toFixed(3)} |`);
-    out.push(`| Pearson r (BT) | ${pearson(bx, jx).toFixed(3)} |`);
-  }
-  out.push(`| Spearman ρ (human Elo vs mean judge score) | ${spearman(hx, jx).toFixed(3)} |`);
-  out.push(`| Kendall τ (Elo) | ${kendall(hx, jx).toFixed(3)} |`);
-  out.push(`| Pearson r (Elo) | ${pearson(hx, jx).toFixed(3)} |`);
-  out.push(``);
-} else {
-  out.push(`## RQ1a — system-level correlation: not enough systems with both signals (${common.length})`);
+  out.push(`| Agree | ${agree} |`);
+  out.push(`| Disagree | ${disagree} |`);
+  out.push(`| Judge tie (|Δ| < ${TIE_BAND}) on decisive human vote | ${judgeTie} |`);
+  out.push(`| Human tie (excluded) | ${humanTie} |`);
+  out.push(`| Missing judge score (excluded) | ${missing} |`);
+  out.push(`| **Agreement rate (decisive both sides)** | **${decisive ? ((100 * agree) / decisive).toFixed(1) + "%" : "n/a"} (${agree}/${decisive})** |`);
   out.push(``);
 }
 
-// RQ1 level 2: battle-level agreement
-let agree = 0, disagree = 0, judgeTie = 0, humanTie = 0, missing = 0;
-const TIE_BAND = 0.5;
-for (const v of cleanVotes) {
-  const ja = judgeByReview.get(v.reviewAId)?.value;
-  const jb = judgeByReview.get(v.reviewBId)?.value;
-  if (ja === undefined || jb === undefined) { missing++; continue; }
-  if (v.winner === "TIE") { humanTie++; continue; }
-  const d = ja - jb;
-  if (Math.abs(d) < TIE_BAND) { judgeTie++; continue; }
-  const judgeWinner = d > 0 ? "A" : "B";
-  if (judgeWinner === v.winner) agree++;
-  else disagree++;
-}
-out.push(`## RQ1b — Battle-level human–judge agreement (tie band |Δ| < ${TIE_BAND})`);
-out.push(``);
-out.push(`| Category | Count |`);
-out.push(`|---|---|`);
-out.push(`| Agree (judge picks same winner) | ${agree} |`);
-out.push(`| Disagree | ${disagree} |`);
-out.push(`| Judge tie (|Δ| < ${TIE_BAND}) on decisive human vote | ${judgeTie} |`);
-out.push(`| Human tie (excluded) | ${humanTie} |`);
-out.push(`| Missing judge score (excluded) | ${missing} |`);
-const decisive = agree + disagree;
-out.push(`| **Agreement rate (decisive both sides)** | **${decisive ? ((100 * agree) / decisive).toFixed(1) + "%" : "n/a"} (${agree}/${decisive})** |`);
-out.push(``);
+// ── RQ2c — per-dimension correlation ───────────────────────────────────────
 
-// RQ1 level 3: per-dimension correlation
-out.push(`## RQ1c — Per-dimension correlation (human dimension rating vs mean judge dimension score)`);
+out.push(`## RQ2c — Per-dimension correlation (human dimension rating vs. mean judge dimension score)`);
 out.push(``);
-out.push(`| Dimension | n systems | Spearman ρ (BT) | Spearman ρ (Elo) |`);
-out.push(`|---|---|---|---|`);
+out.push(`Panel-mean columns use noSelf; per-judge columns use that judge's rows alone. Spearman ρ against the BT dimension rating; "ins." = fewer than 3 systems with both signals.`);
+out.push(``);
+const perJudge = judgeSlugs.map((j) => `ρ ${j}`);
+out.push(`| Dimension | n | ρ BT (noSelf) | ρ Elo (noSelf) | ${perJudge.join(" | ")} |`);
+out.push(`|---|---|---|---|${perJudge.map(() => "---").join("|")}|`);
 for (const d of DIMS) {
-  const dimElo = dimEloBySlug.get(d)!;
-  const dimBT = dimBTBySlug.get(d)!;
-  const btPts: Array<[number, number]> = [];
-  const pts: Array<[number, number]> = [];
-  for (const [slug, elo] of dimElo) {
-    // judge meta dimension keys may be lowercase or various case; try both
-    const agg = judgeAgg.get(slug);
-    if (!agg) continue;
-    const jd =
-      agg.dims.get(d) ??
-      agg.dims.get(d.toLowerCase()) ??
-      agg.dims.get(d.toLowerCase().replace(/_(.)/g, (_, c) => c.toUpperCase()));
-    if (!jd) continue;
-    const judgeMeanForDim = jd.sum / jd.n;
-    pts.push([elo, judgeMeanForDim]);
-    const btRating = dimBT.get(slug);
-    if (btRating !== undefined) btPts.push([btRating, judgeMeanForDim]);
-  }
-  const rho = (ps: Array<[number, number]>) =>
-    ps.length >= 3 ? spearman(ps.map((q) => q[0]), ps.map((q) => q[1])).toFixed(3) : "insufficient";
-  out.push(`| ${d} | ${pts.length} | ${rho(btPts)} | ${rho(pts)} |`);
+  const btDim = dimBTBySlug.get(d)!;
+  const eloDim = dimEloBySlug.get(d)!;
+  const primary = corrRow(btDim, (s) => dimMeanOf(aggNoSelf, s, d));
+  const primaryElo = corrRow(eloDim, (s) => dimMeanOf(aggNoSelf, s, d));
+  const cells = judgeSlugs.map((j) => {
+    const c = corrRow(btDim, (s) => dimMeanOf(aggByVariant.get(`judge:${j}`)!, s, d));
+    return c.n >= 3 ? f3(c.rho) : "ins.";
+  });
+  out.push(
+    `| ${d} | ${primary.n} | ${primary.n >= 3 ? f3(primary.rho) : "ins."} | ${primaryElo.n >= 3 ? f3(primaryElo.rho) : "ins."} | ${cells.join(" | ")} |`,
+  );
 }
 out.push(``);
 
