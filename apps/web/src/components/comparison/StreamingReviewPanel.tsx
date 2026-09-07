@@ -1,4 +1,4 @@
-import type { StructuredReview } from "@reviewarena/shared-types";
+import type { Conference, StructuredReview } from "@reviewarena/shared-types";
 import type { ReviewStreamState } from "@/hooks/useReviewStream";
 import type { Highlight, SelectedRange } from "@/lib/highlight";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
@@ -37,6 +37,8 @@ export function StreamingReviewPanel({
   onSelectRanges?: (ranges: SelectedRange[]) => void;
   onRemoveHighlight?: (id: string) => void;
   highlighterArmed?: boolean;
+  /** Scale for the review form's numeric answers. */
+  conference?: Conference;
 }) {
   if (structured)
     return <ReviewPanel label={label} review={structured} raw={rawOutput} {...highlighting} />;

@@ -634,6 +634,7 @@ function ComparisonScreen({
           label="REVIEW A"
           review={pair.reviewA.structured ?? EMPTY_REVIEW}
           raw={pair.reviewA.rawOutput}
+          conference={pair.conference}
           highlights={marksA}
           highlighterArmed={highlighter !== null}
           onSelectRanges={(r) =>
@@ -645,6 +646,7 @@ function ComparisonScreen({
           label="REVIEW B"
           review={pair.reviewB.structured ?? EMPTY_REVIEW}
           raw={pair.reviewB.rawOutput}
+          conference={pair.conference}
           highlights={marksB}
           highlighterArmed={highlighter !== null}
           onSelectRanges={(r) =>

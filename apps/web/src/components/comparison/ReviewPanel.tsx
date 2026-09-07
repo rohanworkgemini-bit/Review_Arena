@@ -1,6 +1,15 @@
 import { Fragment, useRef, type ReactNode } from "react";
 import { Section } from "@/components/comparison/Section";
-import { DIMENSION_LABELS, type StructuredReview } from "@reviewarena/shared-types";
+import {
+  ScoreLine,
+  scaleFor,
+  splitLeadingScore,
+} from "@/components/comparison/ScoreLine";
+import {
+  DIMENSION_LABELS,
+  type Conference,
+  type StructuredReview,
+} from "@reviewarena/shared-types";
 import {
   DIMENSION_COLORS,
   selectionToRanges,
@@ -33,10 +42,14 @@ export function ReviewPanel({
   onSelectRanges,
   onRemoveHighlight,
   highlighterArmed = false,
+  conference,
 }: {
   label: string;
   review: StructuredReview;
   raw?: string | null;
+  /** Sets the scale the numeric answers are drawn against. Without it the
+   *  widest overall scale is assumed, so a bar is never drawn short. */
+  conference?: Conference;
   /** Spans to tint in this panel. Omit for a plain, non-interactive panel. */
   highlights?: readonly Highlight[];
   /** Called on mouse-up with whatever the rater selected. */
@@ -71,7 +84,7 @@ export function ReviewPanel({
         style={highlighterArmed ? { cursor: "text" } : undefined}
       >
         {hasRaw ? (
-          renderMarkdownLite(raw!, highlights, onRemoveHighlight)
+          renderMarkdownLite(raw!, highlights, onRemoveHighlight, conference)
         ) : (
           <StructuredFallback review={review} />
         )}
@@ -159,12 +172,17 @@ function renderMarkdownLite(
   md: string,
   highlights: readonly Highlight[],
   onRemove?: (id: string) => void,
+  conference?: Conference,
 ): ReactNode {
   const lines = md.split("\n");
   const blocks: ReactNode[] = [];
   let list: { ordered: boolean; items: string[] } | null = null;
   let para: string[] = [];
   let key = 0;
+  // Scale of the section currently open, when it is a numeric field. Set by
+  // the heading, consumed by the first paragraph under it, then cleared —
+  // only the answer immediately following the heading is a score.
+  let pendingScale: number | null = null;
   // Monotonic index across every text-bearing element in this panel; it is
   // what highlight offsets are anchored to, so the walk order must stay
   // deterministic (it is — one pass over the lines).
@@ -199,11 +217,22 @@ function renderMarkdownLite(
   const flushPara = () => {
     if (para.length === 0) return;
     const text = para.join(" ");
+    const scale = pendingScale;
+    pendingScale = null;
+    const scored = scale === null ? null : splitLeadingScore(text, scale);
+    // The block's text is what remains after the number is lifted out, and
+    // highlight offsets are taken against the rendered text — so stripping
+    // it here keeps offsets and rendering in step. blockIndex is unchanged
+    // either way: one paragraph is still one block.
+    const body = scored ? scored.rest : text;
     const block = blockIndex++;
     blocks.push(
-      <p key={key++} data-hl-block={block}>
-        <BlockText text={text} block={block} highlights={highlights} onRemove={onRemove} />
-      </p>,
+      <div key={key++}>
+        {scored && <ScoreLine value={scored.value} max={scale!} />}
+        <p data-hl-block={block}>
+          <BlockText text={body} block={block} highlights={highlights} onRemove={onRemove} />
+        </p>
+      </div>,
     );
     para = [];
   };
@@ -221,6 +250,7 @@ function renderMarkdownLite(
       flushList();
       flushPara();
       const text = sanitizeInline(heading[1]!);
+      pendingScale = scaleFor(text, conference);
       const block = blockIndex++;
       blocks.push(
         <div

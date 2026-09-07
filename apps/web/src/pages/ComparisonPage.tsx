@@ -442,6 +442,7 @@ export function ComparisonPage() {
               structured={pair.reviewA.structured ?? null}
               rawOutput={pair.reviewA.rawOutput ?? null}
               stream={streamA}
+              conference={pair.paper.conference}
               highlights={marksA}
               highlighterArmed={highlighter !== null}
               onSelectRanges={(r) =>
@@ -456,6 +457,7 @@ export function ComparisonPage() {
               structured={pair.reviewB.structured ?? null}
               rawOutput={pair.reviewB.rawOutput ?? null}
               stream={streamB}
+              conference={pair.paper.conference}
               highlights={marksB}
               highlighterArmed={highlighter !== null}
               onSelectRanges={(r) =>
