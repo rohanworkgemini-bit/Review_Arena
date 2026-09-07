@@ -1,5 +1,5 @@
 import { Link, NavLink } from "react-router-dom";
-import { Trophy, Vote, Shield } from "lucide-react";
+import { Trophy, Vote, Shield, BookOpen } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 // No standalone "Compare" entry — /compare requires a paperId in the URL,
@@ -9,6 +9,7 @@ const navItems = [
   { to: "/upload", label: "Vote", icon: Vote },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { to: "/admin", label: "Admin", icon: Shield },
+  { to: "/instructions", label: "Instructions", icon: BookOpen },
 ];
 
 // Mobile-only top bar — on lg+ the Sidebar handles nav instead. Flat
