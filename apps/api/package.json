@@ -19,7 +19,8 @@
     "db:wipe-data": "tsx scripts/wipe-data.ts",
     "db:retire-system": "tsx scripts/retire-system.ts",
     "db:inspect": "tsx scripts/inspect.ts",
-    "db:browser": "tsx scripts/db-browser.ts"
+    "db:browser": "tsx scripts/db-browser.ts",
+    "preflight": "tsx scripts/preflight.ts"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
