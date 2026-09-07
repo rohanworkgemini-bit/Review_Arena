@@ -119,9 +119,11 @@ describe("ReviewPanel", () => {
     // wrote it.
     expect(text.indexOf("Questions")).toBeLessThan(text.indexOf("Rating"));
 
-    // Lists render as real list items.
-    expect(html).toContain("<li>Strong empirical section</li>");
-    expect(html).toContain("<li>How does it scale?</li>");
+    // Lists render as real list items. Matched loosely on the opening tag:
+    // <li> also carries the data-hl-block attribute the highlighter anchors
+    // its offsets to, and this assertion is about list structure, not attrs.
+    expect(html).toMatch(/<li[^>]*>Strong empirical section<\/li>/);
+    expect(html).toMatch(/<li[^>]*>How does it scale\?<\/li>/);
   });
 
   it("falls back to structured fields when rawOutput is absent (legacy rows)", () => {

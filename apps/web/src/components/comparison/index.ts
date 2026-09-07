@@ -2,6 +2,7 @@
 // imports a single module instead of 7 individual files.
 export { DimensionProgress } from "./DimensionProgress";
 export { DimensionRow } from "./DimensionRow";
+export { HighlightToolbar } from "./HighlightToolbar";
 export { GeneratingPanel } from "./GeneratingPanel";
 export { LiveStreamingPanel } from "./LiveStreamingPanel";
 export { ReviewPanel } from "./ReviewPanel";

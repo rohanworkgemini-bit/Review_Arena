@@ -12,8 +12,10 @@ import {
   DimensionProgress,
   DimensionRow,
   GeneratingPanel,
+  HighlightToolbar,
   StreamingReviewPanel,
 } from "@/components/comparison";
+import { addHighlights, type Highlight } from "@/lib/highlight";
 import {
   VOTE_DIMENSIONS,
   DIMENSION_LABELS,
@@ -130,6 +132,13 @@ export function ComparisonPage() {
   // Per-dimension picks are REQUIRED — open by default so the rater
   // sees right away that 8 picks are needed before they can submit.
   const [refineOpen, setRefineOpen] = useState(true);
+
+  // Highlighter: arm a dimension, select text in either review to tint it,
+  // hover a tint to see which dimension it belongs to. Reading aid only —
+  // held in component state and never sent with the vote.
+  const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
+  const [marksA, setMarksA] = useState<Highlight[]>([]);
+  const [marksB, setMarksB] = useState<Highlight[]>([]);
 
   // Resume the in-flight round on reload. The pair is held stable from the
   // moment it's picked until the user votes — refreshing should never
@@ -417,12 +426,28 @@ export function ComparisonPage() {
               “{pair.paper.title ?? "Untitled paper"}”
             </span>
           </div>
+          <HighlightToolbar
+            className="border-x-0 border-b border-t-0"
+            active={highlighter}
+            onChange={setHighlighter}
+            highlights={[...marksA, ...marksB]}
+            onClear={() => {
+              setMarksA([]);
+              setMarksB([]);
+            }}
+          />
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
             <StreamingReviewPanel
               label="Review A"
               structured={pair.reviewA.structured ?? null}
               rawOutput={pair.reviewA.rawOutput ?? null}
               stream={streamA}
+              highlights={marksA}
+              highlighterArmed={highlighter !== null}
+              onSelectRanges={(r) =>
+                highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
+              }
+              onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
             />
             <div className="hidden bg-rule lg:block" aria-hidden />
             <div className="h-px bg-rule lg:hidden" aria-hidden />
@@ -431,6 +456,12 @@ export function ComparisonPage() {
               structured={pair.reviewB.structured ?? null}
               rawOutput={pair.reviewB.rawOutput ?? null}
               stream={streamB}
+              highlights={marksB}
+              highlighterArmed={highlighter !== null}
+              onSelectRanges={(r) =>
+                highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
+              }
+              onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
             />
           </div>
         </div>
