@@ -118,8 +118,12 @@ export function RevealPage() {
 
   const usingPlaceholder = !params.get("state");
   const detail = revealQuery.data;
-  const scoringPending = !!voteId && (!detail || detail.judgeStatus === "RUNNING");
-  const notJudged = !!detail && detail.judgeStatus === "PENDING";
+  // Arena pairs are never judged and come back PENDING. Rather than render
+  // an empty panel explaining its own absence, the whole judge section is
+  // withheld until we know the pair was actually judged — which also means
+  // it never flashes in during load, and never appears at all on the arena.
+  const judged = !!detail && detail.judgeStatus !== "PENDING";
+  const scoringPending = judged && detail.judgeStatus === "RUNNING";
   const panelSize = detail?.judgeVerdict?.judgesExpected ?? 0;
   // Guard: in prod, require state param (no mocking system IDs)
   const hasMissingState = !header.reviewA.reviewId && !import.meta.env.DEV;
@@ -157,8 +161,9 @@ export function RevealPage() {
           <div className="eyebrow">Vote recorded · you preferred</div>
           <h1 className="text-3xl font-semibold tracking-[-0.01em] mt-2">{winnerLabel}</h1>
           <p className="text-graphite mt-2">
-            Systems revealed below, along with how the LLM judge panel sees the
-            same reviews.
+            {judged
+              ? "Systems revealed below, along with how the LLM judge panel sees the same reviews."
+              : "Systems revealed below."}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -183,19 +188,15 @@ export function RevealPage() {
         1000-point scale, where 400 points is ten-to-one odds.
       </p>
 
+      {judged && (
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Judge-panel dimension scores</CardTitle>
           <CardDescription>
-            {revealQuery.isError || detail?.judgeStatus === "FAILED" ? (
+            {detail.judgeStatus === "FAILED" ? (
               <span>
                 Judge scores are unavailable — your vote is saved and counted;
                 check the leaderboard later.
-              </span>
-            ) : notJudged ? (
-              <span>
-                This comparison was not scored by the judge panel (judging runs
-                for study papers only). Your vote is saved and counted.
               </span>
             ) : scoringPending ? (
               <span className="inline-flex items-center gap-2">
@@ -203,7 +204,7 @@ export function RevealPage() {
                 Judge panel in progress — updates automatically as judges finish.
               </span>
             ) : (
-              `0–10 per dimension, mean across the ${detail?.reviewA.judgeCount ?? 0}-model judge panel. Higher is better.`
+              `0–10 per dimension, mean across the ${detail.reviewA.judgeCount}-model judge panel. Higher is better.`
             )}
           </CardDescription>
         </CardHeader>
@@ -243,7 +244,7 @@ export function RevealPage() {
             </span>
           </div>
 
-          {detail?.judgeVerdict && (
+          {detail.judgeVerdict && (
             <div className="mt-5 border-t border-dashed border-rule2 pt-4">
               <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
                 Panel verdict (same A/B comparison you made)
@@ -311,6 +312,7 @@ export function RevealPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       <div className="flex flex-wrap justify-between gap-3 pt-2">
         <div className="flex flex-wrap gap-3">
