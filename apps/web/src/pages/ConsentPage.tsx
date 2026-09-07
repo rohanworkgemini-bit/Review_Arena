@@ -16,13 +16,13 @@ const CONTACT_EMAIL = "rohan.gupta@stud.tu-darmstadt.de";
 
 const PROCESSORS: Array<{ name: string; role: string; data: string }> = [
   {
-    name: "Datalab (Marker API)",
+    name: "Datalab (Chandra API)",
     role: "PDF parsing — converts an uploaded PDF into structured text",
     data: "The full PDF you upload",
   },
   {
-    name: "arxiv2md",
-    role: "Parsing for arXiv submissions (alternative to PDF upload)",
+    name: "arxiv2md (our own service, running on Google Cloud Run)",
+    role: "Fetches and converts arXiv submissions (alternative to PDF upload)",
     data: "The arXiv identifier; the paper is fetched from arxiv.org",
   },
   {
@@ -31,14 +31,9 @@ const PROCESSORS: Array<{ name: string; role: string; data: string }> = [
     data: "The full parsed text of your paper",
   },
   {
-    name: "Vercel",
-    role: "Hosts this web application",
-    data: "Standard web traffic (requests, IP addresses in transit)",
-  },
-  {
-    name: "Google Cloud (Cloud Run)",
-    role: "Hosts the API and the review-generation service",
-    data: "All application data in transit",
+    name: "UKP Lab, TU Darmstadt",
+    role: "Hosts the website, the API, the review-generation service and the database, on a lab-operated server",
+    data: "All application data, in transit and at rest",
   },
 ];
 
@@ -82,6 +77,18 @@ export function ConsentPage() {
           addresses together with your votes, and no age, gender or other
           demographic data is collected.
         </li>
+        <li>
+          <span className="text-ink">
+            A participant code, if you were given one
+          </span>{" "}
+          — invited participants in the controlled study receive a short code
+          (for example <span className="font-mono text-ink">maple-1553</span>)
+          handed out in person. It is not derived from anything about you, but
+          it does link together the papers you upload and every comparison you
+          make. Whoever handed you the code knows which code is yours, so your
+          study data is pseudonymous to them rather than anonymous. If you
+          arrived here without a code, this does not apply to you.
+        </li>
       </ul>
 
       {/* ─── Where it goes ───────────────────────────────────────────── */}
@@ -92,7 +99,8 @@ export function ConsentPage() {
         The review systems compared here are commercial AI services, so the
         text of your paper is sent to external providers. When you submit a
         paper it flows through this pipeline: the document is parsed to text
-        (Datalab&rsquo;s Marker API for PDFs, arxiv2md for arXiv links), the
+        (Datalab&rsquo;s Chandra API for PDFs, our own arxiv2md service for
+        arXiv links), the
         same text is sent to each participating review system —{" "}
         <span className="text-ink">commercial AI model APIs</span> (OpenAI,
         Google Gemini, Anthropic, DeepSeek, Mistral, Z.ai) — and, for study
@@ -154,8 +162,8 @@ export function ConsentPage() {
         A note on anonymity
       </h2>
       <p className="mt-3 text-[14.5px] leading-relaxed text-graphite">
-        We collect no identifying data. However, if you submit your own
-        unpublished manuscript, its{" "}
+        We collect no directly identifying data — no name, no e-mail, no
+        account. However, if you submit your own unpublished manuscript, its{" "}
         <span className="text-ink">
           writing style could in principle reveal you
         </span>{" "}
@@ -174,7 +182,7 @@ export function ConsentPage() {
       <p className="mt-3 text-[14.5px] leading-relaxed text-graphite">
         Generated reviews, votes, dimension picks, and notes are retained and
         analysed for academic research on automated peer review, and results
-        are published only in aggregate (e.g. Elo rankings, statistical
+        are published only in aggregate (system rankings and statistical
         analyses). Study data is stored in an access-controlled, encrypted
         database operated by the UKP Lab and analysed on an encrypted work
         computer.
@@ -202,9 +210,10 @@ export function ConsentPage() {
         >
           {CONTACT_EMAIL}
         </a>{" "}
-        and quote the session identifier below — it is the only way we can
-        locate your data. Because results are only ever published in aggregate,
-        no individual vote can be traced to you after publication.
+        and quote the session identifier below, or your participant code if you
+        were given one — those are the only ways we can locate your data.
+        Because results are only ever published in aggregate, no individual vote
+        can be traced to you after publication.
       </p>
 
       {/* The caller's anonymous session id, so they can copy it into a

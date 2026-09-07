@@ -449,7 +449,7 @@ function UploadScreen({
             <span id="study-consent-hint" className="text-[13px] leading-relaxed text-graphite">
               I understand that this paper will be processed by{" "}
               <span className="text-ink">commercial AI model APIs</span> and
-              parsed via the Datalab Marker API, as described in the study's
+              parsed via the Datalab Chandra API, as described in the study's
               data-processing notice.
             </span>
           </label>
