@@ -26,8 +26,8 @@ const PROCESSORS: Array<{ name: string; role: string; data: string }> = [
     data: "The arXiv identifier; the paper is fetched from arxiv.org",
   },
   {
-    name: "OpenAI · Google (Gemini) · Anthropic · DeepSeek",
-    role: "Commercial AI APIs — generate reviews and act as automated judges",
+    name: "OpenAI · Google (Gemini) · Anthropic · DeepSeek · Mistral · Z.ai",
+    role: "Commercial AI APIs — generate reviews and, for study papers, act as the automated judge panel (each provider does both)",
     data: "The full parsed text of your paper",
   },
   {
@@ -95,9 +95,10 @@ export function ConsentPage() {
         (Datalab&rsquo;s Marker API for PDFs, arxiv2md for arXiv links), the
         same text is sent to each participating review system —{" "}
         <span className="text-ink">commercial AI model APIs</span> (OpenAI,
-        Google Gemini, Anthropic, DeepSeek) — and the generated reviews are
-        additionally scored by a commercial AI model acting as an automated
-        judge. Data is transmitted over encrypted connections (TLS). Under
+        Google Gemini, Anthropic, DeepSeek, Mistral, Z.ai) — and, for study
+        papers, each pair of generated reviews is additionally scored by all
+        six of those models acting as an automated judge panel. Data is
+        transmitted over encrypted connections (TLS). Under
         these providers&rsquo; API terms, submitted content is not used to
         train their models, but it does leave this application. Providers
         outside the EU are used on the basis of their Standard Contractual
