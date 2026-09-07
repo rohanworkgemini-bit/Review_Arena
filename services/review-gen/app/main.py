@@ -7,8 +7,6 @@ Endpoints:
   POST /stream-generate — streaming variant: yields tokens then 'done'
   POST /judge           — LLM-as-judge scoring (overall + per-dimension),
                           the single automatic quality metric
-  POST /analytics/topics       — topic model over a review corpus
-  POST /analytics/wordfreq     — per-system word frequencies
   GET  /health
 """
 from __future__ import annotations
@@ -49,7 +47,6 @@ from app.adapters._budget import (
     render_canonical,
 )
 from app.judge import judge_pair, judge_review
-from app.analytics import topic_model, word_frequencies
 from app.parsing import (
     Arxiv2MdError,
     ChandraError,
@@ -477,25 +474,3 @@ def judge_pair_endpoint(req: JudgePairRequest) -> dict:
         "passes_used": result.passes_used,
         "raw_passes": result.raw_passes,
     }
-
-
-# ─── /analytics ────────────────────────────────────────────────────────────
-
-
-class AnalyticsRequest(BaseModel):
-    reviews: list[str]
-    n_topics: int = 8
-    top_k: int = 50
-
-
-@app.post("/analytics/topics", dependencies=[Depends(verify_api_key)])
-def analytics_topics(req: AnalyticsRequest) -> dict:
-    try:
-        return {"topics": topic_model(req.reviews, n_topics=req.n_topics)}
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-
-
-@app.post("/analytics/wordfreq", dependencies=[Depends(verify_api_key)])
-def analytics_wordfreq(req: AnalyticsRequest) -> dict:
-    return {"frequencies": word_frequencies(req.reviews, top_k=req.top_k)}
