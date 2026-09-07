@@ -20,7 +20,8 @@
     "db:retire-system": "tsx scripts/retire-system.ts",
     "db:inspect": "tsx scripts/inspect.ts",
     "db:browser": "tsx scripts/db-browser.ts",
-    "preflight": "tsx scripts/preflight.ts"
+    "preflight": "tsx scripts/preflight.ts",
+    "study:status": "tsx scripts/study-status.ts"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",
