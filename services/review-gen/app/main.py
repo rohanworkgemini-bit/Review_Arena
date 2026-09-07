@@ -48,7 +48,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.judge import DEFAULT_JUDGE_MODEL, judge_pair, judge_review
+from app.judge import judge_pair, judge_review
 from app.analytics import topic_model, word_frequencies
 from app.parsing import (
     Arxiv2MdError,
@@ -434,7 +434,8 @@ async def stream_generate(req: GenerateRequest, request: Request):
 class JudgeRequest(BaseModel):
     review_text: str
     paper_text: str
-    model: str = DEFAULT_JUDGE_MODEL
+    # Required: the judge is a panel and every call names its member.
+    model: str
 
 
 @app.post("/judge", dependencies=[Depends(verify_api_key)])
@@ -450,16 +451,19 @@ class JudgePairRequest(BaseModel):
     review_a: str
     review_b: str
     paper_text: str
-    model: str = DEFAULT_JUDGE_MODEL
+    # Required: the judge is a panel and every call names its member.
+    model: str
 
 
 @app.post("/judge-pair", dependencies=[Depends(verify_api_key)])
 def judge_pair_endpoint(req: JudgePairRequest) -> dict:
-    """Pairwise verdict: paper + both reviews in one request per pass, two
-    order-swapped passes (position-bias control). 'A'/'B' in the response
-    refer to review_a/review_b of THIS request."""
+    """One panel member's pairwise verdict: paper + both reviews in one
+    request per pass, two order-swapped passes (position-bias control).
+    'A'/'B' in the response refer to review_a/review_b of THIS request.
+    The Node side fans out one call per panel member."""
     result = judge_pair(req.review_a, req.review_b, req.paper_text, model=req.model)
     return {
+        "judge_model": req.model,
         "overall_preference": result.overall_preference,
         "dimension_preferences": result.dimension_preferences,
         "review_a": {

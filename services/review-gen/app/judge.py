@@ -1,12 +1,20 @@
 """LLM-as-judge utilities used by the metrics pipeline.
 
-API-based. Dispatches on model name:
-  - "gemini-*"  →  Google GenAI (requires GEMINI_API_KEY).
-  - everything else  →  OpenAI Chat Completions (requires OPENAI_API_KEY).
+API-based. The judge is a PANEL: the Node side calls /judge-pair once per
+study system, so every model in the lineup judges every study pair
+(itself included — self-judgements are flagged downstream, not skipped).
+Each call names its model explicitly; this module routes on the model-id
+prefix (see _PROVIDERS):
+  - "gemini-*"    →  Google GenAI              (GEMINI_API_KEY)
+  - "claude-*"    →  Anthropic Messages API     (ANTHROPIC_API_KEY)
+  - "gpt-*"       →  OpenAI Chat Completions    (OPENAI_API_KEY)
+  - "deepseek-*", "mistral-*", "glm-*"  →  the provider's OpenAI-compatible
+    endpoint (DEEPSEEK_API_KEY / MISTRAL_API_KEY / ZAI_API_KEY)
+An unknown prefix raises — there is no silent fallback to OpenAI.
 
 If the relevant key is missing the call raises loudly — there's no mock
-fallback. The judge runs in the background per review (see
-scoreOneReview), so a silent fake would pollute the leaderboard with
+fallback. The judge runs in the background per pair (see
+scorePairIfReady), so a silent fake would pollute the leaderboard with
 nonsense; better to fail and surface a config error.
 
 Methodology references:
@@ -26,7 +34,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger("review-gen.judge")
 
@@ -172,33 +180,138 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
     return system_prompt, user_prompt
 
 
-def _is_gemini(model: str) -> bool:
-    return model.lower().startswith("gemini")
+# ─── Provider routing ──────────────────────────────────────────────────────
 
 
-def _is_deepseek(model: str) -> bool:
-    return model.lower().startswith("deepseek")
+@dataclass(frozen=True)
+class _Provider:
+    kind: Literal["openai", "gemini", "anthropic"]
+    env: str                      # API-key environment variable
+    base_url: str | None          # OpenAI-compatible endpoints only
+    json_mode: bool               # send response_format=json_object
+    temperature: float | None     # None = omit (reasoning models reject it)
+
+
+# Keyed by model-id prefix; longest match wins. Mirrors the client
+# construction in app/adapters/{gpt,gemini,claude,mistral,glm,
+# deepseekv4flash}.py so the judge reaches each provider exactly the way
+# the generator does.
+_PROVIDERS: dict[str, _Provider] = {
+    "gemini": _Provider("gemini", "GEMINI_API_KEY", None, True, 0.0),
+    "claude": _Provider("anthropic", "ANTHROPIC_API_KEY", None, False, None),
+    "deepseek": _Provider("openai", "DEEPSEEK_API_KEY", "https://api.deepseek.com/v1", True, 0.0),
+    "mistral": _Provider("openai", "MISTRAL_API_KEY", "https://api.mistral.ai/v1", True, 0.0),
+    "glm": _Provider("openai", "ZAI_API_KEY", "https://api.z.ai/api/paas/v4", True, 0.0),
+    # gpt-5.x rejects any non-default temperature (see adapters/gpt56terra.py).
+    "gpt": _Provider("openai", "OPENAI_API_KEY", None, True, None),
+}
+
+
+def _provider_for(model: str) -> _Provider:
+    """Route a model id to its provider by prefix. Raises on an unknown
+    prefix — a typo must not silently become an OpenAI call."""
+    key = model.lower()
+    matches = [prefix for prefix in _PROVIDERS if key.startswith(prefix)]
+    if not matches:
+        raise RuntimeError(
+            f"no judge provider for model={model!r}; known prefixes: "
+            f"{', '.join(sorted(_PROVIDERS))}"
+        )
+    return _PROVIDERS[max(matches, key=len)]
+
+
+def _parse_json_text(raw: str) -> dict:
+    """Parse a judge payload, tolerating a ```json fence or stray prose
+    around the object (Z.ai and Mistral occasionally fence even in JSON
+    mode). Raises json.JSONDecodeError — classified as transient — when
+    no object is found."""
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+    text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end < start:
+        raise json.JSONDecodeError("no JSON object in judge output", text, 0)
+    data: dict = json.loads(text[start:end + 1])
+    return data
+
+
+# JSON schemas for Anthropic structured outputs (output_config.format).
+# They mirror the shapes _build_prompts / _build_pair_prompts ask every
+# provider for, so the Claude judge cannot drift from the others.
+def _dim_object(value_schema: dict) -> dict:
+    return {
+        "type": "object",
+        "properties": {dim: value_schema for dim in _DIMENSIONS},
+        "required": list(_DIMENSIONS),
+        "additionalProperties": False,
+    }
+
+
+_SCORES_BLOCK_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "dimension_scores": _dim_object({"type": "number"}),
+        "overall_score": {"type": "number"},
+    },
+    "required": ["dimension_scores", "overall_score"],
+    "additionalProperties": False,
+}
+
+_REVIEW_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "reasoning_per_dimension": _dim_object({"type": "string"}),
+        "dimension_scores": _dim_object({"type": "number"}),
+        "overall_score": {"type": "number"},
+    },
+    "required": ["reasoning_per_dimension", "dimension_scores", "overall_score"],
+    "additionalProperties": False,
+}
+
+_PREF_SCHEMA: dict = {"type": "string", "enum": ["1", "2", "TIE"]}
+
+_PAIR_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "reasoning_per_dimension": _dim_object({"type": "string"}),
+        "preference_per_dimension": _dim_object(_PREF_SCHEMA),
+        "overall_preference": _PREF_SCHEMA,
+        "review_1_scores": _SCORES_BLOCK_SCHEMA,
+        "review_2_scores": _SCORES_BLOCK_SCHEMA,
+    },
+    "required": [
+        "reasoning_per_dimension",
+        "preference_per_dimension",
+        "overall_preference",
+        "review_1_scores",
+        "review_2_scores",
+    ],
+    "additionalProperties": False,
+}
 
 
 def _openai_judge_pass(
     client: Any,
     *,
+    provider: _Provider,
     system_prompt: str,
     user_prompt: str,
     model: str,
 ) -> dict:
-    response = client.chat.completions.create(
-        model=model,
-        temperature=0,
-        response_format={"type": "json_object"},
-        messages=[
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-    )
+    }
+    if provider.json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    if provider.temperature is not None:
+        kwargs["temperature"] = provider.temperature
+    response = client.chat.completions.create(**kwargs)
     raw = response.choices[0].message.content or "{}"
-    data: dict = json.loads(raw)
-    return data
+    return _parse_json_text(raw)
 
 
 def _gemini_judge_pass(
@@ -230,31 +343,76 @@ def _gemini_judge_pass(
         request_options={"timeout": 180},
     )
     raw = (response.text or "{}").strip()
-    data: dict = json.loads(raw)
-    return data
+    return _parse_json_text(raw)
 
 
-def _one_judge_pass(
+def _anthropic_judge_pass(
     client: Any,
     *,
     system_prompt: str,
     user_prompt: str,
     model: str,
+    schema: dict,
 ) -> dict:
-    """Single judge call with retry on transient errors. Dispatches by
-    model name. Returns the parsed JSON dict. Raises RuntimeError if all
-    retries fail. `client` is the OpenAI client (unused for Gemini)."""
+    """One Claude judge call. Structured output via output_config.format
+    guarantees a schema-valid JSON text block; no temperature (Sonnet 5
+    rejects it), no assistant prefill (removed on the 4.6+ family), and
+    adaptive thinking left at its default. Streamed and collected because
+    the SDK refuses non-streaming requests that may exceed 10 minutes
+    under adaptive thinking (see adapters/claude.py)."""
+    with client.messages.stream(
+        model=model,
+        max_tokens=16_000,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+        output_config={
+            "format": {"type": "json_schema", "schema": schema},
+            # The judge is a form-filling task; medium effort keeps the
+            # 12-calls-per-pair panel affordable without dropping the CoT.
+            "effort": "medium",
+        },
+    ) as stream:
+        message = stream.get_final_message()
+    if message.stop_reason == "refusal":
+        # Deliberately worded so the transient-error classifier does not
+        # retry it: a policy refusal repeats identically on every attempt.
+        raise RuntimeError(f"anthropic judge refused the request: {message.stop_details}")
+    text = next((block.text for block in message.content if block.type == "text"), "")
+    return _parse_json_text(text)
+
+
+def _one_judge_pass(
+    client: Any,
+    *,
+    provider: _Provider,
+    schema: dict,
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+) -> dict:
+    """Single judge call with retry on transient errors. Dispatches on the
+    provider kind. Returns the parsed JSON dict. Raises RuntimeError if all
+    retries fail. `client` is the provider SDK client (None for Gemini)."""
     last_err: Exception | None = None
     for attempt in range(JUDGE_RETRY_MAX):
         try:
-            if _is_gemini(model):
+            if provider.kind == "gemini":
                 return _gemini_judge_pass(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     model=model,
                 )
+            if provider.kind == "anthropic":
+                return _anthropic_judge_pass(
+                    client,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    model=model,
+                    schema=schema,
+                )
             return _openai_judge_pass(
                 client,
+                provider=provider,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=model,
@@ -287,81 +445,58 @@ def _one_judge_pass(
     raise RuntimeError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
 
 
-# Default judge model — DeepSeek V4 Flash (set 2026-09-03, with the
-# six-system lineup cut; changed BEFORE any study data was collected, so
-# the mid-study-change prohibition below is not violated).
+# There is no default judge model (panel design, 2026-09, set BEFORE any
+# study data was collected): the Node side names one of the six study
+# systems on every call, so the judge's vendor is never disjoint from the
+# systems under test. Self-judging is therefore a measured quantity — every
+# verdict row carries self_judging, and the analysis reports the panel
+# with and without those rows — instead of a design assumption.
 #
-# Chosen because DeepSeek no longer appears anywhere in the review-system
-# lineup (Google, OpenAI, Anthropic, Mistral, Zhipu, Moonshot) — the
-# judge's vendor is fully disjoint from every system under test, which
-# retires the docs/FAIRNESS.md B3 self-grading conflict the previous
-# Gemini judge carried instead of merely relocating it.
-#
-# Flash tier on purpose: the judge runs on EVERY generated review
-# (2 passes each), the highest-volume model call in the system. The trade
-# is a cheaper grader scoring stronger models' output, which biases
-# toward noisier scores rather than toward any one system. Report the
-# human-judge correlation with that caveat.
-#
-# Do NOT change this model mid-study — that would make the RQ1
-# correlation incomparable across collected data.
-DEFAULT_JUDGE_MODEL = "deepseek-v4-flash"
+# Do NOT change the panel membership or the prompts mid-study — that would
+# make the human-vs-judge correlation incomparable across collected data.
 
 
-def _client_for(model: str) -> Any:
+def _client_for(model: str, provider: _Provider) -> Any:
     """Build the provider client for a judge model (None on the Gemini
     path — it uses the module-global google.generativeai). Raises if the
     required key is missing; no mock fallback."""
-    if _is_gemini(model):
-        if not os.environ.get("GEMINI_API_KEY"):
-            raise RuntimeError(
-                f"judge with model={model!r} requires GEMINI_API_KEY "
-                "in the environment. There is no mock fallback."
-            )
-        return None
-    if _is_deepseek(model):
-        # DeepSeek's OpenAI-compatible endpoint: same chat-completions +
-        # response_format shape, different base_url and key.
-        if not os.environ.get("DEEPSEEK_API_KEY"):
-            raise RuntimeError(
-                f"judge with model={model!r} requires DEEPSEEK_API_KEY "
-                "in the environment. There is no mock fallback."
-            )
-        from openai import OpenAI
-        # Explicit deadline: the SDK default is 600s/attempt, which under a
-        # burst quietly pins threadpool threads (see adapters/base.py).
-        return OpenAI(
-            api_key=os.environ["DEEPSEEK_API_KEY"],
-            base_url="https://api.deepseek.com/v1",
-            timeout=180.0,
-            max_retries=3,
-        )
-    if not os.environ.get("OPENAI_API_KEY"):
+    api_key = os.environ.get(provider.env)
+    if not api_key:
         raise RuntimeError(
-            f"judge with model={model!r} requires OPENAI_API_KEY "
+            f"judge with model={model!r} requires {provider.env} "
             "in the environment. There is no mock fallback."
         )
+    if provider.kind == "gemini":
+        return None
+    # Explicit deadlines: the SDK defaults are 600s/attempt, which under a
+    # burst quietly pin threadpool threads (see adapters/base.py).
+    if provider.kind == "anthropic":
+        from anthropic import Anthropic
+
+        return Anthropic(api_key=api_key, timeout=180.0, max_retries=3)
     from openai import OpenAI
-    return OpenAI(timeout=180.0, max_retries=3)
+
+    return OpenAI(api_key=api_key, base_url=provider.base_url, timeout=180.0, max_retries=3)
 
 
 def judge_review(
     review_text: str,
     paper_text: str,
     *,
-    model: str = DEFAULT_JUDGE_MODEL,
+    model: str,
 ) -> JudgeResult:
-    """Score a review against the paper.
+    """Score a review against the paper (pointwise; kept for the /judge
+    endpoint — the pipeline uses judge_pair).
 
     Returns overall + per-dimension scores. Raises RuntimeError if the
-    relevant API key (GEMINI_API_KEY for gemini-*, OPENAI_API_KEY
-    otherwise) is missing — no fake-data fallback.
+    provider's API key is missing — no fake-data fallback.
 
     Runs the judge JUDGE_PASSES times and averages numeric scores to
     reduce stochasticity (even at temperature=0 the model is not
     perfectly deterministic, ~±0.5 variance observed).
     """
-    client = _client_for(model)
+    provider = _provider_for(model)
+    client = _client_for(model, provider)
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)
 
@@ -372,6 +507,8 @@ def judge_review(
         try:
             pass_data.append(_one_judge_pass(
                 client,
+                provider=provider,
+                schema=_REVIEW_SCHEMA,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=model,
@@ -548,12 +685,14 @@ def judge_pair(
     review_b_text: str,
     paper_text: str,
     *,
-    model: str = DEFAULT_JUDGE_MODEL,
+    model: str,
 ) -> PairJudgeResult:
-    """Compare two reviews of one paper. Two order-swapped passes; a
-    preference stands only where both orderings agree (else TIE). Raises
-    RuntimeError if no pass returns a valid payload."""
-    client = _client_for(model)
+    """Compare two reviews of one paper with one panel member. Two
+    order-swapped passes; a preference stands only where both orderings
+    agree (else TIE). Raises RuntimeError if no pass returns a valid
+    payload."""
+    provider = _provider_for(model)
+    client = _client_for(model, provider)
 
     # (first_review, second_review, position of review A in this pass)
     orders: list[tuple[str, str, str]] = [
@@ -568,6 +707,8 @@ def judge_pair(
         try:
             data = _one_judge_pass(
                 client,
+                provider=provider,
+                schema=_PAIR_SCHEMA,
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=model,
