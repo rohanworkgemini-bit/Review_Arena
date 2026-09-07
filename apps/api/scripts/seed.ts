@@ -1,19 +1,22 @@
 // Seed review_systems so the demo has something to compare on day one.
 // Run: pnpm --filter @reviewarena/api db:seed
 //
-// Live lineup — 10 frontier commercial reviewers, 5 providers x 2 tiers:
-//     - GPT-5.2 / GPT-5.4-mini             (OpenAI)
-//     - Claude Opus 4.8 / Sonnet 5         (Anthropic, native SDK)
-//     - Gemini 3.1 Pro / Gemini 3.6 Flash  (Google)
-//     - DeepSeek V4 Pro / V4 Flash         (DeepSeek OpenAI-compat API)
-//     - Mistral Large 3 / Medium 3.5       (Mistral OpenAI-compat API)
+// Live lineup — the controlled study's six systems, one mid-tier model
+// per provider (2026-09):
+//     - Claude Sonnet 5        (Anthropic, native SDK)
+//     - DeepSeek V4 Flash      (DeepSeek OpenAI-compat API)
+//     - Gemini 3.8 Flash       (Google, native SDK)
+//     - GLM-5.2                (Z.ai OpenAI-compat API)
+//     - GPT-5.6 Terra          (OpenAI)
+//     - Mistral Medium 3.5     (Mistral OpenAI-compat API)
 //
-// Two tiers per provider is deliberate: it lets the thesis separate
-// "which lab" from "how much compute" when reading the leaderboard.
+// The same six systems form the LLM judge panel: every study pair is
+// judged by all six (self-judgements flagged, reported with and without
+// in the analysis). There is no separate judge-only vendor.
 //
 // Every `model` string below was verified callable against the
-// provider's live model-list endpoint on 2026-07-26. Two do not match
-// their display name — see the comments on those rows.
+// provider's live model-list endpoint. Mistral's does not match its
+// display name on purpose — see the comment on that row.
 //
 // Scope: the thesis benchmarks frontier commercial LLMs only. The
 // open-weight specialist reviewers (DeepReviewer, OpenReviewer,
@@ -38,17 +41,19 @@ import { reviewSystems } from "../src/db/schema.js";
 // Slugs of retired adapters. Disabled (not deleted) so historical
 // reviews / votes / Elo snapshots remain in the DB for thesis analysis.
 const RETIRED_SLUGS = [
+  // Hard-deleted 2026-09 (scripts/retire-system.ts) when DeepSeek V4 Flash
+  // took its lineup slot; listed so a restored backup can't re-enable it.
+  "kimi-k3",
   // 2026-09 six-system study cut: lineup reduced to one system per
-  // provider to match the controlled study design; DeepSeek moved to the
-  // judge role. Rows deleted from the live dev DB (it held no votes);
-  // these entries only matter if an old backup is ever restored.
+  // provider to match the controlled study design. Rows deleted from the
+  // live dev DB (it held no votes); these entries only matter if an old
+  // backup is ever restored.
   "gpt-5.2",
   "gpt-5.4-mini",
   "claude-opus-4-8",
   "gemini-3.1-pro",
   "gemini-3.6-flash",
   "deepseek-v4-pro",
-  "deepseek-v4-flash",
   "mistral-large-3",
   // Superseded by the 2026-07 lineup refresh (5 providers x 2 tiers).
   "gpt-5.5-pro",            // → gpt-5.4-mini. 50k TPM (10x below every other
@@ -63,7 +68,7 @@ const RETIRED_SLUGS = [
   "gpt-5-mini",             // → gpt-5.4-mini
   "gemini-3-pro",           // → gemini-3.1-pro
   "gemini-2.5-flash",       // → gemini-3.6-flash
-  "deepseek-v3-2",          // → deepseek-v4-pro / deepseek-v4-flash
+  "deepseek-v3-2",          // → deepseek-v4-flash
   // Earlier baselines.
   "gpt-4o-mini",            // pre-GPT-5 zero-shot baseline
   "gpt-4o",                 // pre-GPT-5 frontier baseline
@@ -107,9 +112,9 @@ async function main() {
     enabled?: boolean;
   }> = [
     // ─── The controlled study's six systems (2026-09 lineup cut) ───────
-    // One per provider; DeepSeek deliberately absent — it serves as the
-    // LLM-as-judge (services/review-gen/app/judge.py) with no vendor
-    // overlap against any system under test.
+    // One per provider. Each also sits on the judge panel — the Node
+    // pipeline calls services/review-gen/app/judge.py once per system
+    // for every study pair, naming config.model as the judge.
     {
       slug: "gemini-3.8-flash",
       name: "Gemini 3.8 Flash",
@@ -164,15 +169,14 @@ async function main() {
       enabled: !!process.env.ZAI_API_KEY,
     },
     {
-      slug: "kimi-k3",
-      name: "Kimi K3",
+      slug: "deepseek-v4-flash",
+      name: "DeepSeek V4 Flash",
       description:
-        "Moonshot Kimi K3 (2.8T open-weight reasoning model) zero-shot " +
-        "reviewer via Moonshot's OpenAI-compatible endpoint.",
-      adapterKey: "kimi-k3",
-      // Reasoning model: temperature omitted on purpose (adapter default).
-      config: { model: "kimi-k3" },
-      enabled: !!process.env.MOONSHOT_API_KEY,
+        "DeepSeek V4 Flash (mid tier) zero-shot reviewer via DeepSeek's " +
+        "OpenAI-compatible endpoint.",
+      adapterKey: "deepseek-v4-flash",
+      config: { model: "deepseek-v4-flash", temperature: 0.2 },
+      enabled: !!process.env.DEEPSEEK_API_KEY,
     },
   ];
 

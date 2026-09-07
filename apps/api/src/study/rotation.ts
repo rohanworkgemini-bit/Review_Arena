@@ -9,17 +9,21 @@
  * rotations = each rotation used 8 times = each pair measured 8 times.
  *
  * The letter → slug mapping is FIXED and preregistered (alphabetical by
- * slug). Do not change any of these constants once the study has started —
- * the balance properties above hold only for this exact assignment.
- * rotation.test.ts proves every property programmatically.
+ * slug; re-lettered once, pre-study, in 2026-09 when deepseek-v4-flash
+ * replaced kimi-k3). Do not change any of these constants once the study
+ * has started — the balance properties above hold only for this exact
+ * assignment. rotation.test.ts proves every property programmatically.
+ *
+ * The same six systems form the LLM judge panel (pipeline/judge-panel.ts):
+ * every study pair is judged by all six, self-judgements flagged.
  */
 
 export const STUDY_SYSTEMS: Record<string, string> = {
   A: "claude-sonnet-5",
-  B: "gemini-3.8-flash",
-  C: "glm-5.2",
-  D: "gpt-5.6-terra",
-  E: "kimi-k3",
+  B: "deepseek-v4-flash",
+  C: "gemini-3.8-flash",
+  D: "glm-5.2",
+  E: "gpt-5.6-terra",
   F: "mistral-medium-3.5",
 };
 

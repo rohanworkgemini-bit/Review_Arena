@@ -4,7 +4,7 @@ DESIGN DECISION (2026-07-11): the fairness input/output caps were
 REMOVED. Every commercial system now receives the COMPLETE canonical
 paper text and no output-token cap (except provider-mandated ceilings,
 e.g. Anthropic requires an explicit max_tokens). The thesis runs
-commercial models only (GPT-5, Claude, Gemini, DeepSeek), all with
+commercial models only (GPT, Claude, Gemini, DeepSeek, Mistral, GLM), all with
 >=128k-token context windows, so full papers fit natively.
 
 What remains shared:

@@ -21,6 +21,15 @@ describe("study rotation design", () => {
     expect(new Set(STUDY_SLUGS).size).toBe(6);
   });
 
+  it("letters A–F follow the preregistered alphabetical-by-slug order", () => {
+    expect(Object.values(STUDY_SYSTEMS)).toEqual([...STUDY_SLUGS].sort());
+  });
+
+  it("is the 2026-09 lineup: deepseek-v4-flash in, kimi-k3 out", () => {
+    expect(STUDY_SLUGS).toContain("deepseek-v4-flash");
+    expect(STUDY_SLUGS).not.toContain("kimi-k3");
+  });
+
   it("each rotation is a perfect matching: 3 disjoint pairs covering all 6", () => {
     for (const rotation of ROTATIONS) {
       const letters = rotation.flat();

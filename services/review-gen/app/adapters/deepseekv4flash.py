@@ -1,19 +1,17 @@
-"""Kimi K3 reviewer (Moonshot AI).
+"""DeepSeek V4 Flash reviewer.
 
-Moonshot exposes an OpenAI-compatible chat-completions endpoint, so this
-is the same shape as mistral.py / glm.py: the openai SDK pointed at a
-different base_url. Kimi K3 (2.8T-parameter open-weight reasoning model,
-1M context) is the flagship; the id "kimi-k3" is the documented model
-parameter.
+DeepSeek exposes an OpenAI-compatible chat-completions endpoint, so this
+is the same shape as glm.py / mistral.py: the openai SDK pointed at a
+different base_url. V4 Flash is the mid tier of the V4 family — the same
+tier as the rest of the six-system lineup.
 
-Reasoning-family model: like OpenAI's 5.x reasoning tiers it manages its
-own sampling, so temperature defaults to None (omitted) rather than 0.2.
-Reasoning depth is the provider default; pin it explicitly via
-config {"reasoning_effort": "..."} if the study needs it fixed.
+Single-file adapter (base + model pin in one) — DeepSeek contributes
+exactly one system to the lineup. The judge panel reaches DeepSeek
+through app/judge.py with the same base_url and key.
 
-Single-file adapter — Moonshot contributes exactly one system.
-
-Requires MOONSHOT_API_KEY in the environment. Raises loudly if missing.
+Requires DEEPSEEK_API_KEY in the environment. Raises loudly if missing —
+no silent mock, so a stale leaderboard can't accumulate votes against
+missing data.
 """
 from __future__ import annotations
 
@@ -37,22 +35,22 @@ from app.adapters.base import (
 )
 from app.schemas import ParsedPaper
 
-_MOONSHOT_BASE_URL = "https://api.moonshot.ai/v1"
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 
-class KimiK3Adapter(Adapter):
-    adapter_key = "kimi-k3"
+class DeepSeekV4FlashAdapter(Adapter):
+    adapter_key = "deepseek-v4-flash"
 
     def __init__(self, config: dict | None = None) -> None:
         super().__init__(config)
         self._system_prompt = build_system_prompt(
             self.config.get('conference', DEFAULT_CONFERENCE)
         )
-        api_key = os.environ.get("MOONSHOT_API_KEY")
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "KimiK3Adapter requires MOONSHOT_API_KEY. "
-                "Get one at https://platform.kimi.ai/ and add it to .env."
+                "DeepSeekV4FlashAdapter requires DEEPSEEK_API_KEY. "
+                "Get one at https://platform.deepseek.com/ and add it to .env."
             )
         # Lazy import so the rest of the service starts without the
         # openai SDK installed.
@@ -60,17 +58,14 @@ class KimiK3Adapter(Adapter):
 
         self._client = OpenAI(
             api_key=api_key,
-            base_url=_MOONSHOT_BASE_URL,
+            base_url=_DEEPSEEK_BASE_URL,
             max_retries=PROVIDER_MAX_RETRIES,
             timeout=PROVIDER_TIMEOUT_S,
         )
-        self._model = self.config.get("model", "kimi-k3")
-        # None = omit temperature (reasoning models reject or ignore it).
-        self._temperature = self.config.get("temperature")
-        self._reasoning_effort = self.config.get("reasoning_effort")
-        # Moonshot documents a 1M-token window for K3; logged for
-        # transparency, not used to size input.
-        self._context_window = int(self.config.get("context_window", 1_000_000))
+        self._model = self.config.get("model", "deepseek-v4-flash")
+        self._temperature = self.config.get("temperature", 0.2)
+        # Logged for transparency, not used to size input (full papers fit).
+        self._context_window = int(self.config.get("context_window", 128_000))
 
     def _kwargs(self, prompt: str, *, stream: bool) -> dict:
         kwargs: dict = {
@@ -85,9 +80,6 @@ class KimiK3Adapter(Adapter):
         }
         if self._temperature is not None:
             kwargs["temperature"] = self._temperature
-        if self._reasoning_effort is not None:
-            # Moonshot's top-level reasoning-depth knob ("low"/"high"/"max").
-            kwargs["extra_body"] = {"reasoning_effort": self._reasoning_effort}
         return kwargs
 
     def _metrics(self, prompt: str, raw: str) -> GenerationMetrics:

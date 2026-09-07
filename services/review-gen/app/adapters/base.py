@@ -146,7 +146,7 @@ class Adapter(ABC):
     def generate_stream(self, paper: ParsedPaper) -> Iterator[StreamEvent]:
         """Yield token deltas, then a final 'done' event with the parsed
         StructuredReview. Adapters with native streaming (gpt, gemini,
-        claude, deepseek) override this. The default
+        claude, and the OpenAI-compatible ones) override this. The default
         implementation falls back to a single-shot generate() — useful
         for adapters where the model produces output in one go.
         """

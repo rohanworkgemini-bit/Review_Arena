@@ -17,6 +17,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:nuke": "tsx scripts/drop-all.ts",
     "db:wipe-data": "tsx scripts/wipe-data.ts",
+    "db:retire-system": "tsx scripts/retire-system.ts",
     "db:inspect": "tsx scripts/inspect.ts",
     "db:browser": "tsx scripts/db-browser.ts"
   },

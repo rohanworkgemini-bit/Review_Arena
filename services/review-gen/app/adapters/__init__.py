@@ -2,32 +2,34 @@
 
 Live adapter keys (must match `review_systems.adapter_key` in the DB) —
 the controlled study's six systems, one per provider:
-  gemini-3.8-flash — Google Gemini 3.8 Flash (native SDK)
-  gpt-5.6-terra    — OpenAI GPT-5.6 Terra
-  claude-sonnet-5  — Anthropic Claude Sonnet 5 (native SDK)
+  claude-sonnet-5    — Anthropic Claude Sonnet 5 (native SDK)
+  deepseek-v4-flash  — DeepSeek V4 Flash via its OpenAI-compatible endpoint
+  gemini-3.8-flash   — Google Gemini 3.8 Flash (native SDK)
+  glm-5.2            — Zhipu GLM-5.2 via Z.ai's OpenAI-compatible endpoint
+  gpt-5.6-terra      — OpenAI GPT-5.6 Terra
   mistral-medium-3.5 — Mistral Medium 3.5 via its OpenAI-compatible endpoint
-  glm-5.2          — Zhipu GLM-5.2 via Z.ai's OpenAI-compatible endpoint
-  kimi-k3          — Moonshot Kimi K3 via its OpenAI-compatible endpoint
 
-The 2026-09 lineup cut (10 systems → these 6) matches the study design's
-six-system balanced rotation and frees DeepSeek to serve as the
-LLM-as-judge (deepseek-v4-flash, see app/judge.py) with no vendor
-overlap against any system under test. The previous lineup's adapters
-and DB rows were REMOVED, not disabled — the study starts from a clean
-database, so there is no history to preserve. Model ids for the four new
-systems verified against provider docs 2026-09-03.
+The 2026-09 lineup cut (10 systems → 6) matches the study design's
+six-system balanced rotation. The same six systems form the LLM judge
+panel (app/judge.py routes on the model id; the Node side calls it once
+per system for every study pair), so no vendor is judge-only and
+self-judging is measured rather than designed away. Kimi K3 was replaced
+by DeepSeek V4 Flash before any study data was collected; the previous
+lineups' adapters and DB rows were REMOVED, not disabled — the study
+starts from a clean database, so there is no history to preserve.
 
 Standardized integration framework (so every system gets the same input
 budgeting + output normalization, and adding a new one is minimal):
   - _budget.py        — canonical paper rendering + one reference tokenizer
   - _review_parse.py  — markdown/JSON → StructuredReview + score clamping
 
-To add a provider, copy the closest adapter: glm.py or kimik3.py for
-anything with an OpenAI-compatible /chat/completions endpoint (the
+To add a provider, copy the closest adapter: glm.py or deepseekv4flash.py
+for anything with an OpenAI-compatible /chat/completions endpoint (the
 openai SDK pointed at a different base_url), claude.py or gemini.py for
 a native SDK, then a thin per-system subclass pinning the model id
 (gemini38flash.py) — or a single-file adapter when the provider
-contributes only one system.
+contributes only one system. Add the provider to _PROVIDERS in
+app/judge.py as well so it can sit on the judge panel.
 """
 from __future__ import annotations
 
@@ -81,17 +83,17 @@ def _bootstrap() -> None:
 
         return GLMAdapter(cfg)
 
-    def _kimik3_factory(cfg: dict) -> Adapter:
-        from app.adapters.kimik3 import KimiK3Adapter
+    def _deepseekv4flash_factory(cfg: dict) -> Adapter:
+        from app.adapters.deepseekv4flash import DeepSeekV4FlashAdapter
 
-        return KimiK3Adapter(cfg)
+        return DeepSeekV4FlashAdapter(cfg)
 
     register("gemini-3.8-flash", _gemini38flash_factory)
     register("gpt-5.6-terra", _gpt56terra_factory)
     register("claude-sonnet-5", _claude_sonnet5_factory)
     register("mistral-medium-3.5", _mistral_medium35_factory)
     register("glm-5.2", _glm_factory)
-    register("kimi-k3", _kimik3_factory)
+    register("deepseek-v4-flash", _deepseekv4flash_factory)
 
 
 _bootstrap()
