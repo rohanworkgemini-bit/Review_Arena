@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Beaker, FileSearch, Settings as SettingsIcon, Layers } from "lucide-react";
+import {
+  Beaker,
+  BookOpen,
+  FileSearch,
+  Settings as SettingsIcon,
+  Layers,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -12,9 +18,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
 import { ReviewerPlayground } from "@/components/ReviewerPlayground";
+import { DocsTab } from "@/components/admin/DocsTab";
 
 // Admin dashboard. Single entry point for the thesis-runner: enter the
-// ADMIN_TOKEN once, then operate across four tabs:
+// ADMIN_TOKEN once, then operate across five tabs:
+//   - Docs:       how the system works and how to run a study session.
 //   - Playground: hit /reviews/playground to round-trip a paper through
 //     one chosen system without polluting the DB.
 //   - Parse:      hit /parse and /parse-arxiv to sanity-check the parser.
@@ -30,6 +38,7 @@ import { ReviewerPlayground } from "@/components/ReviewerPlayground";
 const TOKEN_KEY = "reviewarena.adminToken";
 
 const TABS = [
+  { id: "docs", label: "Docs", icon: BookOpen },
   { id: "playground", label: "Playground", icon: Beaker },
   { id: "parse", label: "Parse", icon: FileSearch },
   { id: "systems", label: "Systems", icon: Layers },
@@ -98,6 +107,7 @@ export function AdminPage() {
       <TabStrip current={tab} onChange={setTab} />
 
       <div>
+        {tab === "docs" && <DocsTab />}
         {tab === "playground" && <ReviewerPlayground token={token} />}
         {tab === "parse" && <ParseTab token={token} />}
         {tab === "systems" && <SystemsTab token={token} />}
