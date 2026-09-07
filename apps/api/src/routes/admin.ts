@@ -317,7 +317,9 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   router.post("/admin/papers/:id/score", async (req, res, next) => {
     try {
-      await scorePaper(req.params.id, judge);
+      // ?force=1 re-runs every panel member; default re-runs only the
+      // members that have no verdict yet (cheap after a PARTIAL).
+      await scorePaper(req.params.id, judge, req.query.force === "1");
       const payload = { ok: true, paperId: req.params.id };
       const validated = AdminScoreResponseSchema.parse(payload);
       res.json(validated);
@@ -330,19 +332,22 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   router.get("/admin/export.json", async (_req, res, next) => {
     try {
-      const [systems, paperRows, voteRows, metricRows, snapshotRows] = await Promise.all([
-        db.query.reviewSystems.findMany(),
-        db.query.papers.findMany({ with: { reviews: true } }),
-        db.query.votes.findMany({ with: { dimensions: true } }),
-        db.query.metricScores.findMany(),
-        db.query.eloSnapshots.findMany(),
-      ]);
+      const [systems, paperRows, voteRows, metricRows, verdictRows, snapshotRows] =
+        await Promise.all([
+          db.query.reviewSystems.findMany(),
+          db.query.papers.findMany({ with: { reviews: true } }),
+          db.query.votes.findMany({ with: { dimensions: true } }),
+          db.query.metricScores.findMany(),
+          db.query.judgeVerdicts.findMany(),
+          db.query.eloSnapshots.findMany(),
+        ]);
       const payload = {
         exportedAt: new Date().toISOString(),
         systems,
         papers: paperRows,
         votes: voteRows,
         metrics: metricRows,
+        verdicts: verdictRows,
         snapshots: snapshotRows,
       };
       const validated = AdminExportResponseSchema.parse(payload);

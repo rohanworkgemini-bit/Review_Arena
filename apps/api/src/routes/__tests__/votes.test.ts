@@ -175,16 +175,16 @@ describe("Vote Battle Inclusion Filters", () => {
     expect(["COMPLETED", "FAILED", "PENDING"]).not.toContain("GENERATING");
   });
 
-  it("should exclude judge_status !== COMPLETE from Elo", () => {
-    const statuses = ["COMPLETE", "PARTIAL", "FAILED"] as const;
-    expect(statuses).toContain("COMPLETE");
-    expect(statuses).toContain("PARTIAL");
-    expect(statuses).toContain("FAILED");
+  it("should exclude only judge_status FAILED from Elo (panel rule)", () => {
+    const statuses = ["PENDING", "COMPLETE", "PARTIAL", "FAILED"] as const;
 
-    // Only COMPLETE should be included in Elo
-    const shouldInclude = (status: typeof statuses[number]) => status === "COMPLETE";
+    // Mirrors loadBattles() in votes.ts: FAILED = no panel member scored
+    // the pair. PARTIAL (some judges returned) and PENDING (arena, never
+    // judged) still count — the human vote is valid regardless.
+    const shouldInclude = (status: typeof statuses[number]) => status !== "FAILED";
+    expect(shouldInclude("PENDING")).toBe(true);
     expect(shouldInclude("COMPLETE")).toBe(true);
-    expect(shouldInclude("PARTIAL")).toBe(false);
+    expect(shouldInclude("PARTIAL")).toBe(true);
     expect(shouldInclude("FAILED")).toBe(false);
   });
 });

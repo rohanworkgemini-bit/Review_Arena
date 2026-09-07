@@ -293,14 +293,14 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       });
     });
 
-    it("should exclude judge_status !== COMPLETE from Elo", () => {
-      // If judge_status = PARTIAL or FAILED, exclude from Elo
-      const goodStatus = "COMPLETE";
-      const badStatuses = ["PARTIAL", "FAILED"] as const;
+    it("should exclude only judge_status FAILED from Elo (panel rule)", () => {
+      // FAILED = no judge-panel member scored the pair. PARTIAL and PENDING
+      // (arena papers are never judged) still count toward the board.
+      const countedStatuses = ["PENDING", "COMPLETE", "PARTIAL"] as const;
+      const excludedStatus = "FAILED";
 
-      expect(goodStatus).toBe("COMPLETE");
-      badStatuses.forEach((status) => {
-        expect(status).not.toBe("COMPLETE");
+      countedStatuses.forEach((status) => {
+        expect(status).not.toBe(excludedStatus);
       });
     });
   });

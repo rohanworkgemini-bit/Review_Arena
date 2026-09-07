@@ -17,6 +17,10 @@ import { reviews } from "../db/schema.js";
 import { logger } from "../logger.js";
 
 const STALE_AFTER_MS = 15 * 60_000;
+// A judge claim covers the whole six-member panel: each member is retried
+// up to 4× against an 8-minute per-call deadline, so a healthy-but-slow
+// panel can legitimately hold RUNNING for ~30 min. 90 min leaves margin.
+const STALE_JUDGE_AFTER_MS = 90 * 60_000;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 
 async function sweepOnce(): Promise<void> {
@@ -35,12 +39,14 @@ async function sweepOnce(): Promise<void> {
   }
 
   // Same idea for the pairwise judge claim: RUNNING is held only while a
-  // live scorePairIfReady run owns the pair. A crash mid-judge strands it,
-  // which would block any future claim of that pair forever.
+  // live scorePairIfReady run owns the pair. A crash mid-panel strands it,
+  // which would block any future claim of that pair forever. Verdicts the
+  // panel already persisted survive; rescore-missing re-runs only the rest.
+  const judgeCutoff = new Date(Date.now() - STALE_JUDGE_AFTER_MS);
   const judgeSwept = await db
     .update(reviews)
     .set({ judgeStatus: "FAILED", updatedAt: new Date() })
-    .where(and(eq(reviews.judgeStatus, "RUNNING"), lt(reviews.updatedAt, cutoff)))
+    .where(and(eq(reviews.judgeStatus, "RUNNING"), lt(reviews.updatedAt, judgeCutoff)))
     .returning({ id: reviews.id });
   if (judgeSwept.length > 0) {
     logger.warn(

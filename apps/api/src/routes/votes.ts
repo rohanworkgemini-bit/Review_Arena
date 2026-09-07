@@ -310,8 +310,10 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
   // infra failure (cold-start, loop, empty stream), not low review
   // quality. Exclude those from the quality Elo so the leaderboard ranks
   // reviewing, not uptime. (Reliability is reported separately.)
-  // Also exclude judge_status !== COMPLETE to avoid silent judge failures
-  // corrupting the leaderboard.
+  // Also exclude judge_status FAILED (no panel member scored the pair) so a
+  // silent judge failure can't corrupt the human-vs-judge analysis. PARTIAL
+  // (some panel members returned) still counts; per-judge strictness lives
+  // in the offline analysis, not the leaderboard.
   // FAIRNESS B4 — exclude votes flagged for low quality (e.g., decision time
   // < 3s) to detect potential botting or inattentive votes.
   return rows

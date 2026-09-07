@@ -20,6 +20,8 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 import { Pool } from "pg";
 
 const DATA_TABLES = [
+  "judge_verdicts",
+  "study_comparisons",
   "metric_scores",
   "elo_snapshots",
   "dimension_votes",

@@ -22,11 +22,9 @@ export interface PairJudgeResult {
   raw_passes: unknown[];
 }
 
-// Keep in sync with DEFAULT_JUDGE_MODEL in services/review-gen/app/judge.py.
-// Stored on every metric row's meta so the leaderboard / reveal page
-// can surface which judge produced a given score.
-export const DEFAULT_JUDGE_MODEL = "deepseek-v4-flash";
-
+// There is no default judge model: the judge is a panel of the six study
+// systems (see pipeline/judge-panel.ts), and every call names its member's
+// backing model id explicitly. Python routes on that id.
 export class JudgeClient {
   private readonly apiKey: string;
 
@@ -34,7 +32,7 @@ export class JudgeClient {
     this.apiKey = apiKey;
   }
 
-  async judge(reviewText: string, paperText: string, model = DEFAULT_JUDGE_MODEL): Promise<JudgeResult> {
+  async judge(reviewText: string, paperText: string, model: string): Promise<JudgeResult> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["x-api-key"] = this.apiKey;
     const { statusCode, body } = await request(`${this.baseUrl}/judge`, {
@@ -60,7 +58,7 @@ export class JudgeClient {
     reviewA: string,
     reviewB: string,
     paperText: string,
-    model = DEFAULT_JUDGE_MODEL,
+    model: string,
   ): Promise<PairJudgeResult> {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (this.apiKey) headers["x-api-key"] = this.apiKey;
@@ -79,7 +77,7 @@ export class JudgeClient {
       bodyTimeout: 8 * 60_000,
     });
     const text = await body.text();
-    if (statusCode >= 400) throw new Error(`judge-pair ${statusCode}: ${text}`);
+    if (statusCode >= 400) throw new Error(`judge-pair ${model} ${statusCode}: ${text}`);
     return JSON.parse(text) as PairJudgeResult;
   }
 }

@@ -1,36 +1,55 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { judgeVerdicts, metricScores, papers, reviews, studyComparisons } from "../db/schema.js";
-import { DEFAULT_JUDGE_MODEL, JudgeClient } from "../clients/judge-client.js";
-import type { PairJudgeResult } from "../clients/judge-client.js";
+import {
+  judgeVerdicts,
+  metricScores,
+  papers,
+  reviewSystems,
+  reviews,
+  studyComparisons,
+} from "../db/schema.js";
+import type { JudgeClient, PairJudgeResult } from "../clients/judge-client.js";
+import { STUDY_SLUGS } from "../study/rotation.js";
+import {
+  PANEL_CONCURRENCY,
+  mapWithConcurrency,
+  panelStatus,
+  type PanelMember,
+} from "./judge-panel.js";
 import { logger } from "../logger.js";
 
-// Pairwise LLM-judge pipeline (2026-09-04, replacing per-review pointwise
-// scoring; changed pre-study so all collected data is one judging regime).
+// Judge-panel pipeline (2026-09; study papers only).
 //
-// The judge reads the paper + BOTH reviews in one request and returns the
-// same construct human raters give — an A/B/TIE preference per dimension —
-// plus per-review 1-10 scores from the same call. Two order-swapped passes
-// control position bias (Zheng et al. 2023); the paper is sent twice per
-// pair instead of four times, halving judge input cost.
+// Every study pair is judged by a PANEL — each of the six study systems in
+// turn reads the paper + BOTH reviews in one request and returns the same
+// construct human raters give: an A/B/TIE preference per dimension plus
+// per-review 1-10 scores. Two order-swapped passes per judge control
+// position bias (Zheng et al. 2023). A system also judges pairs it wrote a
+// side of; those rows are flagged self_judging so the analysis can report
+// the panel with and without self-judgements.
+//
+// Arena papers are not judged at all: the judge signal only feeds the
+// thesis' human-vs-judge analysis, which is run on the controlled study.
 //
 // Entry points:
-//   scorePairIfReady() — fired whenever a review completes. Claims the
-//                        paper's pair atomically (judge_status RUNNING) so
-//                        the two completion events racing each other can't
-//                        judge the same pair twice; the loser sees the
-//                        claim and returns. No-ops until BOTH reviews of
-//                        the pair are COMPLETED.
+//   scorePairIfReady() — fired whenever a review completes. Claims each
+//                        ready rotation pair atomically (judge_status
+//                        RUNNING) so racing completion events can't judge
+//                        the same pair twice; the loser sees the claim and
+//                        returns. No-ops until BOTH reviews are COMPLETED.
 //   scorePaper()       — manual re-judge (admin endpoint / backfill):
-//                        resets the pair's judge status and re-runs.
+//                        resets the paper's pairs to PENDING and re-runs
+//                        only the panel members that have no verdict yet
+//                        (all of them with force=true).
 //
-// Persisted per pair: one judge_verdicts row (preferences relative to its
-// review_a_id/review_b_id) + the familiar per-review LLM_JUDGE_OVERALL
-// metric rows, so the reveal radar and the fairness filter are unchanged.
+// Persisted per (pair, judge): one judge_verdicts row (preferences relative
+// to its review_a_id/review_b_id) + one LLM_JUDGE_OVERALL metric row per
+// review. Readers aggregate across judges (pipeline/judge-panel.ts).
 
 interface ClaimedReview {
   id: string;
+  systemId: string;
   structured: unknown;
 }
 
@@ -45,6 +64,7 @@ async function claimPair(ids: [string, string]): Promise<ClaimedReview[] | null>
     const rows = await tx
       .select({
         id: reviews.id,
+        systemId: reviews.reviewSystemId,
         status: reviews.status,
         judgeStatus: reviews.judgeStatus,
         structured: reviews.structured,
@@ -66,37 +86,64 @@ async function claimPair(ids: [string, string]): Promise<ClaimedReview[] | null>
 }
 
 /**
- * Judge whatever of the paper's pair(s) is ready and unclaimed.
+ * The judge panel: the six study systems, as currently seeded. Derived from
+ * the DB rather than a second hardcoded list so the backing model ids
+ * (e.g. mistral-medium-3.5 → mistral-medium-2604) stay in one place.
+ */
+async function loadPanel(): Promise<PanelMember[]> {
+  const rows = await db.query.reviewSystems.findMany({
+    where: and(inArray(reviewSystems.slug, [...STUDY_SLUGS]), eq(reviewSystems.enabled, true)),
+    columns: { id: true, slug: true, config: true },
+  });
+  const members = rows.map((r) => ({
+    slug: r.slug,
+    systemId: r.id,
+    model: typeof r.config.model === "string" ? r.config.model : r.slug,
+  }));
+  if (members.length !== STUDY_SLUGS.length) {
+    const missing = STUDY_SLUGS.filter((s) => !members.some((m) => m.slug === s));
+    logger.warn({ missing }, "judge_panel_incomplete");
+  }
+  return members.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * Judge whatever of the paper's rotation pairs is ready and unclaimed.
  *
- * Study papers (rows in study_comparisons) judge each of the three
- * rotation pairs as soon as both of its reviews are COMPLETED — pairs are
- * judged sequentially so the shared paper prefix stays warm in the
- * provider's context cache. Arena papers judge the newest two completed
- * reviews. Silently returns when nothing is ready or another run owns the
- * claim. Throws on judge failure (after retries); callers log-and-swallow.
+ * Study papers (rows in study_comparisons) judge each of the three rotation
+ * pairs as soon as both of its reviews are COMPLETED — pairs run
+ * sequentially so the shared paper prefix stays warm in each provider's
+ * context cache; the panel members of one pair run concurrently. Arena
+ * papers are skipped. Silently returns when nothing is ready or another run
+ * owns the claim. Throws only when a pair got no verdict at all (after
+ * retries); callers log-and-swallow.
  */
 export async function scorePairIfReady(
   paperId: string,
   judge: JudgeClient,
   paperTextArg?: string,
+  force = false,
 ): Promise<void> {
   const comparisons = await db.query.studyComparisons.findMany({
     where: eq(studyComparisons.paperId, paperId),
     orderBy: asc(studyComparisons.pairIndex),
   });
+  if (comparisons.length === 0) {
+    logger.debug({ paperId }, "judge_skipped_arena");
+    return;
+  }
 
-  const pairs: Array<[string, string]> = comparisons.length
-    ? comparisons.map((c) => [c.reviewAId, c.reviewBId])
-    : [await latestArenaPair(paperId)].filter((p): p is [string, string] => p !== null);
-
+  let panel: PanelMember[] | undefined;
   let paperText: string | undefined = paperTextArg;
   let lastErr: unknown = null;
-  for (const ids of pairs) {
+  for (const c of comparisons) {
+    const ids: [string, string] = [c.reviewAId, c.reviewBId];
     const claimed = await claimPair(ids);
     if (!claimed) continue;
+    panel ??= await loadPanel();
     paperText ??= await loadPaperText(paperId);
     try {
-      await scoreClaimedPair(paperId, claimed, judge, paperText);
+      await scoreClaimedPair(paperId, claimed, judge, paperText, panel, force);
     } catch (err) {
       // Keep judging the remaining ready pairs; rethrow the last failure
       // so callers still log it.
@@ -106,16 +153,18 @@ export async function scorePairIfReady(
   if (lastErr) throw lastErr;
 }
 
-/** Arena papers: the newest two COMPLETED reviews are the live pair. */
-async function latestArenaPair(paperId: string): Promise<[string, string] | null> {
-  const rows = await db.query.reviews.findMany({
-    where: and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")),
-    columns: { id: true, createdAt: true },
-  });
-  const pair = rows
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-    .slice(-2);
-  return pair.length === 2 ? [pair[0]!.id, pair[1]!.id] : null;
+/** Slugs of panel members that already have a verdict for this pair (either order). */
+async function existingJudges(a: string, b: string): Promise<Set<string>> {
+  const rows = await db
+    .select({ judgeModel: judgeVerdicts.judgeModel })
+    .from(judgeVerdicts)
+    .where(
+      or(
+        and(eq(judgeVerdicts.reviewAId, a), eq(judgeVerdicts.reviewBId, b)),
+        and(eq(judgeVerdicts.reviewAId, b), eq(judgeVerdicts.reviewBId, a)),
+      ),
+    );
+  return new Set(rows.map((r) => r.judgeModel));
 }
 
 async function scoreClaimedPair(
@@ -123,6 +172,8 @@ async function scoreClaimedPair(
   claimed: ClaimedReview[],
   judge: JudgeClient,
   paperText: string,
+  panel: PanelMember[],
+  force: boolean,
 ): Promise<void> {
   const [a, b] = claimed as [ClaimedReview, ClaimedReview];
   const start = Date.now();
@@ -130,57 +181,74 @@ async function scoreClaimedPair(
   const textA = renderReviewText(a.structured);
   const textB = renderReviewText(b.structured);
 
-  let verdict: PairJudgeResult;
-  try {
-    verdict = await judgePairWithRetry(judge, textA, textB, paperText);
-  } catch (err) {
-    // Written down so the fairness filter can exclude the comparison —
-    // but only over our own claim, never over a COMPLETE row.
-    await db
-      .update(reviews)
-      .set({ judgeStatus: "FAILED", updatedAt: new Date() })
-      .where(
-        and(
-          inArray(reviews.id, [a.id, b.id]),
-          eq(reviews.judgeStatus, "RUNNING"),
-        ),
-      )
-      .catch(() => {/* best effort */});
-    throw err;
+  const present = force ? new Set<string>() : await existingJudges(a.id, b.id);
+  const members = panel.filter((m) => !present.has(m.slug));
+  const alreadyPresent = panel.length - members.length;
+
+  // Persist inside each worker so a crash mid-panel keeps every verdict that
+  // did come back; a later re-judge only runs the missing members.
+  const results = await mapWithConcurrency(members, PANEL_CONCURRENCY, async (member) => {
+    const verdict = await judgePairWithRetry(judge, textA, textB, paperText, member.model);
+    await persistJudgeVerdict(paperId, a, b, textA, textB, verdict, member, panel.length);
+    return verdict;
+  });
+
+  const failedJudges = members
+    .filter((_, i) => results[i]!.status === "rejected")
+    .map((m) => m.slug);
+  const returned = results.filter((r) => r.status === "fulfilled").length + alreadyPresent;
+  const status = panelStatus(returned, panel.length);
+
+  // Only over our own claim, never over a row another run already settled.
+  await db
+    .update(reviews)
+    .set({ judgeStatus: status, updatedAt: new Date() })
+    .where(and(inArray(reviews.id, [a.id, b.id]), eq(reviews.judgeStatus, "RUNNING")));
+
+  const log = {
+    paperId,
+    reviewAId: a.id,
+    reviewBId: b.id,
+    status,
+    returned,
+    expected: panel.length,
+    reused: alreadyPresent,
+    failedJudges,
+    elapsed_ms: Date.now() - start,
+  };
+  if (status === "FAILED") {
+    logger.error(log, "judge_panel_failed");
+    const first = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
+    throw first?.reason ?? new Error(`judge panel returned no verdict for pair ${a.id}/${b.id}`);
   }
-
-  logger.info(
-    {
-      paperId,
-      overallPreference: verdict.overall_preference,
-      passesUsed: verdict.passes_used,
-      elapsed_ms: Date.now() - start,
-    },
-    "judge_pair_complete",
-  );
-
-  await persistPairVerdict(paperId, a.id, b.id, textA, textB, verdict);
+  if (status === "PARTIAL") logger.warn(log, "judge_panel_partial");
+  else logger.info(log, "judge_panel_complete");
 }
 
-async function persistPairVerdict(
+async function persistJudgeVerdict(
   paperId: string,
-  reviewAId: string,
-  reviewBId: string,
+  a: ClaimedReview,
+  b: ClaimedReview,
   textA: string,
   textB: string,
   verdict: PairJudgeResult,
+  member: PanelMember,
+  panelSize: number,
 ): Promise<void> {
   // Per-review metric rows keep their historical shape (radar chart,
-  // leaderboard filter and analysis all read them unchanged), with
-  // pairwise provenance added to meta. review_chars / review_words stay
-  // recorded for length-controlled analysis (AlpacaEval-style).
+  // leaderboard filter and analysis read them), one row per judge, with
+  // pairwise provenance in meta. review_chars / review_words stay recorded
+  // for length-controlled analysis (AlpacaEval-style).
   const sides = [
-    { reviewId: reviewAId, text: textA, scores: verdict.review_a },
-    { reviewId: reviewBId, text: textB, scores: verdict.review_b },
+    { review: a, text: textA, scores: verdict.review_a },
+    { review: b, text: textB, scores: verdict.review_b },
   ];
   for (const side of sides) {
     const meta = {
-      judge_model: DEFAULT_JUDGE_MODEL,
+      judge_model: member.slug,
+      judge_model_id: member.model,
+      self_judging: member.systemId === side.review.systemId,
+      panel_size: panelSize,
       dimension_scores: side.scores.dimension_scores,
       review_chars: side.text.length,
       review_words: side.text.split(/\s+/).filter((w) => w.length > 0).length,
@@ -190,55 +258,72 @@ async function persistPairVerdict(
     await db
       .insert(metricScores)
       .values({
-        reviewId: side.reviewId,
+        reviewId: side.review.id,
         kind: "LLM_JUDGE_OVERALL",
         referenceType: "NONE",
+        judgeModel: member.slug,
         value: side.scores.overall_score,
         meta,
       })
       .onConflictDoUpdate({
-        target: [metricScores.reviewId, metricScores.kind, metricScores.referenceType],
+        target: [
+          metricScores.reviewId,
+          metricScores.kind,
+          metricScores.referenceType,
+          metricScores.judgeModel,
+        ],
         set: { value: side.scores.overall_score, meta, computedAt: new Date() },
       });
   }
 
-  // One verdict row per pair; a re-judge replaces it.
+  // One verdict row per (pair, judge); a re-judge replaces it. Sides are
+  // stored in the claimed (a, b) order for every judge of the pair.
+  const verdictMeta = {
+    passes_used: verdict.passes_used,
+    raw_passes: verdict.raw_passes,
+    judge_model_id: member.model,
+    panel_size: panelSize,
+    self_judging: member.systemId === a.systemId || member.systemId === b.systemId,
+  };
   await db
     .insert(judgeVerdicts)
     .values({
       paperId,
-      reviewAId,
-      reviewBId,
+      reviewAId: a.id,
+      reviewBId: b.id,
       overallPreference: verdict.overall_preference,
       dimensionPreferences: verdict.dimension_preferences,
-      meta: { passes_used: verdict.passes_used, raw_passes: verdict.raw_passes },
-      judgeModel: DEFAULT_JUDGE_MODEL,
+      meta: verdictMeta,
+      judgeModel: member.slug,
     })
     .onConflictDoUpdate({
-      target: [judgeVerdicts.reviewAId, judgeVerdicts.reviewBId],
+      target: [judgeVerdicts.reviewAId, judgeVerdicts.reviewBId, judgeVerdicts.judgeModel],
       set: {
         overallPreference: verdict.overall_preference,
         dimensionPreferences: verdict.dimension_preferences,
-        meta: { passes_used: verdict.passes_used, raw_passes: verdict.raw_passes },
-        judgeModel: DEFAULT_JUDGE_MODEL,
+        meta: verdictMeta,
         computedAt: new Date(),
       },
     });
-
-  await db
-    .update(reviews)
-    .set({ judgeStatus: "COMPLETE", updatedAt: new Date() })
-    .where(inArray(reviews.id, [reviewAId, reviewBId]));
 }
 
 /**
- * Manual re-judge for a paper (admin endpoint / backfill). Resets the
- * pair's judge status to PENDING and runs the pairwise judge again.
+ * Manual re-judge for a study paper (admin endpoint / backfill). Resets the
+ * paper's pairs to PENDING and runs the panel again — only the members
+ * without a verdict unless `force`. Arena papers are a logged no-op.
  */
-export async function scorePaper(paperId: string, judge: JudgeClient): Promise<void> {
+export async function scorePaper(paperId: string, judge: JudgeClient, force = false): Promise<void> {
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) });
   if (!paper || !paper.parsedStructure) {
     throw new Error(`paper ${paperId} not parsed yet`);
+  }
+  const isStudy = await db.query.studyComparisons.findFirst({
+    where: eq(studyComparisons.paperId, paperId),
+    columns: { id: true },
+  });
+  if (!isStudy) {
+    logger.info({ paperId }, "judge_skipped_arena");
+    return;
   }
   const parsed = paper.parsedStructure as unknown as ParsedPaper;
 
@@ -247,7 +332,7 @@ export async function scorePaper(paperId: string, judge: JudgeClient): Promise<v
     .set({ judgeStatus: "PENDING", updatedAt: new Date() })
     .where(and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")));
 
-  await scorePairIfReady(paperId, judge, renderPaperText(parsed));
+  await scorePairIfReady(paperId, judge, renderPaperText(parsed), force);
 }
 
 async function loadPaperText(paperId: string): Promise<string> {
@@ -267,12 +352,13 @@ async function judgePairWithRetry(
   reviewA: string,
   reviewB: string,
   paperText: string,
+  model: string,
   attempts = 4,
 ) {
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await judge.judgePair(reviewA, reviewB, paperText);
+      return await judge.judgePair(reviewA, reviewB, paperText, model);
     } catch (err) {
       lastErr = err;
       if (i < attempts - 1) {

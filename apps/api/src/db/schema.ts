@@ -45,10 +45,15 @@ export const reviewStatusEnum = pgEnum("review_status", [
 export const judgeStatusEnum = pgEnum("judge_status", [
   // Not yet judged. New review rows start here; the column default stays
   // COMPLETE only so legacy rows (which predate judge-status tracking)
-  // keep counting on the leaderboard.
+  // keep counting on the leaderboard. Arena papers are never judged and
+  // stay PENDING for good — only study pairs go through the panel.
   "PENDING",
+  // Every member of the judge panel returned a verdict for the pair.
   "COMPLETE",
+  // At least one panel member returned, at least one failed after retries.
+  // The pair still counts for the leaderboard; the analysis can filter.
   "PARTIAL",
+  // No panel member returned a verdict.
   "FAILED",
   // Claimed by an in-flight pairwise judge run (both reviews of a pair
   // are claimed atomically so concurrent completion events can't judge
@@ -157,7 +162,8 @@ export const papers = pgTable(
     uploadedBySessionId: text("uploaded_by_session_id"),
     // When the uploader accepted the data-processing notice (/consent):
     // paper content is sent to commercial AI APIs (OpenAI, Google,
-    // Anthropic, DeepSeek) and the Datalab parsing API; infrastructure
+    // Anthropic, DeepSeek, Mistral, Z.ai — each both generates reviews and
+    // sits on the judge panel) and the Datalab parsing API; infrastructure
     // runs on Vercel, Google Cloud, and a Postgres we operate. Keep this
     // list in sync with
     // apps/web/src/pages/ConsentPage.tsx — it is the processor list
@@ -259,9 +265,10 @@ export const reviews = pgTable(
     contextWindow: integer("context_window"),
     outputTokens: integer("output_tokens"),
     timeToFirstTokenMs: integer("time_to_first_token_ms"),
-    // Judge execution status: COMPLETE if both passes succeeded,
-    // PARTIAL if one pass succeeded, FAILED if all retries exhausted.
-    // Defaults to COMPLETE for backwards compat with existing rows.
+    // Judge-panel status of the pair this review belongs to (both reviews
+    // of a pair are always set together): COMPLETE if every panel member
+    // returned, PARTIAL if some did, FAILED if none. Arena reviews are not
+    // judged and stay PENDING. Defaults to COMPLETE for legacy rows.
     judgeStatus: judgeStatusEnum("judge_status").notNull().default("COMPLETE"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -421,16 +428,23 @@ export const metricScores = pgTable(
     value: doublePrecision("value").notNull(),
     referenceType: metricReferenceTypeEnum("reference_type").notNull().default("NONE"),
     meta: jsonb("meta"),
+    // Slug of the review system acting as judge for this row (the panel is
+    // the six study systems; each judges every study pair, itself included).
+    // The backing model id is in meta.judge_model_id.
+    judgeModel: text("judge_model").notNull(),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    // A given (review, metric, reference-type) is computed once and cached.
-    reviewKindRefUk: uniqueIndex("metric_scores_review_kind_ref_uk").on(
+    // A given (review, metric, reference-type, judge) is computed once and
+    // cached; a re-judge replaces it. Readers aggregate across judges.
+    reviewKindRefJudgeUk: uniqueIndex("metric_scores_review_kind_ref_judge_uk").on(
       t.reviewId,
       t.kind,
       t.referenceType,
+      t.judgeModel,
     ),
     kindIdx: index("metric_scores_kind_idx").on(t.kind),
+    judgeIdx: index("metric_scores_judge_idx").on(t.judgeModel),
   }),
 );
 
@@ -438,13 +452,13 @@ export const metricScores = pgTable(
 
 export const judgePreferenceEnum = pgEnum("judge_preference", ["A", "B", "TIE"]);
 
-// One row per judged pair: the LLM judge reads the paper + BOTH reviews in
-// one request (order-swapped double pass, Zheng et al. 2023 position-bias
-// control) and emits the same construct humans give — a per-dimension
-// A/B/TIE preference. "A"/"B" are relative to reviewAId/reviewBId ON THIS
-// ROW; the reveal route re-maps them onto the vote's blinded sides. The
-// per-review 1-10 scores from the same request still land in metric_scores
-// (radar chart + fairness filter unchanged).
+// One row per (judged pair, judge): each member of the judge panel reads the
+// paper + BOTH reviews in one request (order-swapped double pass, Zheng et
+// al. 2023 position-bias control) and emits the same construct humans give
+// — a per-dimension A/B/TIE preference. "A"/"B" are relative to
+// reviewAId/reviewBId ON THIS ROW; the reveal route re-maps them onto the
+// vote's blinded sides and takes the panel majority. The per-review 1-10
+// scores from the same request land in metric_scores, one row per judge.
 export const judgeVerdicts = pgTable(
   "judge_verdicts",
   {
@@ -461,15 +475,21 @@ export const judgeVerdicts = pgTable(
     overallPreference: judgePreferenceEnum("overall_preference").notNull(),
     // {DIMENSION: "A" | "B" | "TIE"} for the 8 vote dimensions.
     dimensionPreferences: jsonb("dimension_preferences").notNull(),
-    // Audit trail: raw per-pass payloads + passes_used (2 = swap-consistent;
-    // 1 = single valid pass, position-bias control unavailable — the
-    // analysis can filter on this).
+    // Audit trail: raw per-pass payloads, passes_used (2 = swap-consistent;
+    // 1 = single valid pass, position-bias control unavailable), panel_size,
+    // judge_model_id (backing model) and self_judging (the judge generated
+    // one of the two reviews) — the analysis filters on these.
     meta: jsonb("meta"),
+    // Slug of the review system acting as judge (see metric_scores).
     judgeModel: text("judge_model").notNull(),
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    pairUk: uniqueIndex("judge_verdicts_pair_uk").on(t.reviewAId, t.reviewBId),
+    pairJudgeUk: uniqueIndex("judge_verdicts_pair_judge_uk").on(
+      t.reviewAId,
+      t.reviewBId,
+      t.judgeModel,
+    ),
     paperIdx: index("judge_verdicts_paper_idx").on(t.paperId),
   }),
 );
