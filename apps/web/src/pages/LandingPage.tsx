@@ -9,7 +9,7 @@ import { getLeaderboard } from "@/lib/api";
 // hairline rules; the red is the reviewer's pen (interactive elements
 // and editorial marks only). The hero embeds a self-contained demo of
 // the signature comparison card: two sample reviews stream in blind,
-// you vote, identities reveal, the Elo delta prints.
+// you vote, identities reveal, the rating delta prints.
 
 // ─── Demo data (from the reference; sample pairs, not live reviews) ─────────
 
@@ -129,12 +129,13 @@ function Hero() {
             <em className="font-normal italic text-redink">Ranked by humans.</em>
           </h1>
           <p className="mb-3.5 max-w-[34ch] text-[16.5px] text-ink2">
-            Read two blind reviews of the same paper. Vote on which is more
-            useful. Every verdict updates an <b className="font-semibold">Elo ranking</b> of
-            the systems behind them.
+            Read two reviews of the same paper without knowing who wrote
+            them. Pick the one you would rather have received. Every choice
+            moves the systems up or down the{" "}
+            <b className="font-semibold">leaderboard</b>.
           </p>
           <p className="mt-[26px] max-w-[30ch] border-l-2 border-red pl-3.5 font-mono text-xs leading-normal text-graphite">
-            No names until you vote. 
+            No names until you have voted.
           </p>
         </div>
 
@@ -370,9 +371,10 @@ function About() {
 
           <div className="mt-6 md:mt-0 md:pl-11">
             <p className="text-[15.5px] leading-relaxed text-graphite">
-              Every system reviews the same paper under identical conditions.
-              Human raters read the two reviews blind, votes on which is more
-              useful. The verdicts accumulate into an Elo ranking .
+              Every model gets the same paper, the same instructions and the
+              same room to work. Readers see the two reviews side by side with
+              the names hidden and pick the more useful one. Those picks build
+              the ranking.
             </p>
           </div>
         </div>
@@ -386,23 +388,23 @@ function About() {
 const STEPS: { n: string; title: string; body: string }[] = [
   {
     n: "i.",
-    title: "Submit a manuscript",
-    body: "Upload a paper or paste an arXiv link. The same paper goes to two review systems .",
+    title: "Bring a paper",
+    body: "Upload a PDF or paste an arXiv link. It goes to two review systems at once.",
   },
   {
     n: "ii.",
-    title: "Read the pair of generated reviews",
-    body: "Two reviews arrive with their generating systems hidden.",
+    title: "Read both reviews",
+    body: "They arrive side by side, section against section. You will not know which model wrote which.",
   },
   {
     n: "iii.",
-    title: "Vote on which is more useful",
-    body: "Vote for the review that which you find more overall helpful as well as across multiple dimensions .",
+    title: "Pick the better one",
+    body: "Choose the review you would rather receive as an author, and say which one did better on each of eight dimensions.",
   },
   {
     n: "iv.",
-    title: "See the results ",
-    body: "Your vote feeds a Elo-based leaderboard. See the updated ratings and confidence intervals for the two systems you just compared.",
+    title: "See who wrote them",
+    body: "The names are revealed, along with how your vote moved both systems on the leaderboard.",
   },
 ];
 
@@ -472,7 +474,7 @@ function Standings() {
                 System
               </th>
               <th className="border-b border-rule2 pb-[11px] text-right text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
-                Elo
+                Rating
               </th>
               <th className="border-b border-rule2 pb-[11px] text-right text-[10.5px] font-medium uppercase tracking-[0.12em] text-graphite">
                 Votes
@@ -514,7 +516,7 @@ function Standings() {
         </table>
         <p className="mt-4 font-mono text-[11px] text-graphite">
           {isLive
-            ? "Elo initialised at 1000 · K = 4 · intervals from 100 bootstrap resamples"
+            ? "Bradley-Terry · one fit to every comparison · 95% intervals from 100 bootstrap resamples"
             : "Sample table — upload a paper and vote to start the real ladder"}
         </p>
         <Link

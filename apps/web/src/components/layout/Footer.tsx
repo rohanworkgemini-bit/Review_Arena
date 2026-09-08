@@ -13,7 +13,7 @@ export function Footer() {
   return (
     <footer className="border-t border-rule">
       <div className="mx-auto flex max-w-[1080px] flex-col items-start justify-between gap-3 px-7 pt-[22px] font-mono text-[11.5px] text-graphite md:flex-row md:items-baseline">
-        <span>ReviewArena · benchmarking automated peer-review systems under a shared human evaluation</span>
+        <span>ReviewArena · which AI writes the most useful peer review?</span>
         <div className="flex items-baseline gap-5">
           <Link to="/leaderboard" className="transition-colors hover:text-ink">
             Leaderboard
@@ -21,15 +21,9 @@ export function Footer() {
           <Link to="/consent" className="transition-colors hover:text-ink">
             Data processing
           </Link>
-          <a
-            href="https://github.com/rohanworkgemini/review-arena"
-            target="_blank"
-            rel="noreferrer noopener"
-            className="transition-colors hover:text-ink"
-          >
-            GitHub
-          </a>
-
+          <Link to="/instructions" className="transition-colors hover:text-ink">
+            How it works
+          </Link>
         </div>
       </div>
       {/* Anonymous session id — shown so participants can quote it in a
