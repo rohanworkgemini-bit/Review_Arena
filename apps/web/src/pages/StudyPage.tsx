@@ -9,9 +9,15 @@ import {
   AlignedReviewPair,
   DimensionProgress,
   DimensionRow,
-  HighlightToolbar,
+  HighlightPopover,
+  RatingRail,
+  ReadingControls,
+  useReadingPrefs,
+  useScrolledInto,
+  type AlignedReviewPairHandle,
 } from "@/components/comparison";
-import { addHighlights, type Highlight } from "@/lib/highlight";
+import { sectionForDimension } from "@/components/comparison/dimensionSections";
+import { addHighlights, type Highlight, type SelectedRange } from "@/lib/highlight";
 import { clearDraft, draftKey, loadDraft, pruneDrafts, saveDraft } from "@/lib/voteDraft";
 import { cn } from "@/lib/cn";
 import {
@@ -572,9 +578,34 @@ function ComparisonScreen({
 
   // Highlighter: a reading aid, never submitted. Kept per panel so the same
   // block index in A and B can't collide.
-  const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
+  // A selection waiting to be tagged: the spans, which panel they came
+  // from, and where to anchor the dimension picker.
+  const [pending, setPending] = useState<
+    { side: "A" | "B"; ranges: SelectedRange[]; rect: DOMRect } | null
+  >(null);
   const [marksA, setMarksA] = useState<Highlight[]>([]);
   const [marksB, setMarksB] = useState<Highlight[]>([]);
+
+  // Rate-as-you-read: the rail's current dimension, the section headings it
+  // needs to know where to jump, and a handle to do the scrolling.
+  const [activeDim, setActiveDim] = useState<VoteDimension>(VOTE_DIMENSIONS[0]!);
+  const [headings, setHeadings] = useState<(string | null)[]>([]);
+  const pairRef = useRef<AlignedReviewPairHandle>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
+  const railVisible = useScrolledInto(reviewsRef);
+  const reading = useReadingPrefs();
+  const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
+  const jumpTarget = sectionForDimension(activeDim, headings);
+
+  // "Wide" breaks the reviews out of the page's centred max-width, which is
+  // sized for prose rather than for two columns of it side by side. Applied
+  // to the container, so both panels widen together.
+  const breakout = reading.prefs.wide
+    ? {
+        width: "min(96vw, 1900px)",
+        marginLeft: "calc(50% - min(48vw, 950px))",
+      }
+    : undefined;
 
   const dKey = draftKey("study", comparisonId);
 
@@ -592,7 +623,8 @@ function ComparisonScreen({
     // still address the words the rater marked.
     setMarksA(d?.marksA ?? []);
     setMarksB(d?.marksB ?? []);
-    setHighlighter(null);
+    setPending(null);
+    setActiveDim(VOTE_DIMENSIONS[0]!);
     // Restored so decisionMs stays the time since the rater FIRST opened
     // this comparison. Over-reporting an interrupted session is harmless;
     // under-reporting would make a resumed vote look rushed, and "too fast
@@ -660,38 +692,77 @@ function ComparisonScreen({
         authors more. The systems stay anonymous until you finish this paper.
       </p>
 
-      <HighlightToolbar
-        className="mb-3"
-        active={highlighter}
-        onChange={setHighlighter}
-        highlights={[...marksA, ...marksB]}
-        onClear={() => {
-          setMarksA([]);
-          setMarksB([]);
-        }}
+      <div className="mb-3 flex flex-wrap items-center justify-end gap-3">
+        <ReadingControls {...reading} />
+      </div>
+
+      <RatingRail
+        visible={railVisible}
+        active={activeDim}
+        onActiveChange={setActiveDim}
+        values={dimensionValues}
+        onPick={(d, v) => setDimensionValues((prev) => ({ ...prev, [d]: v }))}
+        canJump={jumpTarget !== null}
+        onJump={() => jumpTarget !== null && pairRef.current?.scrollToSection(jumpTarget)}
       />
 
-      <div className="mb-6 border border-rule2 bg-white">
-        <AlignedReviewPair
-          labelA="REVIEW A"
-          labelB="REVIEW B"
-          rawA={pair.reviewA.rawOutput ?? ""}
-          rawB={pair.reviewB.rawOutput ?? ""}
-          conference={pair.conference}
-          highlighterArmed={highlighter !== null}
-          panelA={{
-            highlights: marksA,
-            onSelectRanges: (r) =>
-              highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter)),
-            onRemoveHighlight: (id) => setMarksA((prev) => prev.filter((h) => h.id !== id)),
+      {pending && (
+        <HighlightPopover
+          rect={pending.rect}
+          onDismiss={() => {
+            setPending(null);
+            window.getSelection()?.removeAllRanges();
           }}
-          panelB={{
-            highlights: marksB,
-            onSelectRanges: (r) =>
-              highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter)),
-            onRemoveHighlight: (id) => setMarksB((prev) => prev.filter((h) => h.id !== id)),
+          onPick={(d) => {
+            const apply = pending.side === "A" ? setMarksA : setMarksB;
+            apply((prev) => addHighlights(prev, pending.ranges, d));
+            setPending(null);
+            window.getSelection()?.removeAllRanges();
           }}
         />
+      )}
+
+      <div style={breakout}>
+        <div ref={reviewsRef} className="mb-2 border border-rule2 bg-white">
+          <AlignedReviewPair
+            handleRef={pairRef}
+            onHeadings={onHeadings}
+            fontSize={reading.prefs.fontSize}
+            labelA="REVIEW A"
+            labelB="REVIEW B"
+            rawA={pair.reviewA.rawOutput ?? ""}
+            rawB={pair.reviewB.rawOutput ?? ""}
+            conference={pair.conference}
+            panelA={{
+              highlights: marksA,
+              onSelectRanges: (r, rect) => rect && setPending({ side: "A", ranges: r, rect }),
+              onRemoveHighlight: (id) => setMarksA((prev) => prev.filter((h) => h.id !== id)),
+            }}
+            panelB={{
+              highlights: marksB,
+              onSelectRanges: (r, rect) => rect && setPending({ side: "B", ranges: r, rect }),
+              onRemoveHighlight: (id) => setMarksB((prev) => prev.filter((h) => h.id !== id)),
+            }}
+          />
+        </div>
+        <div className="mb-6 flex items-center justify-end gap-4">
+          <span className="font-mono text-[11px] text-graphite">
+            select any passage to tag it with a dimension
+          </span>
+          {marksA.length + marksB.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setMarksA([]);
+                setMarksB([]);
+              }}
+              className="font-mono text-[11px] text-graphite underline-offset-4 hover:text-ink hover:underline"
+            >
+              Clear {marksA.length + marksB.length} highlight
+              {marksA.length + marksB.length === 1 ? "" : "s"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Per-dimension picks — the same eight axes, wording and widget the

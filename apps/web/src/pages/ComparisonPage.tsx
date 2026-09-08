@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate, Navigate } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,16 @@ import {
   DimensionRow,
   AlignedReviewPair,
   GeneratingPanel,
-  HighlightToolbar,
+  HighlightPopover,
+  RatingRail,
+  ReadingControls,
+  useReadingPrefs,
+  useScrolledInto,
+  type AlignedReviewPairHandle,
   StreamingReviewPanel,
 } from "@/components/comparison";
-import { addHighlights, type Highlight } from "@/lib/highlight";
+import { addHighlights, type Highlight, type SelectedRange } from "@/lib/highlight";
+import { sectionForDimension } from "@/components/comparison/dimensionSections";
 import { clearDraft, draftKey, loadDraft, saveDraft } from "@/lib/voteDraft";
 import {
   VOTE_DIMENSIONS,
@@ -150,12 +156,33 @@ export function ComparisonPage() {
   // Highlighter: arm a dimension, select text in either review to tint it,
   // hover a tint to see which dimension it belongs to. Reading aid only —
   // held in component state and never sent with the vote.
-  const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
+  // A selection waiting to be tagged: the spans, which panel they came
+  // from, and where to anchor the dimension picker.
+  const [pending, setPending] = useState<
+    { side: "A" | "B"; ranges: SelectedRange[]; rect: DOMRect } | null
+  >(null);
   // Seeded from the draft: the pair is held by its token across a reload,
   // so the same markdown re-renders to the same blocks and the stored
   // offsets still address the words the rater marked.
   const [marksA, setMarksA] = useState<Highlight[]>(() => draft?.marksA ?? []);
   const [marksB, setMarksB] = useState<Highlight[]>(() => draft?.marksB ?? []);
+
+  // Rate-as-you-read state: the rail's dimension, the headings it needs to
+  // know where to jump, and a handle to do the scrolling.
+  const [activeDim, setActiveDim] = useState<VoteDimension>(VOTE_DIMENSIONS[0]!);
+  const [headings, setHeadings] = useState<(string | null)[]>([]);
+  const pairRef = useRef<AlignedReviewPairHandle>(null);
+  const reviewsRef = useRef<HTMLDivElement>(null);
+  const railVisible = useScrolledInto(reviewsRef);
+  const reading = useReadingPrefs();
+  const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
+  const jumpTarget = sectionForDimension(activeDim, headings);
+  // "Wide" breaks the reviews out of the page's centred max-width, which is
+  // sized for prose rather than two columns of it. Applied to the container
+  // so both panels widen together.
+  const breakout = reading.prefs.wide
+    ? { width: "min(96vw, 1900px)", marginLeft: "calc(50% - min(48vw, 950px))" }
+    : undefined;
 
   // Persist the in-progress survey so a reload does not cost the rater a
   // re-read of both reviews. Skipped once a vote is cast — that record is
@@ -349,6 +376,17 @@ export function ComparisonPage() {
       ? pairQuery.data.reviewB.reviewId
       : undefined,
   );
+  // Alignment needs both reviews whole: pairing sections against a column
+  // that is still growing would reflow under the reader. Until both have
+  // landed the streaming panels render instead, and the rating rail stays
+  // hidden — there is nothing to rate yet.
+  const rawAFinal = pair.reviewA.rawOutput ?? streamA.text;
+  const rawBFinal = pair.reviewB.rawOutput ?? streamB.text;
+  const bothReviewsReady =
+    !!(pair.reviewA.structured ?? streamA.structured) &&
+    !!(pair.reviewB.structured ?? streamB.structured) &&
+    !!rawAFinal?.trim() &&
+    !!rawBFinal?.trim();
 
   // bothReady = both reviews are in a TERMINAL state — either:
   //   (a) /pair returned structured outright (review COMPLETED before
@@ -443,7 +481,7 @@ export function ComparisonPage() {
         />
       ) : (
         // The signature: one card, two equal columns, a single 1px divider.
-        <div className="border border-rule2 bg-card">
+        <div className="border border-rule2 bg-card" style={breakout} ref={reviewsRef}>
           <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
               Pair / blind
@@ -460,48 +498,76 @@ export function ComparisonPage() {
               “{pair.paper.title ?? "Untitled paper"}”
             </span>
           </div>
-          <HighlightToolbar
-            className="border-x-0 border-b border-t-0"
-            active={highlighter}
-            onChange={setHighlighter}
-            highlights={[...marksA, ...marksB]}
-            onClear={() => {
-              setMarksA([]);
-              setMarksB([]);
-            }}
-          />
+          <div className="flex flex-wrap items-center justify-end gap-4 border-b border-rule px-4 py-2">
+            <span className="mr-auto font-mono text-[11px] text-graphite">
+              select any passage to tag it with a dimension
+            </span>
+            {marksA.length + marksB.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMarksA([]);
+                  setMarksB([]);
+                }}
+                className="font-mono text-[11px] text-graphite underline-offset-4 hover:text-ink hover:underline"
+              >
+                Clear {marksA.length + marksB.length} highlight
+                {marksA.length + marksB.length === 1 ? "" : "s"}
+              </button>
+            )}
+            <ReadingControls {...reading} />
+          </div>
+          {pending && (
+            <HighlightPopover
+              rect={pending.rect}
+              onDismiss={() => {
+                setPending(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+              onPick={(d) => {
+                const apply = pending.side === "A" ? setMarksA : setMarksB;
+                apply((prev) => addHighlights(prev, pending.ranges, d));
+                setPending(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+            />
+          )}
+          {bothReviewsReady && (
+            <RatingRail
+              visible={railVisible}
+              active={activeDim}
+              onActiveChange={setActiveDim}
+              values={dimensionValues}
+              onPick={(d, v) =>
+                !readOnly && setDimensionValues((prev) => ({ ...prev, [d]: v }))
+              }
+              canJump={jumpTarget !== null}
+              onJump={() => jumpTarget !== null && pairRef.current?.scrollToSection(jumpTarget)}
+            />
+          )}
           {(() => {
-            // Alignment needs both reviews whole: pairing sections against a
-            // column that is still growing would reflow under the reader.
-            // Until both have landed, the streaming panels render as before.
-            const rawAFinal = pair.reviewA.rawOutput ?? streamA.text;
-            const rawBFinal = pair.reviewB.rawOutput ?? streamB.text;
-            const bothDone =
-              !!(pair.reviewA.structured ?? streamA.structured) &&
-              !!(pair.reviewB.structured ?? streamB.structured) &&
-              !!rawAFinal?.trim() &&
-              !!rawBFinal?.trim();
-
-            if (bothDone)
+            if (bothReviewsReady)
               return (
                 <AlignedReviewPair
+                  handleRef={pairRef}
+                  onHeadings={onHeadings}
+                  fontSize={reading.prefs.fontSize}
                   labelA="Review A"
                   labelB="Review B"
                   rawA={rawAFinal!}
                   rawB={rawBFinal!}
                   conference={pair.paper.conference}
-                  highlighterArmed={highlighter !== null}
                   panelA={{
                     highlights: marksA,
-                    onSelectRanges: (r) =>
-                      highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter)),
+                    onSelectRanges: (r, rect) =>
+                      rect && !readOnly && setPending({ side: "A", ranges: r, rect }),
                     onRemoveHighlight: (id) =>
                       setMarksA((prev) => prev.filter((h) => h.id !== id)),
                   }}
                   panelB={{
                     highlights: marksB,
-                    onSelectRanges: (r) =>
-                      highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter)),
+                    onSelectRanges: (r, rect) =>
+                      rect && !readOnly && setPending({ side: "B", ranges: r, rect }),
                     onRemoveHighlight: (id) =>
                       setMarksB((prev) => prev.filter((h) => h.id !== id)),
                   }}
@@ -509,6 +575,8 @@ export function ComparisonPage() {
               );
 
             return (
+            // Highlighting is not offered mid-stream: offsets recorded
+            // against text that is still growing would shift under the mark.
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
               <StreamingReviewPanel
                 label="Review A"
@@ -516,12 +584,6 @@ export function ComparisonPage() {
                 rawOutput={pair.reviewA.rawOutput ?? null}
                 stream={streamA}
                 conference={pair.paper.conference}
-                highlights={marksA}
-                highlighterArmed={highlighter !== null}
-                onSelectRanges={(r) =>
-                  highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
-                }
-                onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
               />
               <div className="hidden bg-rule lg:block" aria-hidden />
               <div className="h-px bg-rule lg:hidden" aria-hidden />
@@ -531,12 +593,6 @@ export function ComparisonPage() {
                 rawOutput={pair.reviewB.rawOutput ?? null}
                 stream={streamB}
                 conference={pair.paper.conference}
-                highlights={marksB}
-                highlighterArmed={highlighter !== null}
-                onSelectRanges={(r) =>
-                  highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
-                }
-                onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
               />
             </div>
             );

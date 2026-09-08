@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
 import type { Conference } from "@reviewarena/shared-types";
 import { parseReviewSections, type ReviewSection } from "@/components/comparison/ReviewPanel";
 import { selectionToRanges, type Highlight, type SelectedRange } from "@/lib/highlight";
@@ -80,9 +80,18 @@ export function pairSections(a: ReviewSection[], b: ReviewSection[]): Row[] {
   return rows;
 }
 
+/** Imperative handle so the rating rail can scroll to a section. */
+export interface AlignedReviewPairHandle {
+  scrollToSection: (index: number) => void;
+}
+
 interface PanelHighlighting {
   highlights?: readonly Highlight[];
-  onSelectRanges?: (ranges: SelectedRange[]) => void;
+  /** Called on mouse-up with the selected spans and the selection's
+   *  viewport box, so the caller can put a dimension picker beside it.
+   *  The selection is deliberately left in place: it stays visible while
+   *  the rater chooses what the passage was about. */
+  onSelectRanges?: (ranges: SelectedRange[], rect: DOMRect | null) => void;
   onRemoveHighlight?: (id: string) => void;
 }
 
@@ -94,7 +103,9 @@ export function AlignedReviewPair({
   conference,
   panelA = {},
   panelB = {},
-  highlighterArmed = false,
+  fontSize,
+  onHeadings,
+  handleRef,
 }: {
   labelA: string;
   labelB: string;
@@ -103,10 +114,17 @@ export function AlignedReviewPair({
   conference?: Conference;
   panelA?: PanelHighlighting;
   panelB?: PanelHighlighting;
-  highlighterArmed?: boolean;
+  /** Body text size in px, set by the reading controls. Applies to the
+   *  whole grid so both panels always change together. */
+  fontSize?: number;
+  /** The paired section headings, in render order — the rating rail needs
+   *  them to work out where a dimension is answered. */
+  onHeadings?: (headings: (string | null)[]) => void;
+  handleRef?: Ref<AlignedReviewPairHandle>;
 }) {
   const rootA = useRef<HTMLDivElement>(null);
   const rootB = useRef<HTMLDivElement>(null);
+  const headingEls = useRef<(HTMLDivElement | null)[]>([]);
 
   const rows = useMemo(
     () =>
@@ -117,20 +135,39 @@ export function AlignedReviewPair({
     [rawA, rawB, conference, panelA.highlights, panelB.highlights, panelA.onRemoveHighlight, panelB.onRemoveHighlight],
   );
 
+  useEffect(() => {
+    onHeadings?.(rows.map((r) => r.heading));
+  }, [rows, onHeadings]);
+
+  useImperativeHandle(handleRef, () => ({
+    scrollToSection(index) {
+      const el = headingEls.current[index];
+      if (!el) return;
+      // `center` rather than `start`: the rating rail is sticky, and a
+      // section scrolled to the very top lands underneath it.
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    },
+  }));
+
   const onUp = (side: "A" | "B") => () => {
     const cfg = side === "A" ? panelA : panelB;
     if (!cfg.onSelectRanges) return;
+    // Capture the box before anything touches the selection — it is what
+    // anchors the dimension picker to the words the rater chose.
+    const sel = window.getSelection();
+    const rect =
+      sel && !sel.isCollapsed && sel.rangeCount > 0
+        ? sel.getRangeAt(0).getBoundingClientRect()
+        : null;
     const ranges = selectionToRanges(side === "A" ? rootA.current : rootB.current);
     if (ranges.length === 0) return;
-    cfg.onSelectRanges(ranges);
-    window.getSelection()?.removeAllRanges();
+    cfg.onSelectRanges(ranges, rect);
   };
 
   // Rows are 1-indexed and each pairing occupies two of them: the shared
   // heading, then the two bodies side by side.
   const headingRow = (i: number) => 2 * i + 1;
   const bodyRow = (i: number) => 2 * i + 2;
-  const cursor = highlighterArmed ? ({ cursor: "text" } as const) : undefined;
 
   return (
     <div className="px-[17px] pb-[15px] pt-4">
@@ -141,8 +178,8 @@ export function AlignedReviewPair({
       </div>
 
       <div
-        className="grid grid-cols-1 gap-x-6 text-[14.5px] leading-[1.62] text-ink2 lg:grid-cols-[1fr_1px_1fr]"
-        style={{ gridAutoRows: "min-content" }}
+        className="grid grid-cols-1 gap-x-6 leading-[1.62] text-ink2 lg:grid-cols-[1fr_1px_1fr]"
+        style={{ gridAutoRows: "min-content", fontSize: fontSize ?? 14.5 }}
       >
         {/* Column rule, drawn once across every row. */}
         <div
@@ -154,6 +191,9 @@ export function AlignedReviewPair({
         {rows.map((row, i) => (
           <div
             key={`h${i}`}
+            ref={(el) => {
+              headingEls.current[i] = el;
+            }}
             // A band across the full width, not a label at the left edge:
             // the heading captions BOTH reviews, and left-aligned in the
             // flow it read as though it belonged to column A alone.
@@ -179,7 +219,7 @@ export function AlignedReviewPair({
             <div
               key={`a${i}`}
               className="space-y-3"
-              style={{ gridColumn: 1, gridRow: bodyRow(i), ...cursor }}
+              style={{ gridColumn: 1, gridRow: bodyRow(i) }}
             >
               {row.a ? row.a.nodes : <Omitted label={labelA} />}
             </div>
@@ -191,7 +231,7 @@ export function AlignedReviewPair({
             <div
               key={`b${i}`}
               className="space-y-3"
-              style={{ gridColumn: 3, gridRow: bodyRow(i), ...cursor }}
+              style={{ gridColumn: 3, gridRow: bodyRow(i) }}
             >
               {row.b ? row.b.nodes : <Omitted label={labelB} />}
             </div>
