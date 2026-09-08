@@ -376,7 +376,9 @@ export function scheduleSnapshotRecompute(voteId: string, baselineSlug: string):
   })();
 }
 
-async function snapshotLeaderboard(
+/** Exported for scripts/seed-demo-votes.ts, which writes votes straight to
+ *  the database and so must refresh the snapshots the board reads from. */
+export async function snapshotLeaderboard(
   executor: DbExecutor,
   triggerVoteId: string,
   dimension: VoteDimension | null,
