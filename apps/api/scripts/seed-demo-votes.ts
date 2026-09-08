@@ -72,6 +72,20 @@ function rng(seed: number): () => number {
   };
 }
 
+// Postgres caps a statement at 65535 bound parameters, so rows go in
+// chunks. One statement per row is fine at 1000 votes and roughly 30k
+// round trips at 10000 — this turns the whole seed into a few dozen.
+const CHUNK = 500;
+
+async function insertMany<T>(
+  table: Parameters<typeof db.insert>[0],
+  rows: T[],
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    await db.insert(table).values(rows.slice(i, i + CHUNK) as never);
+  }
+}
+
 async function clear(): Promise<void> {
   const demo = await db.query.papers.findMany({
     where: like(papers.contentHash, `${HASH_PREFIX}%`),
@@ -145,43 +159,56 @@ async function seed(): Promise<void> {
   console.log(`Seeding ${N} votes across ${paperCount} demo papers…`);
 
   const paperIds: string[] = [];
+  const paperRows = [];
   for (let i = 0; i < paperCount; i++) {
     const id = createId();
     paperIds.push(id);
-    await db.insert(papers).values({
+    paperRows.push({
       id,
       contentHash: `${HASH_PREFIX}${id}`,
       userTitle: `${TITLE_PREFIX}synthetic paper ${i + 1}`,
-      status: "PARSED",
+      status: "PARSED" as const,
       conference: "iclr",
       // Consent is a real column with real meaning; a synthetic paper has
       // no uploader to have given it, so it stays null.
     });
   }
+  await insertMany(papers, paperRows);
 
   // A review per (paper, system). Reviews carry no text: nothing renders
   // them, and writing 6000 fake reviews would make the table meaningless
   // for anyone inspecting real output.
   const reviewByPaperSystem = new Map<string, string>();
+  const reviewRows = [];
   for (const paperId of paperIds) {
     for (const sys of systems) {
       const id = createId();
       reviewByPaperSystem.set(`${paperId}:${sys.id}`, id);
-      await db.insert(reviews).values({
+      reviewRows.push({
         id,
         paperId,
         reviewSystemId: sys.id,
-        status: "COMPLETED",
+        status: "COMPLETED" as const,
         // PENDING, like an arena review: it counts, and it is honest —
         // no panel ever looked at this.
-        judgeStatus: "PENDING",
+        judgeStatus: "PENDING" as const,
       });
     }
   }
+  await insertMany(reviews, reviewRows);
 
-  let written = 0;
+  // votes_session_pair_sig_uk is unique on (session, paper, pairSig): a
+  // session may not vote twice on the same pair of the same paper. Rather
+  // than draw at random and retry on collision, each session is walked
+  // across consecutive papers, so it never revisits one and the constraint
+  // cannot fire. Six votes per session is also roughly what a real visitor
+  // does, which keeps the session clustering realistic for anything that
+  // later resamples by session.
+  const VOTES_PER_SESSION = 6;
+  const voteRows = [];
+  const dimRows = [];
   for (let i = 0; i < N; i++) {
-    const paperId = pick(paperIds);
+    const paperId = paperIds[i % paperIds.length]!;
     const a = pick(systems);
     let b = pick(systems);
     while (b.id === a.id) b = pick(systems);
@@ -197,24 +224,24 @@ async function seed(): Promise<void> {
     const winner = r < pA * 0.85 ? "A" : r < pA * 0.85 + 0.15 ? "TIE" : "B";
 
     const voteId = createId();
-    await db.insert(votes).values({
+    voteRows.push({
       id: voteId,
       paperId,
       reviewAId: reviewByPaperSystem.get(`${paperId}:${a.id}`)!,
       reviewBId: reviewByPaperSystem.get(`${paperId}:${b.id}`)!,
-      winner,
-      mode: "ARENA",
+      winner: winner as "A" | "B" | "TIE",
+      mode: "ARENA" as const,
       // Plausible reading times, above the 3s quality-flag threshold.
       decisionMs: 20_000 + Math.floor(rand() * 90_000),
-      sessionId: `demo-${Math.floor(rand() * 200)}`,
+      sessionId: `demo-s${Math.floor(i / VOTES_PER_SESSION)}`,
     });
 
     // Per-dimension picks, correlated with the overall verdict but not
     // identical to it — a board where every dimension agrees perfectly
     // would hide exactly the disagreement the per-dimension boards exist
     // to show.
-    await db.insert(dimensionVotes).values(
-      VOTE_DIMENSIONS.map((dimension) => {
+    dimRows.push(
+      ...VOTE_DIMENSIONS.map((dimension) => {
         const agree = rand() < 0.7;
         const value = agree
           ? winner === "A"
@@ -226,10 +253,11 @@ async function seed(): Promise<void> {
         return { id: createId(), voteId, dimension, value };
       }),
     );
-
-    written++;
-    if (written % 200 === 0) console.log(`  ${written}/${N}`);
   }
+
+  await insertMany(votes, voteRows);
+  await insertMany(dimensionVotes, dimRows);
+  const written = voteRows.length;
 
   // The board renders from elo_snapshots, which the API writes as each vote
   // lands. Writing votes straight to the database bypasses that, so the
