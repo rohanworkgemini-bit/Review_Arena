@@ -134,7 +134,11 @@ function BlockText({
     out.push(
       <mark
         key={h.id}
-        title={DIMENSION_LABELS[h.dimension]}
+        // Read by the container's hover delegation to name the dimension.
+        // An attribute, not a child element: anything with text inside the
+        // mark would join the block's textContent, and highlight offsets
+        // are measured against exactly that.
+        data-hl-dim={h.dimension}
         aria-label={`Highlighted: ${DIMENSION_LABELS[h.dimension]}`}
         onClick={() => onRemove?.(h.id)}
         className="rounded-[2px] px-[1px] text-inherit"

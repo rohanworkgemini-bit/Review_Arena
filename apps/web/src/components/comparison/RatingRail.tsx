@@ -72,7 +72,11 @@ export function RatingRail({
     <div
       aria-hidden={!visible}
       className={cn(
-        "fixed inset-x-0 top-0 z-30 border-b border-rule2 bg-paper2/95 backdrop-blur",
+        // Opaque, and no backdrop blur. A blurred backdrop on a translating
+        // element gets rasterised at low quality for the duration of the
+        // animation and re-rasterised at the end, which read as the bar
+        // arriving out of focus and then snapping sharp.
+        "fixed inset-x-0 top-0 z-30 border-b border-rule2 bg-paper2",
         "transition-transform duration-150 motion-reduce:transition-none",
         visible ? "translate-y-0" : "-translate-y-full",
         className,

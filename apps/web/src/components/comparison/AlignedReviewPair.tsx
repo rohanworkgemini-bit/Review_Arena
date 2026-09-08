@@ -1,7 +1,23 @@
-import { useEffect, useImperativeHandle, useMemo, useRef, type Ref } from "react";
-import type { Conference } from "@reviewarena/shared-types";
+import {
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
+import {
+  DIMENSION_LABELS,
+  type Conference,
+  type VoteDimension,
+} from "@reviewarena/shared-types";
 import { parseReviewSections, type ReviewSection } from "@/components/comparison/ReviewPanel";
-import { selectionToRanges, type Highlight, type SelectedRange } from "@/lib/highlight";
+import {
+  DIMENSION_COLORS,
+  selectionToRanges,
+  type Highlight,
+  type SelectedRange,
+} from "@/lib/highlight";
 
 /**
  * The two reviews, laid out section against section.
@@ -125,6 +141,14 @@ export function AlignedReviewPair({
   const rootA = useRef<HTMLDivElement>(null);
   const rootB = useRef<HTMLDivElement>(null);
   const headingEls = useRef<(HTMLDivElement | null)[]>([]);
+  // Which tinted span the pointer is over, and where to label it. Held
+  // here and resolved by delegation rather than by a handler on every
+  // mark: a long review carries dozens of them.
+  const [hovered, setHovered] = useState<{
+    dimension: VoteDimension;
+    left: number;
+    top: number;
+  } | null>(null);
 
   const rows = useMemo(
     () =>
@@ -148,6 +172,31 @@ export function AlignedReviewPair({
       el.scrollIntoView({ behavior: "smooth", block: "center" });
     },
   }));
+
+  // The label is positioned against the viewport, so any scroll would
+  // leave it behind the span it belongs to.
+  useEffect(() => {
+    if (!hovered) return;
+    const clear = () => setHovered(null);
+    window.addEventListener("scroll", clear, true);
+    return () => window.removeEventListener("scroll", clear, true);
+  }, [hovered]);
+
+  const onPointerOver = (e: React.MouseEvent) => {
+    const mark = (e.target as HTMLElement).closest?.("[data-hl-dim]") as HTMLElement | null;
+    if (!mark) return;
+    const dimension = mark.dataset.hlDim as VoteDimension;
+    if (!dimension) return;
+    const r = mark.getBoundingClientRect();
+    setHovered({ dimension, left: r.left + r.width / 2, top: r.top });
+  };
+
+  const onPointerOut = (e: React.MouseEvent) => {
+    const from = (e.target as HTMLElement).closest?.("[data-hl-dim]");
+    const to = (e.relatedTarget as HTMLElement | null)?.closest?.("[data-hl-dim]");
+    // Moving between two spans of the same run should not flicker the label.
+    if (from && from !== to) setHovered(null);
+  };
 
   const onUp = (side: "A" | "B") => () => {
     const cfg = side === "A" ? panelA : panelB;
@@ -178,6 +227,8 @@ export function AlignedReviewPair({
       </div>
 
       <div
+        onMouseOver={onPointerOver}
+        onMouseOut={onPointerOut}
         className="grid grid-cols-1 gap-x-6 leading-[1.62] text-ink2 lg:grid-cols-[1fr_1px_1fr]"
         style={{ gridAutoRows: "min-content", fontSize: fontSize ?? 14.5 }}
       >
@@ -238,6 +289,41 @@ export function AlignedReviewPair({
           ))}
         </div>
       </div>
+
+      {hovered && (
+        <HighlightLabel
+          dimension={hovered.dimension}
+          left={hovered.left}
+          top={hovered.top}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Names the dimension a tinted span was tagged with. Fixed to the viewport
+ * and rendered outside the text, because anything placed inside the mark
+ * would land in the block's textContent and shift every highlight offset
+ * measured against it.
+ */
+function HighlightLabel({
+  dimension,
+  left,
+  top,
+}: {
+  dimension: VoteDimension;
+  left: number;
+  top: number;
+}) {
+  const c = DIMENSION_COLORS[dimension];
+  return (
+    <div
+      role="tooltip"
+      className="pointer-events-none fixed z-40 -translate-x-1/2 -translate-y-full whitespace-nowrap border border-ink bg-paper px-2 py-1 font-mono text-[11px] text-ink shadow-sm"
+      style={{ left, top: top - 6, borderBottomColor: c.edge, borderBottomWidth: 2 }}
+    >
+      {DIMENSION_LABELS[dimension]}
     </div>
   );
 }
