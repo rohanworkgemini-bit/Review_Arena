@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
 import { DimensionProgress, DimensionRow, HighlightToolbar } from "@/components/comparison";
 import { addHighlights, type Highlight } from "@/lib/highlight";
+import { clearDraft, draftKey, loadDraft, pruneDrafts, saveDraft } from "@/lib/voteDraft";
 import { cn } from "@/lib/cn";
 import {
   CONFERENCE_OPTIONS,
@@ -61,6 +62,13 @@ export default function StudyPage() {
     }
   });
   const [entered, setEntered] = useState<boolean>(() => !!code);
+
+  // Drafts are cleared on submit, so what remains is abandoned comparisons.
+  // Sweep them once per session rather than leaving keys to accumulate in a
+  // browser that is never cleared.
+  useEffect(() => {
+    pruneDrafts();
+  }, []);
 
   if (!entered || !code) {
     return (
@@ -563,17 +571,39 @@ function ComparisonScreen({
   const [marksA, setMarksA] = useState<Highlight[]>([]);
   const [marksB, setMarksB] = useState<Highlight[]>([]);
 
+  const dKey = draftKey("study", comparisonId);
+
   // Each comparison is a fresh survey — clear picks when the pair changes,
-  // otherwise comparison 2 inherits comparison 1's answers.
+  // otherwise comparison 2 inherits comparison 1's answers. A draft for THIS
+  // comparison is restored instead, so a refresh mid-survey does not cost
+  // the rater a re-read of both reviews.
   useEffect(() => {
-    setDimensionValues({});
-    setDimensionNotes({});
-    setNote("");
+    const d = loadDraft(dKey);
+    setDimensionValues(d?.values ?? {});
+    setDimensionNotes(d?.notes ?? {});
+    setNote(d?.note ?? "");
+    // Highlights are a reading aid tied to block offsets in text that may
+    // have re-rendered; they are cheap to redo and wrong to guess at.
     setMarksA([]);
     setMarksB([]);
     setHighlighter(null);
-    startedAt.current = Date.now();
-  }, [comparisonId]);
+    // Restored so decisionMs stays the time since the rater FIRST opened
+    // this comparison. Over-reporting an interrupted session is harmless;
+    // under-reporting would make a resumed vote look rushed, and "too fast
+    // to be real" is a quality flag in the analysis.
+    startedAt.current = d?.startedAt ?? Date.now();
+  }, [comparisonId, dKey]);
+
+  // Persist on every change. The payload is a few hundred bytes and writes
+  // are synchronous but trivial, so there is nothing to debounce.
+  useEffect(() => {
+    saveDraft(dKey, {
+      note,
+      values: dimensionValues,
+      notes: dimensionNotes,
+      startedAt: startedAt.current,
+    });
+  }, [dKey, note, dimensionValues, dimensionNotes]);
 
   const pairQuery = useQuery({
     queryKey: ["study-pair", comparisonId],
@@ -594,7 +624,11 @@ function ComparisonScreen({
           note: dimensionNotes[d]?.trim() || undefined,
         })),
       }),
-    onSuccess: onVoted,
+    onSuccess: () => {
+      // The vote is recorded server-side; the scratchpad has done its job.
+      clearDraft(dKey);
+      onVoted();
+    },
   });
 
   const pair = pairQuery.data;

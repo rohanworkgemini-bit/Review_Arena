@@ -1,6 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useNavigate, Navigate } from "react-router-dom";
-import { useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +15,7 @@ import {
   StreamingReviewPanel,
 } from "@/components/comparison";
 import { addHighlights, type Highlight } from "@/lib/highlight";
+import { clearDraft, draftKey, loadDraft, saveDraft } from "@/lib/voteDraft";
 import {
   VOTE_DIMENSIONS,
   DIMENSION_LABELS,
@@ -99,7 +99,18 @@ export function ComparisonPage() {
     if (!paperId) navigate("/upload", { replace: true });
   }, [paperId, navigate]);
 
-  const startedAt = useMemo(() => Date.now(), [paperId]);
+  // An unsubmitted draft for this paper, if the tab was reloaded mid-survey.
+  // A cast vote always wins: that one is final and the page is read-only.
+  const dKey = paperId ? draftKey("arena", paperId) : null;
+  const draft = useMemo(() => (dKey ? loadDraft(dKey) : null), [dKey]);
+
+  // Restored so decisionMs measures from when the rater FIRST opened this
+  // pair. Under-reporting a resumed vote would make it look rushed, and
+  // "too fast to be real" is a quality flag in the analysis.
+  const startedAt = useMemo(
+    () => draft?.startedAt ?? Date.now(),
+    [paperId, draft], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Record of the vote already cast for this paper in this tab, if any.
   // Written on submit, read back when the user walks in from the reveal
@@ -121,14 +132,16 @@ export function ComparisonPage() {
   // Seeded from the stored vote when revisiting, so the read-only view
   // shows exactly what was submitted rather than an empty survey.
   const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>(
-    () => castVote?.dimensionValues ?? {},
+    () => castVote?.dimensionValues ?? draft?.values ?? {},
   );
   // Optional free-text rationale per dimension, keyed the same way.
   const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>(
-    () => castVote?.dimensionNotes ?? {},
+    () => castVote?.dimensionNotes ?? draft?.notes ?? {},
   );
   // Optional free-text rationale for the overall verdict.
-  const [overallNote, setOverallNote] = useState(() => castVote?.overallNote ?? "");
+  const [overallNote, setOverallNote] = useState(
+    () => castVote?.overallNote ?? draft?.note ?? "",
+  );
   // Per-dimension picks are REQUIRED — open by default so the rater
   // sees right away that 8 picks are needed before they can submit.
   const [refineOpen, setRefineOpen] = useState(true);
@@ -139,6 +152,19 @@ export function ComparisonPage() {
   const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
   const [marksA, setMarksA] = useState<Highlight[]>([]);
   const [marksB, setMarksB] = useState<Highlight[]>([]);
+
+  // Persist the in-progress survey so a reload does not cost the rater a
+  // re-read of both reviews. Skipped once a vote is cast — that record is
+  // final and lives in sessionStorage instead.
+  useEffect(() => {
+    if (!dKey || readOnly) return;
+    saveDraft(dKey, {
+      note: overallNote,
+      values: dimensionValues as Partial<Record<VoteDimension, -1 | 0 | 1>>,
+      notes: dimensionNotes,
+      startedAt,
+    });
+  }, [dKey, readOnly, overallNote, dimensionValues, dimensionNotes, startedAt]);
 
   // Resume the in-flight round on reload. The pair is held stable from the
   // moment it's picked until the user votes — refreshing should never
@@ -276,6 +302,8 @@ export function ComparisonPage() {
     winner: "A" | "B" | "TIE",
   ) {
     const state = encodeURIComponent(JSON.stringify(data.reveal));
+    // The vote is recorded server-side; the scratchpad has done its job.
+    if (dKey) clearDraft(dKey);
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(PAIR_STORAGE_KEY);
       const record: CastVote = {
