@@ -124,3 +124,51 @@ describe("parseReviewSections", () => {
     expect(secs.map((s) => s.heading)).toEqual(["Summary"]);
   });
 });
+
+// Venue forms use grouping headers — "Strengths and Weaknesses" standing
+// above Strengths and Weaknesses. A header with no text of its own was
+// rendering a body row under it, which read as an unexplained blank strip
+// between two bands.
+describe("grouping headings", () => {
+  const GROUPED = `## Summary
+Text.
+
+## Strengths and Weaknesses
+
+### Strengths
+- A point
+
+### Weaknesses
+- Another point`;
+
+  const html = renderToStaticMarkup(
+    <AlignedReviewPair labelA="Review A" labelB="Review B" rawA={GROUPED} rawB={GROUPED} />,
+  );
+
+  it("still shows the grouping header", () => {
+    expect(html).toContain("Strengths and Weaknesses");
+  });
+
+  it("does not claim either review skipped it", () => {
+    // One "did not answer" per genuinely absent section — never for a
+    // header that was never meant to carry text.
+    expect(html).not.toContain("did not answer this section");
+  });
+
+  it("keeps the sections underneath", () => {
+    expect(html).toContain("A point");
+    expect(html).toContain("Another point");
+  });
+
+  it("marks a section one review left empty as unanswered", () => {
+    const withEmpty = renderToStaticMarkup(
+      <AlignedReviewPair
+        labelA="Review A"
+        labelB="Review B"
+        rawA={"## Summary\nText.\n\n## Limitations\nA discussed them."}
+        rawB={"## Summary\nText.\n\n## Limitations\n"}
+      />,
+    );
+    expect(withEmpty).toContain("did not answer this section");
+  });
+});

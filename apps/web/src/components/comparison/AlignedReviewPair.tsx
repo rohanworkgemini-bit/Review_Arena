@@ -218,6 +218,17 @@ export function AlignedReviewPair({
   const headingRow = (i: number) => 2 * i + 1;
   const bodyRow = (i: number) => 2 * i + 2;
 
+  // A heading with no text of its own on either side is a grouping header —
+  // "Strengths and Weaknesses" standing above Strengths and Weaknesses,
+  // which the venue forms do use. It gets its band and nothing else; a body
+  // row underneath it was rendering as an unexplained blank strip.
+  //
+  // A section present but empty on ONE side is treated as an omission
+  // rather than as content, since a heading a model wrote nothing under
+  // answers the rater's question no better than a missing one.
+  const body = (sec: ReviewSection | null) => (sec && sec.nodes.length > 0 ? sec.nodes : null);
+  const isGroupHeading = (row: Row) => body(row.a) === null && body(row.b) === null;
+
   return (
     <div className="px-[17px] pb-[15px] pt-4">
       <div className="mb-[11px] grid grid-cols-1 gap-x-6 lg:grid-cols-[1fr_1px_1fr]">
@@ -250,7 +261,12 @@ export function AlignedReviewPair({
             // flow it read as though it belonged to column A alone.
             className={
               "-mx-[17px] border-y border-rule2 bg-paper2/70 px-[17px] py-1.5 " +
-              (i === 0 ? "mb-2" : "mb-2 mt-6")
+              // No bottom margin under a grouping header: the sub-heading
+              // that follows belongs to it and should sit tight beneath.
+              (isGroupHeading(row) ? "" : "mb-2") +
+              // ...and no top margin on one that follows a grouping header,
+              // for the same reason.
+              (i === 0 || (rows[i - 1] && isGroupHeading(rows[i - 1]!)) ? "" : " mt-6")
             }
             style={{ gridColumn: "1 / -1", gridRow: headingRow(i) }}
           >
@@ -272,7 +288,7 @@ export function AlignedReviewPair({
               className="space-y-3"
               style={{ gridColumn: 1, gridRow: bodyRow(i) }}
             >
-              {row.a ? row.a.nodes : <Omitted label={labelA} />}
+              {isGroupHeading(row) ? null : (body(row.a) ?? <Omitted label={labelA} />)}
             </div>
           ))}
         </div>
@@ -284,7 +300,7 @@ export function AlignedReviewPair({
               className="space-y-3"
               style={{ gridColumn: 3, gridRow: bodyRow(i) }}
             >
-              {row.b ? row.b.nodes : <Omitted label={labelB} />}
+              {isGroupHeading(row) ? null : (body(row.b) ?? <Omitted label={labelB} />)}
             </div>
           ))}
         </div>
