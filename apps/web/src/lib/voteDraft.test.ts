@@ -7,12 +7,22 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clearDraft, draftKey, loadDraft, pruneDrafts, saveDraft } from "./voteDraft";
 
 const KEY = draftKey("study", "cmp1");
+const mark = {
+  id: "h1",
+  block: 3,
+  start: 10,
+  end: 42,
+  dimension: "CRITIQUE_CLARITY" as const,
+};
 const filled = {
   note: "A read the paper more carefully.",
   values: { CRITIQUE_CLARITY: -1 as const },
   notes: { CRITIQUE_CLARITY: "A's questions are actionable." },
+  marksA: [mark],
+  marksB: [],
   startedAt: Date.now(),
 };
+const blank = { note: "", values: {}, notes: {}, marksA: [], marksB: [], startedAt: Date.now() };
 
 beforeEach(() => localStorage.clear());
 
@@ -33,23 +43,18 @@ describe("saveDraft / loadDraft", () => {
   });
 
   it("writes nothing when the survey is untouched", () => {
-    saveDraft(KEY, { note: "", values: {}, notes: {}, startedAt: Date.now() });
+    saveDraft(KEY, blank);
     expect(loadDraft(KEY)).toBeNull();
   });
 
   it("treats whitespace-only answers as untouched", () => {
-    saveDraft(KEY, {
-      note: "   ",
-      values: {},
-      notes: { CRITIQUE_CLARITY: "  " },
-      startedAt: Date.now(),
-    });
+    saveDraft(KEY, { ...blank, note: "   ", notes: { CRITIQUE_CLARITY: "  " } });
     expect(loadDraft(KEY)).toBeNull();
   });
 
   it("clears a previously saved draft when the rater empties it", () => {
     saveDraft(KEY, filled);
-    saveDraft(KEY, { note: "", values: {}, notes: {}, startedAt: filled.startedAt });
+    saveDraft(KEY, { ...blank, startedAt: filled.startedAt });
     expect(loadDraft(KEY)).toBeNull();
   });
 
@@ -105,5 +110,41 @@ describe("pruneDrafts", () => {
 describe("draftKey", () => {
   it("keeps arena and study scopes apart", () => {
     expect(draftKey("arena", "x")).not.toBe(draftKey("study", "x"));
+  });
+});
+
+describe("highlight persistence", () => {
+  it("brings tinted spans back", () => {
+    saveDraft(KEY, filled);
+    expect(loadDraft(KEY)?.marksA).toEqual([mark]);
+    expect(loadDraft(KEY)?.marksB).toEqual([]);
+  });
+
+  it("saves markup even when no dimension is answered yet", () => {
+    saveDraft(KEY, { ...blank, marksA: [mark] });
+    expect(loadDraft(KEY)?.marksA).toHaveLength(1);
+  });
+
+  // A stored span with nonsense offsets would tint the wrong words, in a
+  // reading aid the rater is trusting — so drop it rather than clamp it.
+  it("drops malformed spans instead of repairing them", () => {
+    saveDraft(KEY, {
+      ...blank,
+      marksA: [
+        mark,
+        { ...mark, id: "bad-range", start: 40, end: 10 },
+        { ...mark, id: "bad-block", block: -1 },
+        { ...mark, id: "bad-dim", dimension: "NOT_A_DIMENSION" as never },
+      ],
+    });
+    expect(loadDraft(KEY)?.marksA).toEqual([mark]);
+  });
+
+  it("survives marks being absent from an older draft", () => {
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({ ...filled, marksA: undefined, marksB: undefined, savedAt: Date.now() }),
+    );
+    expect(loadDraft(KEY)?.marksA).toEqual([]);
   });
 });

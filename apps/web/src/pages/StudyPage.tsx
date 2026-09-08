@@ -582,10 +582,11 @@ function ComparisonScreen({
     setDimensionValues(d?.values ?? {});
     setDimensionNotes(d?.notes ?? {});
     setNote(d?.note ?? "");
-    // Highlights are a reading aid tied to block offsets in text that may
-    // have re-rendered; they are cheap to redo and wrong to guess at.
-    setMarksA([]);
-    setMarksB([]);
+    // Tinted spans come back too: the comparison is fetched once and cached,
+    // so the same markdown re-renders to the same blocks and the offsets
+    // still address the words the rater marked.
+    setMarksA(d?.marksA ?? []);
+    setMarksB(d?.marksB ?? []);
     setHighlighter(null);
     // Restored so decisionMs stays the time since the rater FIRST opened
     // this comparison. Over-reporting an interrupted session is harmless;
@@ -601,9 +602,11 @@ function ComparisonScreen({
       note,
       values: dimensionValues,
       notes: dimensionNotes,
+      marksA,
+      marksB,
       startedAt: startedAt.current,
     });
-  }, [dKey, note, dimensionValues, dimensionNotes]);
+  }, [dKey, note, dimensionValues, dimensionNotes, marksA, marksB]);
 
   const pairQuery = useQuery({
     queryKey: ["study-pair", comparisonId],

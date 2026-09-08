@@ -150,8 +150,11 @@ export function ComparisonPage() {
   // hover a tint to see which dimension it belongs to. Reading aid only —
   // held in component state and never sent with the vote.
   const [highlighter, setHighlighter] = useState<VoteDimension | null>(null);
-  const [marksA, setMarksA] = useState<Highlight[]>([]);
-  const [marksB, setMarksB] = useState<Highlight[]>([]);
+  // Seeded from the draft: the pair is held by its token across a reload,
+  // so the same markdown re-renders to the same blocks and the stored
+  // offsets still address the words the rater marked.
+  const [marksA, setMarksA] = useState<Highlight[]>(() => draft?.marksA ?? []);
+  const [marksB, setMarksB] = useState<Highlight[]>(() => draft?.marksB ?? []);
 
   // Persist the in-progress survey so a reload does not cost the rater a
   // re-read of both reviews. Skipped once a vote is cast — that record is
@@ -162,9 +165,11 @@ export function ComparisonPage() {
       note: overallNote,
       values: dimensionValues as Partial<Record<VoteDimension, -1 | 0 | 1>>,
       notes: dimensionNotes,
+      marksA,
+      marksB,
       startedAt,
     });
-  }, [dKey, readOnly, overallNote, dimensionValues, dimensionNotes, startedAt]);
+  }, [dKey, readOnly, overallNote, dimensionValues, dimensionNotes, marksA, marksB, startedAt]);
 
   // Resume the in-flight round on reload. The pair is held stable from the
   // moment it's picked until the user votes — refreshing should never

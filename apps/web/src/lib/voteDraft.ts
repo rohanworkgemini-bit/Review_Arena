@@ -1,4 +1,5 @@
-import type { VoteDimension } from "@reviewarena/shared-types";
+import { VOTE_DIMENSIONS, type VoteDimension } from "@reviewarena/shared-types";
+import type { Highlight } from "./highlight";
 
 // A comparison asks for eight dimension picks, eight optional notes and an
 // overall verdict, all after reading two long reviews. Losing that to a
@@ -18,10 +19,41 @@ export interface VoteDraft {
   values: Partial<Record<VoteDimension, -1 | 0 | 1>>;
   /** Per-dimension free text. */
   notes: Partial<Record<VoteDimension, string>>;
+  /** Tinted spans, per panel. Restorable because the offsets address the
+   *  rendered text of a review that does not change between reloads: a
+   *  study comparison is fetched once and cached, and the arena holds its
+   *  pair token, so the same markdown produces the same blocks. */
+  marksA: Highlight[];
+  marksB: Highlight[];
   /** When the rater first opened this comparison, as epoch ms. */
   startedAt: number;
   /** When this draft was last written, as epoch ms. */
   savedAt: number;
+}
+
+const DIMENSIONS = new Set<string>(VOTE_DIMENSIONS);
+
+/**
+ * Keep only spans that still describe a span. A stored highlight whose
+ * offsets are nonsense would tint the wrong words — silently, and in a
+ * reading aid the rater is trusting — so anything malformed is dropped
+ * rather than clamped into place.
+ */
+function sanitizeMarks(v: unknown): Highlight[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter(
+    (h): h is Highlight =>
+      !!h &&
+      typeof h === "object" &&
+      typeof (h as Highlight).id === "string" &&
+      Number.isInteger((h as Highlight).block) &&
+      (h as Highlight).block >= 0 &&
+      Number.isInteger((h as Highlight).start) &&
+      Number.isInteger((h as Highlight).end) &&
+      (h as Highlight).start >= 0 &&
+      (h as Highlight).end > (h as Highlight).start &&
+      DIMENSIONS.has((h as Highlight).dimension),
+  );
 }
 
 const PREFIX = "ra-draft:";
@@ -60,6 +92,8 @@ export function loadDraft(key: string): VoteDraft | null {
       note: typeof d.note === "string" ? d.note : "",
       values: (d.values ?? {}) as VoteDraft["values"],
       notes: (d.notes ?? {}) as VoteDraft["notes"],
+      marksA: sanitizeMarks(d.marksA),
+      marksB: sanitizeMarks(d.marksB),
       startedAt: d.startedAt,
       savedAt: d.savedAt,
     };
@@ -76,11 +110,15 @@ export function saveDraft(
 ): void {
   try {
     // Nothing answered yet is nothing worth restoring, and writing it would
-    // resurrect an empty draft over a fresh start.
+    // resurrect an empty draft over a fresh start. Tinted spans count as
+    // work in progress: a rater who marked up both reviews and reloaded
+    // before answering anything should still get their markup back.
     const empty =
       Object.keys(draft.values).length === 0 &&
       !draft.note.trim() &&
-      Object.values(draft.notes).every((n) => !n?.trim());
+      Object.values(draft.notes).every((n) => !n?.trim()) &&
+      draft.marksA.length === 0 &&
+      draft.marksB.length === 0;
     if (empty) {
       localStorage.removeItem(key);
       return;
