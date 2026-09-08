@@ -11,6 +11,11 @@ import { DIMENSION_COLORS } from "@/lib/highlight";
  * select the text that struck you, then say what it was about. That is the
  * order the thought actually arrives in.
  *
+ * A named list rather than a grid of swatches. Eight colours carry no
+ * meaning on their own, so a grid asked the rater to learn a legend or
+ * hover each square in turn; the label is the thing being chosen and the
+ * colour is only how it will look afterwards.
+ *
  * Appears at the selection, dismisses on Escape, on a click elsewhere, or
  * on scroll — the anchor rect is viewport-relative and would otherwise
  * drift away from the words it belongs to.
@@ -26,7 +31,7 @@ export function HighlightPopover({
   onDismiss: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
 
   // Measure first, then place: a popover clamped after paint visibly jumps.
   useLayoutEffect(() => {
@@ -34,15 +39,24 @@ export function HighlightPopover({
     if (!el) return;
     const { width, height } = el.getBoundingClientRect();
     const margin = 8;
+
     const left = Math.min(
       Math.max(margin, rect.left + rect.width / 2 - width / 2),
       window.innerWidth - width - margin,
     );
-    // Above the selection by default; below when there is no room, so the
-    // popover never covers the text being tagged.
-    const above = rect.top - height - margin;
-    const top = above >= margin ? above : rect.bottom + margin;
-    setPos({ left, top });
+
+    // Eight named rows is tall enough that neither side always fits, so
+    // take whichever has more room and cap the height there rather than
+    // letting the list run off the viewport.
+    const roomAbove = rect.top - margin * 2;
+    const roomBelow = window.innerHeight - rect.bottom - margin * 2;
+    const placeAbove = height <= roomAbove || roomAbove >= roomBelow;
+    const maxHeight = Math.max(140, placeAbove ? roomAbove : roomBelow);
+    const top = placeAbove
+      ? Math.max(margin, rect.top - Math.min(height, maxHeight) - margin)
+      : rect.bottom + margin;
+
+    setPos({ left, top, maxHeight });
   }, [rect]);
 
   useEffect(() => {
@@ -68,33 +82,36 @@ export function HighlightPopover({
       ref={ref}
       role="menu"
       aria-label="Tag the selection with a dimension"
-      className="fixed z-50 border border-ink bg-paper p-1.5 shadow-lg"
+      className="fixed z-50 w-[268px] overflow-y-auto border border-ink bg-paper py-1 shadow-lg"
       style={{
         left: pos?.left ?? -9999,
         top: pos?.top ?? -9999,
+        maxHeight: pos?.maxHeight,
         visibility: pos ? "visible" : "hidden",
       }}
     >
-      <div className="mb-1 px-1 font-mono text-[10px] uppercase tracking-[0.1em] text-graphite">
+      <div className="px-2.5 pb-1 pt-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-graphite">
         Tag as
       </div>
-      <div className="grid grid-cols-4 gap-1">
-        {VOTE_DIMENSIONS.map((d) => {
-          const c = DIMENSION_COLORS[d];
-          return (
-            <button
-              key={d}
-              type="button"
-              role="menuitem"
-              title={DIMENSION_LABELS[d]}
-              aria-label={DIMENSION_LABELS[d]}
-              onClick={() => onPick(d)}
-              className="h-7 w-7 border border-rule2 transition-transform hover:scale-110"
+      {VOTE_DIMENSIONS.map((d) => {
+        const c = DIMENSION_COLORS[d];
+        return (
+          <button
+            key={d}
+            type="button"
+            role="menuitem"
+            onClick={() => onPick(d)}
+            className="flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left transition-colors hover:bg-paper2"
+          >
+            <span
+              aria-hidden
+              className="h-3.5 w-3.5 shrink-0 border border-rule2"
               style={{ backgroundColor: c.bg, boxShadow: `inset 0 -3px 0 ${c.edge}` }}
             />
-          );
-        })}
-      </div>
+            <span className="truncate text-[13px]">{DIMENSION_LABELS[d]}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
