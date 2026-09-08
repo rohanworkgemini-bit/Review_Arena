@@ -20,6 +20,10 @@ import { cn } from "@/lib/cn";
  * be unreadable at this height, and more importantly the rater should be
  * reading *for* something rather than scanning for all eight at once.
  *
+ * Answering never moves the rail on its own — an answered dimension offers
+ * "Next" and waits. Advancing on click looked like the answer had been
+ * snatched away, and left no beat to reconsider or undo a misclick.
+ *
  * It does not replace the full survey below — the same values are shown
  * there with room for notes, and either control can set them. This is an
  * additional way in, not a second source of truth.
@@ -60,13 +64,12 @@ export function RatingRail({
     onActiveChange(next);
   };
 
-  // Answering advances, so a rater who works down the list never has to
-  // reach for the arrows. The last dimension stays put rather than wrapping
-  // round to the first, which would look like the answer was discarded.
-  const pick = (v: -1 | 0 | 1) => {
-    onPick(active, v);
-    if (i < VOTE_DIMENSIONS.length - 1) onActiveChange(VOTE_DIMENSIONS[i + 1]!);
-  };
+  // Answering does NOT advance. Moving the rail out from under the rater
+  // the instant they click reads as the answer being taken away, and it
+  // removes the beat where they might reconsider or correct a misclick.
+  // The rail offers the next dimension instead and waits to be asked.
+  const answeredHere = current !== undefined;
+  const hasNext = i < VOTE_DIMENSIONS.length - 1;
 
   return (
     <div
@@ -120,16 +123,29 @@ export function RatingRail({
         )}
 
         <div className="flex shrink-0 border border-ink">
-          <Choice on={current === -1} onClick={() => pick(-1)}>
+          <Choice on={current === -1} onClick={() => onPick(active, -1)}>
             A better
           </Choice>
-          <Choice on={current === 0} onClick={() => pick(0)} middle>
+          <Choice on={current === 0} onClick={() => onPick(active, 0)} middle>
             Tie
           </Choice>
-          <Choice on={current === 1} onClick={() => pick(1)}>
+          <Choice on={current === 1} onClick={() => onPick(active, 1)}>
             B better
           </Choice>
         </div>
+
+        {/* Offered only once this dimension is answered, so it reads as
+            "done here, move on" rather than as a way to skip. */}
+        {answeredHere && hasNext && (
+          <button
+            type="button"
+            onClick={() => onActiveChange(VOTE_DIMENSIONS[i + 1]!)}
+            className="flex shrink-0 items-center gap-1 border border-ink px-2.5 py-1 font-mono text-[11px] transition-colors hover:bg-ink hover:text-paper"
+          >
+            Next
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        )}
 
         <span className="shrink-0 font-mono text-[11px] text-graphite">
           {answered}/{VOTE_DIMENSIONS.length}
