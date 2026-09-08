@@ -104,10 +104,11 @@ export function InstructionsPage() {
           Your paper goes to two systems at once and the reviews stream in live,
           usually in under a minute. You will not be told which models they are.
         </Step>
-        <Step n="iii." title="Read both, then choose">
-          Pick the review you would rather have received as the author. Then say
-          which one did better on each of the eight dimensions below. You can
-          call any of them a tie.
+        <Step n="iii." title="Read both and say which is better">
+          Answer the eight questions below — which review did better on each,
+          or whether they tied — and then pick the one you would rather have
+          received as the author. You can answer as you read or all at the
+          end; the next section describes the tools for either.
         </Step>
         <Step n="iv." title="See who wrote them">
           The names are revealed, along with how your vote moved both systems on
@@ -155,6 +156,75 @@ export function InstructionsPage() {
         that is hardest to measure any other way.
       </P>
 
+      {/* ─── The reading tools ───────────────────────────────────────── */}
+      <H2>Tools while you read</H2>
+      <P>
+        Two reviews of the same paper is a lot to hold in your head at once.
+        These are here to take some of that load off. All of them are
+        optional — the comparison works perfectly well if you ignore every
+        one.
+      </P>
+
+      <div className="mt-5">
+        <Step n="—" title="The two reviews line up section by section">
+          Summary sits beside Summary, Weaknesses beside Weaknesses, all the
+          way down. So you compare by looking across, not by scrolling up and
+          down hunting for the matching part. If one review skipped a section
+          entirely, its side says so rather than quietly closing the gap —
+          that absence is worth seeing.
+        </Step>
+
+        <Step n="—" title="Highlight anything that strikes you">
+          Select a sentence and a short list appears; choose which of the
+          eight dimensions it belongs to and the passage takes that colour.
+          Hover a coloured passage later and it tells you which dimension you
+          filed it under. Click it to remove it.
+          <br />
+          <br />
+          This is purely a memory aid for you. Highlights are never submitted,
+          never scored, and nobody sees them — so mark up as much or as little
+          as you like.
+        </Step>
+
+        <Step n="—" title="Rate as you go, not all at the end">
+          Once you start scrolling, a bar appears at the top of the screen with
+          one dimension on it and the same three choices. When you notice that
+          one review is clearer, record it right then, while the sentence that
+          convinced you is still in front of you. It will not move on by
+          itself — press <span className="text-ink">Next</span> when you are
+          ready for the following dimension.
+          <br />
+          <br />
+          Anything you record there fills in the full form lower down, and the
+          form still works on its own. It is the same eight answers either way.
+        </Step>
+
+        <Step n="—" title="Jump to the relevant section">
+          The bar has a <span className="text-ink">jump</span> link that
+          scrolls both reviews to the part that dimension is usually answered
+          from — Questions for critique clarity, Weaknesses for evidence, and
+          so on. It only moves the page; nothing is hidden and nothing is
+          off-limits. Evidence for a dimension can sit anywhere, and often
+          does.
+          <br />
+          <br />
+          Two dimensions have no jump: completeness and tone are judged across
+          a whole review, so pointing you at one section would be misleading.
+        </Step>
+
+        <Step n="—" title="Make the text comfortable">
+          The controls above the reviews change the text size and widen the
+          columns. Both sides always change together — you cannot enlarge one
+          review and not the other, because that would quietly favour it.
+        </Step>
+      </div>
+
+      <P>
+        One reassurance: if your browser reloads or you close the tab by
+        accident, your answers, notes and highlights come back. Nothing is
+        submitted until you press the button that casts your vote.
+      </P>
+
       {/* ─── The study ───────────────────────────────────────────────── */}
       <H2>
         <span id="study" />
@@ -199,7 +269,9 @@ export function InstructionsPage() {
         <Step n="iv." title="Make three comparisons per paper">
           Six in total. Each one is a fresh pair of reviews of that paper, and
           which systems you get is decided in advance rather than at random, so
-          please work through all six.
+          please work through all six. The reading tools described above are
+          all available — highlighting and rating as you go are worth the two
+          minutes it takes to try them on the first comparison.
         </Step>
         <Step n="v." title="See the systems revealed">
           After each paper you find out which models wrote the reviews you
