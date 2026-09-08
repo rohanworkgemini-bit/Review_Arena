@@ -172,8 +172,7 @@ export function ComparisonPage() {
   const [activeDim, setActiveDim] = useState<VoteDimension>(VOTE_DIMENSIONS[0]!);
   const [headings, setHeadings] = useState<(string | null)[]>([]);
   const pairRef = useRef<AlignedReviewPairHandle>(null);
-  const reviewsRef = useRef<HTMLDivElement>(null);
-  const railVisible = useScrolledInto(reviewsRef);
+  const reviews = useScrolledInto();
   const reading = useReadingPrefs();
   const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
   const jumpTarget = sectionForDimension(activeDim, headings);
@@ -481,7 +480,7 @@ export function ComparisonPage() {
         />
       ) : (
         // The signature: one card, two equal columns, a single 1px divider.
-        <div className="border border-rule2 bg-card" style={breakout} ref={reviewsRef}>
+        <div className="border border-rule2 bg-card" style={breakout} ref={reviews.ref}>
           <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
               Pair / blind
@@ -534,7 +533,7 @@ export function ComparisonPage() {
           )}
           {bothReviewsReady && (
             <RatingRail
-              visible={railVisible}
+              visible={reviews.visible}
               active={activeDim}
               onActiveChange={setActiveDim}
               values={dimensionValues}

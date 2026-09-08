@@ -591,8 +591,7 @@ function ComparisonScreen({
   const [activeDim, setActiveDim] = useState<VoteDimension>(VOTE_DIMENSIONS[0]!);
   const [headings, setHeadings] = useState<(string | null)[]>([]);
   const pairRef = useRef<AlignedReviewPairHandle>(null);
-  const reviewsRef = useRef<HTMLDivElement>(null);
-  const railVisible = useScrolledInto(reviewsRef);
+  const reviews = useScrolledInto();
   const reading = useReadingPrefs();
   const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
   const jumpTarget = sectionForDimension(activeDim, headings);
@@ -697,7 +696,7 @@ function ComparisonScreen({
       </div>
 
       <RatingRail
-        visible={railVisible}
+        visible={reviews.visible}
         active={activeDim}
         onActiveChange={setActiveDim}
         values={dimensionValues}
@@ -723,7 +722,7 @@ function ComparisonScreen({
       )}
 
       <div style={breakout}>
-        <div ref={reviewsRef} className="mb-2 border border-rule2 bg-white">
+        <div ref={reviews.ref} className="mb-2 border border-rule2 bg-white">
           <AlignedReviewPair
             handleRef={pairRef}
             onHeadings={onHeadings}
