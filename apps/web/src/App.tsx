@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Footer } from "@/components/layout/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useWideReading } from "@/components/comparison/ReadingControls";
 
 // Code-split each route. The leaderboard pulls in recharts (~80 KB);
 // the admin page is rarely visited; reveal pulls in radar deps. Lazy
@@ -66,14 +67,21 @@ const COLLAPSED_WIDTH = "3.5rem";
 // around every route EXCEPT "/" — the landing page renders full-bleed
 // (no sidebar) with its own minimal top bar.
 function AppShell({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
+  const [userCollapsed, setUserCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(COLLAPSED_KEY) === "true";
   });
 
   useEffect(() => {
-    window.localStorage.setItem(COLLAPSED_KEY, String(collapsed));
-  }, [collapsed]);
+    window.localStorage.setItem(COLLAPSED_KEY, String(userCollapsed));
+  }, [userCollapsed]);
+
+  // Reading two long reviews side by side wants every pixel, so the wide
+  // toggle on the comparison page folds the rail away too. Only ever an
+  // override: turning wide off restores whatever the reader had chosen for
+  // the sidebar, rather than forcing it open.
+  const wide = useWideReading();
+  const collapsed = userCollapsed || wide;
 
   // --sidebar-w is consumed by Sidebar itself and by any element that
   // needs to offset around the sidebar. Lives on the root layout div so
@@ -87,7 +95,7 @@ function AppShell({ children }: { children: ReactNode }) {
       {/* editor's mark across the very top — same as the landing page */}
       <div className="h-[3px] bg-red" aria-hidden />
       <div className="relative flex min-h-[calc(100vh-3px)]">
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+        <Sidebar collapsed={collapsed} onToggle={() => setUserCollapsed((c) => !c)} />
         <div className="relative z-10 flex min-w-0 flex-1 flex-col">
           <Header />
           {/* main is flex-1 so on short pages the Footer still hugs the

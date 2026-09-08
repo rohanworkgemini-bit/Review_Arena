@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { Minus, Plus, MoveHorizontal } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -18,6 +18,42 @@ import { cn } from "@/lib/cn";
 
 const SIZE_KEY = "ra-read-size";
 const WIDE_KEY = "ra-read-wide";
+
+// `wide` is shared rather than local: turning it on also collapses the app
+// sidebar, and the sidebar lives in AppShell, well outside this component.
+// A tiny external store lets both subscribe without threading state through
+// every route. Text size stays local — nothing else cares about it.
+let wideValue = ((): boolean => {
+  try {
+    return localStorage.getItem(WIDE_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+const wideListeners = new Set<() => void>();
+
+function setWideValue(next: boolean): void {
+  if (next === wideValue) return;
+  wideValue = next;
+  try {
+    localStorage.setItem(WIDE_KEY, next ? "1" : "0");
+  } catch {
+    /* private mode */
+  }
+  for (const l of wideListeners) l();
+}
+
+/** Subscribe to the wide-reading preference. */
+export function useWideReading(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      wideListeners.add(cb);
+      return () => wideListeners.delete(cb);
+    },
+    () => wideValue,
+    () => false,
+  );
+}
 
 // Steps in px against the panel's 14.5px default. Bounded so the layout
 // cannot be driven somewhere unreadable and then persisted there.
@@ -47,7 +83,7 @@ export function useReadingPrefs() {
       return Number.isInteger(n) && n >= 0 && n < SIZES.length ? n : DEFAULT_INDEX;
     }, DEFAULT_INDEX),
   );
-  const [wide, setWide] = useState(() => read(WIDE_KEY, (r) => r === "1", false));
+  const wide = useWideReading();
 
   useEffect(() => {
     try {
@@ -56,14 +92,6 @@ export function useReadingPrefs() {
       /* private mode */
     }
   }, [index]);
-  useEffect(() => {
-    try {
-      localStorage.setItem(WIDE_KEY, wide ? "1" : "0");
-    } catch {
-      /* private mode */
-    }
-  }, [wide]);
-
   const bigger = useCallback(() => setIndex((i) => Math.min(i + 1, SIZES.length - 1)), []);
   const smaller = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
@@ -74,7 +102,7 @@ export function useReadingPrefs() {
     canGrow: index < SIZES.length - 1,
     canShrink: index > 0,
     wide,
-    toggleWide: () => setWide((w) => !w),
+    toggleWide: () => setWideValue(!wideValue),
   };
 }
 

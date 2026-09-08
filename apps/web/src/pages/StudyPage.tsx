@@ -596,14 +596,11 @@ function ComparisonScreen({
   const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
   const jumpTarget = sectionForDimension(activeDim, headings);
 
-  // "Wide" breaks the reviews out of the page's centred max-width, which is
-  // sized for prose rather than for two columns of it side by side. Applied
-  // to the container, so both panels widen together.
+  // "Wide" lifts the study frame's centred max-width, which is sized for
+  // prose rather than for two columns of it side by side. The study page
+  // has no sidebar to fold away, so here the toggle only widens.
   const breakout = reading.prefs.wide
-    ? {
-        width: "min(96vw, 1900px)",
-        marginLeft: "calc(50% - min(48vw, 950px))",
-      }
+    ? { width: "min(96vw, 1900px)", marginLeft: "calc(50% - min(48vw, 950px))" }
     : undefined;
 
   const dKey = draftKey("study", comparisonId);

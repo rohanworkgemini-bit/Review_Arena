@@ -176,12 +176,11 @@ export function ComparisonPage() {
   const reading = useReadingPrefs();
   const onHeadings = useCallback((h: (string | null)[]) => setHeadings(h), []);
   const jumpTarget = sectionForDimension(activeDim, headings);
-  // "Wide" breaks the reviews out of the page's centred max-width, which is
-  // sized for prose rather than two columns of it. Applied to the container
-  // so both panels widen together.
-  const breakout = reading.prefs.wide
-    ? { width: "min(96vw, 1900px)", marginLeft: "calc(50% - min(48vw, 950px))" }
-    : undefined;
+  // "Wide" lifts the page's centred max-width, which is sized for prose
+  // rather than for two columns of it side by side. It widens the container
+  // rather than breaking out of the viewport: the main column is already
+  // offset by the sidebar, which the same toggle folds away, so absolute
+  // viewport maths would slide the reviews underneath it.
 
   // Persist the in-progress survey so a reload does not cost the rater a
   // re-read of both reviews. Skipped once a vote is cast — that record is
@@ -442,7 +441,12 @@ export function ComparisonPage() {
   }
 
   return (
-    <div className="container max-w-[1080px] py-6 space-y-5">
+    <div
+      className={cn(
+        "container py-6 space-y-5",
+        reading.prefs.wide ? "max-w-none" : "max-w-[1080px]",
+      )}
+    >
       {usingPlaceholder && (
         <div className="flex justify-end">
           <Badge variant="outline">placeholder</Badge>
@@ -480,7 +484,7 @@ export function ComparisonPage() {
         />
       ) : (
         // The signature: one card, two equal columns, a single 1px divider.
-        <div className="border border-rule2 bg-card" style={breakout} ref={reviews.ref}>
+        <div className="border border-rule2 bg-card" ref={reviews.ref}>
           <div className="flex items-baseline justify-between gap-3.5 border-b border-rule bg-paper2 px-4 py-[13px]">
             <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-graphite">
               Pair / blind
