@@ -1,5 +1,6 @@
 // Barrel export for the comparison-page subcomponents. ComparisonPage
 // imports a single module instead of 7 individual files.
+export { AlignedReviewPair } from "./AlignedReviewPair";
 export { DimensionProgress } from "./DimensionProgress";
 export { DimensionRow } from "./DimensionRow";
 export { HighlightToolbar } from "./HighlightToolbar";

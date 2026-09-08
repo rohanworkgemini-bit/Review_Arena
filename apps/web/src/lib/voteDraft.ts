@@ -13,6 +13,8 @@ import type { Highlight } from "./highlight";
 // a reload. The vote itself is only ever created by an explicit submit.
 
 export interface VoteDraft {
+  /** Renderer contract this draft's highlight offsets were taken against. */
+  schema: number;
   /** Overall free-text rationale. */
   note: string;
   /** -1 = A better, 0 = tie, +1 = B better. */
@@ -58,6 +60,15 @@ function sanitizeMarks(v: unknown): Highlight[] {
 
 const PREFIX = "ra-draft:";
 
+// Highlight offsets address block indices produced by the markdown
+// renderer, so a change to how blocks are counted silently re-points every
+// stored span at different words. Bumping this discards drafts written by
+// an older build instead of restoring markup onto the wrong sentences.
+//
+//   1 — initial
+//   2 — headings became section boundaries rather than blocks
+const SCHEMA = 2;
+
 // A draft is a convenience for "I refreshed" or "my laptop slept", not a way
 // to resume a comparison next week: reviews may have been re-generated and
 // the rater will not remember their reasoning. Anything older is discarded.
@@ -84,11 +95,12 @@ export function loadDraft(key: string): VoteDraft | null {
       localStorage.removeItem(key);
       return null;
     }
-    if (Date.now() - d.savedAt > MAX_AGE_MS) {
+    if (Date.now() - d.savedAt > MAX_AGE_MS || d.schema !== SCHEMA) {
       localStorage.removeItem(key);
       return null;
     }
     return {
+      schema: SCHEMA,
       note: typeof d.note === "string" ? d.note : "",
       values: (d.values ?? {}) as VoteDraft["values"],
       notes: (d.notes ?? {}) as VoteDraft["notes"],
@@ -106,7 +118,7 @@ export function loadDraft(key: string): VoteDraft | null {
 
 export function saveDraft(
   key: string,
-  draft: Omit<VoteDraft, "savedAt">,
+  draft: Omit<VoteDraft, "savedAt" | "schema">,
 ): void {
   try {
     // Nothing answered yet is nothing worth restoring, and writing it would
@@ -123,7 +135,10 @@ export function saveDraft(
       localStorage.removeItem(key);
       return;
     }
-    localStorage.setItem(key, JSON.stringify({ ...draft, savedAt: Date.now() }));
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...draft, schema: SCHEMA, savedAt: Date.now() }),
+    );
   } catch {
     /* quota or private mode — proceed without a draft */
   }
@@ -152,7 +167,8 @@ export function pruneDrafts(): void {
       if (!k?.startsWith(PREFIX)) continue;
       try {
         const d = JSON.parse(localStorage.getItem(k) ?? "{}") as Partial<VoteDraft>;
-        if (typeof d.savedAt !== "number" || now - d.savedAt > MAX_AGE_MS) stale.push(k);
+        if (typeof d.savedAt !== "number" || now - d.savedAt > MAX_AGE_MS || d.schema !== SCHEMA)
+          stale.push(k);
       } catch {
         stale.push(k);
       }

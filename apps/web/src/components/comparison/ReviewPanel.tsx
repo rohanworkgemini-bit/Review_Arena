@@ -84,7 +84,14 @@ export function ReviewPanel({
         style={highlighterArmed ? { cursor: "text" } : undefined}
       >
         {hasRaw ? (
-          renderMarkdownLite(raw!, highlights, onRemoveHighlight, conference)
+          parseReviewSections(raw!, highlights, onRemoveHighlight, conference).map(
+            (sec, i) => (
+              <div key={i}>
+                {sec.heading && <SectionHeading>{sec.heading}</SectionHeading>}
+                {sec.nodes}
+              </div>
+            ),
+          )
         ) : (
           <StructuredFallback review={review} />
         )}
@@ -168,14 +175,30 @@ const HEADING_RX = /^#{1,4}\s+(.*)$/;
 const BULLET_RX = /^[-*•]\s+(.*)$/;
 const NUMBERED_RX = /^\d+[.)]\s+(.*)$/;
 
-function renderMarkdownLite(
+/** One heading and everything under it, as rendered nodes. */
+export interface ReviewSection {
+  /** null for whatever precedes the first heading. */
+  heading: string | null;
+  nodes: ReactNode[];
+}
+
+/**
+ * Parse one review into its sections.
+ *
+ * Sections are the unit the aligned two-column view pairs on, and headings
+ * are hoisted out of the flow there — so a heading is a boundary, not a
+ * block, and is not highlightable. Block indices are allocated across the
+ * whole document in reading order and are what highlight offsets address,
+ * so the walk must stay deterministic (it is — one pass over the lines).
+ */
+export function parseReviewSections(
   md: string,
   highlights: readonly Highlight[],
   onRemove?: (id: string) => void,
   conference?: Conference,
-): ReactNode {
+): ReviewSection[] {
   const lines = md.split("\n");
-  const blocks: ReactNode[] = [];
+  const sections: ReviewSection[] = [{ heading: null, nodes: [] }];
   let list: { ordered: boolean; items: string[] } | null = null;
   let para: string[] = [];
   let key = 0;
@@ -187,12 +210,16 @@ function renderMarkdownLite(
   // what highlight offsets are anchored to, so the walk order must stay
   // deterministic (it is — one pass over the lines).
   let blockIndex = 0;
+  // `blocks` is always the open section's node list; re-pointed on each
+  // heading so flushPara/flushList need no knowledge of sectioning.
+  let current = sections[0]!;
+  const push = (n: ReactNode) => current.nodes.push(n);
 
   const flushList = () => {
     if (!list) return;
     const Tag = list.ordered ? "ol" : "ul";
     const items = list.items;
-    blocks.push(
+    push(
       <Tag
         key={key++}
         className={`${list.ordered ? "list-decimal" : "list-disc"} space-y-1 pl-5`}
@@ -226,7 +253,7 @@ function renderMarkdownLite(
     // either way: one paragraph is still one block.
     const body = scored ? scored.rest : text;
     const block = blockIndex++;
-    blocks.push(
+    push(
       <div key={key++}>
         {scored && <ScoreLine value={scored.value} max={scale!} />}
         <p data-hl-block={block}>
@@ -251,16 +278,8 @@ function renderMarkdownLite(
       flushPara();
       const text = sanitizeInline(heading[1]!);
       pendingScale = scaleFor(text, conference);
-      const block = blockIndex++;
-      blocks.push(
-        <div
-          key={key++}
-          data-hl-block={block}
-          className="mb-1 mt-1 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-graphite"
-        >
-          <BlockText text={text} block={block} highlights={highlights} onRemove={onRemove} />
-        </div>,
-      );
+      current = { heading: text, nodes: [] };
+      sections.push(current);
       continue;
     }
 
@@ -292,7 +311,18 @@ function renderMarkdownLite(
   flushList();
   flushPara();
 
-  return <Fragment>{blocks}</Fragment>;
+  // Drop a leading preamble that turned out to be empty — most reviews open
+  // straight into a heading.
+  return sections.filter((sec) => sec.heading !== null || sec.nodes.length > 0);
+}
+
+/** Section heading, in the panel's own register. */
+export function SectionHeading({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-1 mt-1 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-graphite">
+      {children}
+    </div>
+  );
 }
 
 // ─── legacy fallback (rows without rawOutput) ────────────────────────────

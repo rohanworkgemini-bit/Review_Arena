@@ -5,7 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Loader2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
-import { DimensionProgress, DimensionRow, HighlightToolbar } from "@/components/comparison";
+import {
+  AlignedReviewPair,
+  DimensionProgress,
+  DimensionRow,
+  HighlightToolbar,
+} from "@/components/comparison";
 import { addHighlights, type Highlight } from "@/lib/highlight";
 import { clearDraft, draftKey, loadDraft, pruneDrafts, saveDraft } from "@/lib/voteDraft";
 import { cn } from "@/lib/cn";
@@ -666,30 +671,26 @@ function ComparisonScreen({
         }}
       />
 
-      <div className="mb-6 grid grid-cols-1 divide-y divide-rule2 border border-rule2 bg-white md:grid-cols-2 md:divide-x md:divide-y-0">
-        <ReviewPanel
-          label="REVIEW A"
-          review={pair.reviewA.structured ?? EMPTY_REVIEW}
-          raw={pair.reviewA.rawOutput}
+      <div className="mb-6 border border-rule2 bg-white">
+        <AlignedReviewPair
+          labelA="REVIEW A"
+          labelB="REVIEW B"
+          rawA={pair.reviewA.rawOutput ?? ""}
+          rawB={pair.reviewB.rawOutput ?? ""}
           conference={pair.conference}
-          highlights={marksA}
           highlighterArmed={highlighter !== null}
-          onSelectRanges={(r) =>
-            highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
-          }
-          onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
-        />
-        <ReviewPanel
-          label="REVIEW B"
-          review={pair.reviewB.structured ?? EMPTY_REVIEW}
-          raw={pair.reviewB.rawOutput}
-          conference={pair.conference}
-          highlights={marksB}
-          highlighterArmed={highlighter !== null}
-          onSelectRanges={(r) =>
-            highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
-          }
-          onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
+          panelA={{
+            highlights: marksA,
+            onSelectRanges: (r) =>
+              highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter)),
+            onRemoveHighlight: (id) => setMarksA((prev) => prev.filter((h) => h.id !== id)),
+          }}
+          panelB={{
+            highlights: marksB,
+            onSelectRanges: (r) =>
+              highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter)),
+            onRemoveHighlight: (id) => setMarksB((prev) => prev.filter((h) => h.id !== id)),
+          }}
         />
       </div>
 

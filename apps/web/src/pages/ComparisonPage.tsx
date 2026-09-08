@@ -10,6 +10,7 @@ import { BottomBar } from "@/components/layout/BottomBar";
 import {
   DimensionProgress,
   DimensionRow,
+  AlignedReviewPair,
   GeneratingPanel,
   HighlightToolbar,
   StreamingReviewPanel,
@@ -469,36 +470,77 @@ export function ComparisonPage() {
               setMarksB([]);
             }}
           />
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
-            <StreamingReviewPanel
-              label="Review A"
-              structured={pair.reviewA.structured ?? null}
-              rawOutput={pair.reviewA.rawOutput ?? null}
-              stream={streamA}
-              conference={pair.paper.conference}
-              highlights={marksA}
-              highlighterArmed={highlighter !== null}
-              onSelectRanges={(r) =>
-                highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
-              }
-              onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
-            />
-            <div className="hidden bg-rule lg:block" aria-hidden />
-            <div className="h-px bg-rule lg:hidden" aria-hidden />
-            <StreamingReviewPanel
-              label="Review B"
-              structured={pair.reviewB.structured ?? null}
-              rawOutput={pair.reviewB.rawOutput ?? null}
-              stream={streamB}
-              conference={pair.paper.conference}
-              highlights={marksB}
-              highlighterArmed={highlighter !== null}
-              onSelectRanges={(r) =>
-                highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
-              }
-              onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
-            />
-          </div>
+          {(() => {
+            // Alignment needs both reviews whole: pairing sections against a
+            // column that is still growing would reflow under the reader.
+            // Until both have landed, the streaming panels render as before.
+            const rawAFinal = pair.reviewA.rawOutput ?? streamA.text;
+            const rawBFinal = pair.reviewB.rawOutput ?? streamB.text;
+            const bothDone =
+              !!(pair.reviewA.structured ?? streamA.structured) &&
+              !!(pair.reviewB.structured ?? streamB.structured) &&
+              !!rawAFinal?.trim() &&
+              !!rawBFinal?.trim();
+
+            if (bothDone)
+              return (
+                <AlignedReviewPair
+                  labelA="Review A"
+                  labelB="Review B"
+                  rawA={rawAFinal!}
+                  rawB={rawBFinal!}
+                  conference={pair.paper.conference}
+                  highlighterArmed={highlighter !== null}
+                  panelA={{
+                    highlights: marksA,
+                    onSelectRanges: (r) =>
+                      highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter)),
+                    onRemoveHighlight: (id) =>
+                      setMarksA((prev) => prev.filter((h) => h.id !== id)),
+                  }}
+                  panelB={{
+                    highlights: marksB,
+                    onSelectRanges: (r) =>
+                      highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter)),
+                    onRemoveHighlight: (id) =>
+                      setMarksB((prev) => prev.filter((h) => h.id !== id)),
+                  }}
+                />
+              );
+
+            return (
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr]">
+              <StreamingReviewPanel
+                label="Review A"
+                structured={pair.reviewA.structured ?? null}
+                rawOutput={pair.reviewA.rawOutput ?? null}
+                stream={streamA}
+                conference={pair.paper.conference}
+                highlights={marksA}
+                highlighterArmed={highlighter !== null}
+                onSelectRanges={(r) =>
+                  highlighter && setMarksA((prev) => addHighlights(prev, r, highlighter))
+                }
+                onRemoveHighlight={(id) => setMarksA((prev) => prev.filter((h) => h.id !== id))}
+              />
+              <div className="hidden bg-rule lg:block" aria-hidden />
+              <div className="h-px bg-rule lg:hidden" aria-hidden />
+              <StreamingReviewPanel
+                label="Review B"
+                structured={pair.reviewB.structured ?? null}
+                rawOutput={pair.reviewB.rawOutput ?? null}
+                stream={streamB}
+                conference={pair.paper.conference}
+                highlights={marksB}
+                highlighterArmed={highlighter !== null}
+                onSelectRanges={(r) =>
+                  highlighter && setMarksB((prev) => addHighlights(prev, r, highlighter))
+                }
+                onRemoveHighlight={(id) => setMarksB((prev) => prev.filter((h) => h.id !== id))}
+              />
+            </div>
+            );
+          })()}
         </div>
       )}
 

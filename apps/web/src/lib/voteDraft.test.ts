@@ -140,11 +140,36 @@ describe("highlight persistence", () => {
     expect(loadDraft(KEY)?.marksA).toEqual([mark]);
   });
 
-  it("survives marks being absent from an older draft", () => {
-    localStorage.setItem(
-      KEY,
-      JSON.stringify({ ...filled, marksA: undefined, marksB: undefined, savedAt: Date.now() }),
-    );
+  it("survives marks being absent from a draft of the current schema", () => {
+    // Round-trip through saveDraft so the stored schema stays correct, then
+    // strip the mark arrays the way a defensive write might have.
+    saveDraft(KEY, filled);
+    const stored = JSON.parse(localStorage.getItem(KEY)!);
+    delete stored.marksA;
+    delete stored.marksB;
+    localStorage.setItem(KEY, JSON.stringify(stored));
     expect(loadDraft(KEY)?.marksA).toEqual([]);
+    expect(loadDraft(KEY)?.marksB).toEqual([]);
+  });
+});
+
+describe("schema versioning", () => {
+  // Block indices moved when headings stopped being blocks. Restoring a
+  // draft written against the old numbering would tint different words
+  // than the rater marked — so it is discarded, not migrated.
+  it("discards a draft from an older renderer contract", () => {
+    localStorage.setItem(KEY, JSON.stringify({ ...filled, schema: 1, savedAt: Date.now() }));
+    expect(loadDraft(KEY)).toBeNull();
+  });
+
+  it("discards a draft with no schema at all", () => {
+    localStorage.setItem(KEY, JSON.stringify({ ...filled, savedAt: Date.now() }));
+    expect(loadDraft(KEY)).toBeNull();
+  });
+
+  it("prunes drafts left by an older contract", () => {
+    localStorage.setItem(KEY, JSON.stringify({ ...filled, schema: 1, savedAt: Date.now() }));
+    pruneDrafts();
+    expect(localStorage.getItem(KEY)).toBeNull();
   });
 });
