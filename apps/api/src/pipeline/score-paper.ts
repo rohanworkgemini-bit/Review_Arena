@@ -18,6 +18,7 @@ import {
   type PanelMember,
 } from "./judge-panel.js";
 import { logger } from "../logger.js";
+import { isJudgeEnabled } from "../settings.js";
 
 // Judge-panel pipeline (2026-09; study papers only).
 //
@@ -124,6 +125,10 @@ export async function scorePairIfReady(
   paperTextArg?: string,
   force = false,
 ): Promise<void> {
+  if (!(await isJudgeEnabled())) {
+    logger.warn({ paperId }, "judge_disabled");
+    return;
+  }
   const comparisons = await db.query.studyComparisons.findMany({
     where: eq(studyComparisons.paperId, paperId),
     orderBy: asc(studyComparisons.pairIndex),
@@ -313,6 +318,10 @@ async function persistJudgeVerdict(
  * without a verdict unless `force`. Arena papers are a logged no-op.
  */
 export async function scorePaper(paperId: string, judge: JudgeClient, force = false): Promise<void> {
+  if (!(await isJudgeEnabled())) {
+    logger.warn({ paperId }, "judge_disabled");
+    return;
+  }
   const paper = await db.query.papers.findFirst({ where: eq(papers.id, paperId) });
   if (!paper || !paper.parsedStructure) {
     throw new Error(`paper ${paperId} not parsed yet`);

@@ -15,7 +15,9 @@ import { scorePaper } from "../pipeline/score-paper.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { Orchestrator } from "../pipeline/orchestrator.js";
 import type { ParsedPaper } from "@reviewarena/shared-types";
+import { logger } from "../logger.js";
 import type { Config } from "../config.js";
+import { JUDGE_ENABLED, isJudgeEnabled, setSetting } from "../settings.js";
 import {
   AdminReviewSystemsListResponseSchema,
   ReviewSystemSchema,
@@ -50,6 +52,10 @@ const adminUpload = multer({
 export function adminRouter(config: Config, deps: AdminDeps): Router {
   const router = Router();
   const guard = requireAdmin(config.ADMIN_TOKEN);
+
+  const UpdateSettingsRequestSchema = z.object({
+    judgeEnabled: z.boolean().optional(),
+  });
   const { judge, orchestrator: orch, reviewGen } = deps;
 
   // All admin routes require the bearer token.
@@ -189,6 +195,45 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
   });
 
   // ─── Vote inspection ───────────────────────────────────────────────
+
+  // ─── Runtime settings ───────────────────────────────────────────────
+  // Currently one switch: whether the judge panel runs. Kept here rather
+  // than in .env so it can be thrown between sessions without a redeploy.
+
+  router.get("/admin/settings", guard, async (_req, res, next) => {
+    try {
+      res.json({
+        judgeEnabled: await isJudgeEnabled(),
+        // True when the environment forces it off, in which case the UI
+        // switch cannot turn it back on and should say so rather than
+        // appearing broken.
+        judgeLockedOff:
+          String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false",
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch("/admin/settings", guard, async (req, res, next) => {
+    try {
+      const body = UpdateSettingsRequestSchema.parse(req.body);
+      if (body.judgeEnabled !== undefined) {
+        await setSetting(JUDGE_ENABLED, body.judgeEnabled);
+        logger.warn(
+          { judgeEnabled: body.judgeEnabled },
+          "admin_judge_toggle",
+        );
+      }
+      res.json({
+        judgeEnabled: await isJudgeEnabled(),
+        judgeLockedOff:
+          String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false",
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.get("/admin/votes", async (req, res, next) => {
     try {

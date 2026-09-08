@@ -578,6 +578,19 @@ export const metricScoresRelations = relations(metricScores, ({ one }) => ({
   review: one(reviews, { fields: [metricScores.reviewId], references: [reviews.id] }),
 }));
 
+// ─── Runtime settings ─────────────────────────────────────────────────────
+//
+// Operational switches the study runner flips between sessions, kept in the
+// database rather than the environment so they take effect without a
+// redeploy and without shelling into the VM mid-session. Not configuration:
+// anything that belongs in .env stays in .env.
+
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ─── Type re-exports for convenience ──────────────────────────────────────
 
 export type Paper = typeof papers.$inferSelect;
@@ -591,3 +604,4 @@ export type NewVote = typeof votes.$inferInsert;
 export type DimensionVote = typeof dimensionVotes.$inferSelect;
 export type EloSnapshot = typeof eloSnapshots.$inferSelect;
 export type MetricScore = typeof metricScores.$inferSelect;
+export type AppSetting = typeof appSettings.$inferSelect;

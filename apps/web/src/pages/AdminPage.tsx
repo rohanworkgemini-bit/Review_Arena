@@ -478,8 +478,82 @@ function SettingsTab({
   onTokenChange: (next: string) => void;
   onSignOut: () => void;
 }) {
+  const qc = useQueryClient();
+  const settings = useQuery({
+    queryKey: ["admin-settings", token],
+    queryFn: () =>
+      adminFetch<{ judgeEnabled: boolean; judgeLockedOff: boolean }>(
+        "/admin/settings",
+        token,
+      ),
+  });
+  const toggleJudge = useMutation({
+    mutationFn: (judgeEnabled: boolean) =>
+      adminFetch<{ judgeEnabled: boolean; judgeLockedOff: boolean }>(
+        "/admin/settings",
+        token,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ judgeEnabled }),
+        },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-settings"] }),
+  });
+
+  const judgeEnabled = settings.data?.judgeEnabled ?? true;
+  const lockedOff = settings.data?.judgeLockedOff ?? false;
+
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Judge panel</CardTitle>
+          <CardDescription>
+            Every study pair is scored by all six models, twice each with the
+            reviews swapped — 36 provider calls per paper. Turn it off while
+            testing the upload or voting flow; pairs then stay unjudged and{" "}
+            <code className="font-mono text-xs">rescore-missing.ts</code> fills
+            them in once it is back on.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant={judgeEnabled ? "destructive" : "default"}
+              disabled={settings.isLoading || toggleJudge.isPending || lockedOff}
+              onClick={() => toggleJudge.mutate(!judgeEnabled)}
+            >
+              {toggleJudge.isPending
+                ? "Saving…"
+                : judgeEnabled
+                  ? "Turn judging off"
+                  : "Turn judging on"}
+            </Button>
+            <Badge variant={judgeEnabled ? "default" : "outline"}>
+              {settings.isLoading
+                ? "checking…"
+                : judgeEnabled
+                  ? "running"
+                  : "paused"}
+            </Badge>
+          </div>
+          {lockedOff && (
+            <p className="text-sm text-muted-foreground">
+              Forced off by <code className="font-mono text-xs">JUDGE_ENABLED=false</code>{" "}
+              in the environment. Remove it there before this switch will do
+              anything.
+            </p>
+          )}
+          {!judgeEnabled && !lockedOff && (
+            <p className="text-sm text-muted-foreground">
+              Remember to turn this back on before a real session — an unjudged
+              pair contributes nothing to the judge-agreement analysis.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Admin token</CardTitle>

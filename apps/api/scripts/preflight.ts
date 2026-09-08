@@ -22,6 +22,7 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 import { sql } from "drizzle-orm";
 import { db, closeDbPool } from "../src/db/client.js";
 import { NUM_PARTICIPANTS, STUDY_SLUGS } from "../src/study/rotation.js";
+import { isJudgeEnabled } from "../src/settings.js";
 
 const LIVE = process.argv.includes("--live");
 
@@ -236,7 +237,22 @@ async function main(): Promise<void> {
         );
     });
 
-    // 6. Leftover data under a participant code. A smoke test run through
+    // 6. The judge panel switch. A warning rather than a failure — pausing
+    //    it is a legitimate thing to do while testing — but a loud one: a
+    //    session run with judging off yields human votes that RQ2 can never
+    //    be answered from, and the omission is invisible in the UI.
+    await check("judge panel", async () => {
+      const enabled = await isJudgeEnabled();
+      if (enabled) ok("judge panel", "enabled");
+      else
+        warn(
+          "judge panel",
+          "PAUSED — study pairs will not be judged",
+          "Fine while testing. Re-enable in Admin → Settings before any real session, then run rescore-missing.ts to backfill.",
+        );
+    });
+
+    // 7. Leftover data under a participant code. A smoke test run through
     //    /study lands on a real participant's record and silently becomes
     //    part of their data — this is the check that catches it.
     await check("participant data", async () => {
