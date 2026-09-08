@@ -63,13 +63,12 @@ export function LeaderboardPage() {
   }, [entries]);
 
   const currentLabel = dimension ? DIMENSION_LABELS[dimension] : "Overall";
+  // One line. The rating toggle already names the method, and the footnote
+  // under the table gives the parameters — saying it three times was most
+  // of the chrome around a six-row table.
   const currentDescription = dimension
-    ? `Ranking by ${DIMENSION_LABELS[dimension]}, computed only over votes that included a per-dimension pick for ${DIMENSION_LABELS[dimension]}.`
-    : "Overall ranking across automated peer-review systems, computed from blinded pairwise human comparisons.";
-  const methodDescription =
-    method === "BT"
-      ? "Bradley-Terry ratings: a single maximum-likelihood fit to every comparison at once."
-      : "Online Elo: the comparison log replayed in vote order, K=4.";
+    ? `How the systems rank on ${DIMENSION_LABELS[dimension]}, using only the comparisons that rated it.`
+    : "How the review systems rank when people compare them blind.";
   const baselineSlug = data?.baselineSlug ?? null;
 
   return (
@@ -116,7 +115,7 @@ export function LeaderboardPage() {
             </div>
           </div>
           <p className="mt-1 max-w-prose text-sm text-graphite">
-            {currentDescription} {methodDescription}
+            {currentDescription}
           </p>
           <div className="mt-3 font-mono text-[11.5px] text-graphite">
             <span className="text-ink">{data?.totalVotes ?? "—"}</span> votes ·{" "}
@@ -180,7 +179,13 @@ export function LeaderboardPage() {
                               {isBaseline && (
                                 <span
                                   className="ml-1.5 text-[10px] uppercase tracking-[0.1em] text-graphite"
-                                  title="Scale anchor: pinned at 1000"
+                                  title={
+                                    "Scale anchor, pinned at 1000. Bradley-Terry " +
+                                    "ratings are only defined up to a constant, so " +
+                                    "one system fixes the origin — which is why this " +
+                                    "interval is zero-wide and this rank spread reads " +
+                                    "tighter. It is not a better-established rating."
+                                  }
                                 >
                                   anchor
                                 </span>
@@ -222,8 +227,7 @@ export function LeaderboardPage() {
                       {data?.anchor === "BASELINE" && baselineSlug
                         ? `${baselineSlug} pinned at 1000`
                         : "mean-centred at 1000"}{" "}
-                      · intervals from 100 bootstrap resamples · order-independent:
-                      the same votes in any order give the same ratings
+                      · 95% intervals from 100 bootstrap resamples
                     </>
                   ) : (
                     <>
@@ -233,19 +237,11 @@ export function LeaderboardPage() {
                     </>
                   )}
                 </p>
-                {method === "BT" && data?.anchor === "BASELINE" && (
-                  <p className="mt-1 font-mono text-[11px] text-graphite">
-                    Bradley-Terry ratings are only defined up to a constant, so one
-                    system fixes the origin. The anchor's interval is zero-wide
-                    because of that, not because its rating is better established —
-                    and its rank spread reads tighter for the same reason.
-                  </p>
-                )}
                 {data && data.unranked.length > 0 && (
                   <p className="mt-1 font-mono text-[11px] text-graphite">
                     Not yet ranked: {data.unranked.map((u) => u.systemName).join(", ")}
                     {method === "BT"
-                      ? " — not yet linked to the rest of the field by a chain of wins and losses."
+                      ? " — too few comparisons to place them yet."
                       : " — no votes on this board yet."}
                   </p>
                 )}
