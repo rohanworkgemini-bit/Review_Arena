@@ -17,7 +17,16 @@ import type { Orchestrator } from "../pipeline/orchestrator.js";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
-import { JUDGE_ENABLED, isJudgeEnabled, setSetting } from "../settings.js";
+import {
+  JUDGE_ENABLED,
+  JUDGE_MODELS,
+  clearSetting,
+  getJudgeModels,
+  isJudgeEnabled,
+  setSetting,
+} from "../settings.js";
+import { arenaPanelSlugs } from "../pipeline/score-paper.js";
+import { STUDY_SLUGS } from "../study/rotation.js";
 import {
   AdminReviewSystemsListResponseSchema,
   ReviewSystemSchema,
@@ -55,6 +64,10 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   const UpdateSettingsRequestSchema = z.object({
     judgeEnabled: z.boolean().optional(),
+    // Which systems judge ARENA pairs. null restores "the whole panel";
+    // [] means no arena judging. Study papers always use the full
+    // preregistered panel regardless (settings.ts getJudgeModels).
+    judgeModels: z.array(z.string().min(1)).nullable().optional(),
   });
   const { judge, orchestrator: orch, reviewGen } = deps;
 
@@ -197,19 +210,28 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
   // ─── Vote inspection ───────────────────────────────────────────────
 
   // ─── Runtime settings ───────────────────────────────────────────────
-  // Currently one switch: whether the judge panel runs. Kept here rather
-  // than in .env so it can be thrown between sessions without a redeploy.
+  // Two switches: whether the judge panel runs, and which sampler the open
+  // arena uses to pair systems. Kept here rather than in .env so they can
+  // be thrown between sessions without a redeploy.
+
+  const readSettings = async () => ({
+    judgeEnabled: await isJudgeEnabled(),
+    // True when the environment forces it off, in which case the UI
+    // switch cannot turn it back on and should say so rather than
+    // appearing broken.
+    judgeLockedOff:
+      String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false",
+    // The resolved arena panel (what will actually judge), plus the raw
+    // setting so the UI can distinguish "all, by default" from "all six,
+    // explicitly chosen".
+    judgeModels: await getJudgeModels(),
+    arenaJudgeSlugs: await arenaPanelSlugs(),
+    panelSlugs: [...STUDY_SLUGS],
+  });
 
   router.get("/admin/settings", guard, async (_req, res, next) => {
     try {
-      res.json({
-        judgeEnabled: await isJudgeEnabled(),
-        // True when the environment forces it off, in which case the UI
-        // switch cannot turn it back on and should say so rather than
-        // appearing broken.
-        judgeLockedOff:
-          String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false",
-      });
+      res.json(await readSettings());
     } catch (err) {
       next(err);
     }
@@ -225,11 +247,14 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
           "admin_judge_toggle",
         );
       }
-      res.json({
-        judgeEnabled: await isJudgeEnabled(),
-        judgeLockedOff:
-          String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false",
-      });
+      if (body.judgeModels !== undefined) {
+        // null means "no explicit choice", which is an absent row rather
+        // than a stored null — app_settings.value is NOT NULL.
+        if (body.judgeModels === null) await clearSetting(JUDGE_MODELS);
+        else await setSetting(JUDGE_MODELS, body.judgeModels);
+        logger.warn({ judgeModels: body.judgeModels }, "admin_judge_models");
+      }
+      res.json(await readSettings());
     } catch (err) {
       next(err);
     }

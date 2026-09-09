@@ -18,7 +18,7 @@ import {
   type PanelMember,
 } from "./judge-panel.js";
 import { logger } from "../logger.js";
-import { isJudgeEnabled } from "../settings.js";
+import { getJudgeModels, isJudgeEnabled } from "../settings.js";
 
 // Judge-panel pipeline (2026-09; study papers only).
 //
@@ -87,13 +87,16 @@ async function claimPair(ids: [string, string]): Promise<ClaimedReview[] | null>
 }
 
 /**
- * The judge panel: the six study systems, as currently seeded. Derived from
- * the DB rather than a second hardcoded list so the backing model ids
- * (e.g. mistral-medium-3.5 → mistral-medium-2604) stay in one place.
+ * Load a judge panel from a list of slugs. Derived from the DB rather than
+ * a second hardcoded list so the backing model ids (e.g.
+ * mistral-medium-3.5 → mistral-medium-2604) stay in one place. Disabled or
+ * unknown slugs are dropped, and the caller decides whether the shortfall
+ * matters.
  */
-async function loadPanel(): Promise<PanelMember[]> {
+async function loadPanel(slugs: readonly string[]): Promise<PanelMember[]> {
+  if (slugs.length === 0) return [];
   const rows = await db.query.reviewSystems.findMany({
-    where: and(inArray(reviewSystems.slug, [...STUDY_SLUGS]), eq(reviewSystems.enabled, true)),
+    where: and(inArray(reviewSystems.slug, [...slugs]), eq(reviewSystems.enabled, true)),
     columns: { id: true, slug: true, config: true },
   });
   const members = rows.map((r) => ({
@@ -101,11 +104,24 @@ async function loadPanel(): Promise<PanelMember[]> {
     systemId: r.id,
     model: typeof r.config.model === "string" ? r.config.model : r.slug,
   }));
-  if (members.length !== STUDY_SLUGS.length) {
-    const missing = STUDY_SLUGS.filter((s) => !members.some((m) => m.slug === s));
+  if (members.length !== slugs.length) {
+    const missing = slugs.filter((s) => !members.some((m) => m.slug === s));
     logger.warn({ missing }, "judge_panel_incomplete");
   }
   return members.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/**
+ * Panel slugs for an arena pair: the admin selection, or the full
+ * preregistered panel when no selection has been made. Study papers never
+ * consult this — see getJudgeModels() for why.
+ */
+export async function arenaPanelSlugs(): Promise<string[]> {
+  const chosen = await getJudgeModels();
+  if (chosen === null) return [...STUDY_SLUGS];
+  // Keep the preregistered order and drop anything not on the panel, so an
+  // unknown slug in the setting cannot silently add a judge.
+  return STUDY_SLUGS.filter((s) => chosen.includes(s));
 }
 
 /**
@@ -134,7 +150,7 @@ export async function scorePairIfReady(
     orderBy: asc(studyComparisons.pairIndex),
   });
   if (comparisons.length === 0) {
-    logger.debug({ paperId }, "judge_skipped_arena");
+    await scoreArenaPair(paperId, judge, paperTextArg, force);
     return;
   }
 
@@ -145,7 +161,7 @@ export async function scorePairIfReady(
     const ids: [string, string] = [c.reviewAId, c.reviewBId];
     const claimed = await claimPair(ids);
     if (!claimed) continue;
-    panel ??= await loadPanel();
+    panel ??= await loadPanel(STUDY_SLUGS);
     paperText ??= await loadPaperText(paperId);
     try {
       await scoreClaimedPair(paperId, claimed, judge, paperText, panel, force);
@@ -156,6 +172,64 @@ export async function scorePairIfReady(
     }
   }
   if (lastErr) throw lastErr;
+}
+
+/**
+ * Judge an arena paper's single pair.
+ *
+ * An arena paper carries exactly the two reviews the sampler chose, so the
+ * pair is unambiguous and there is no rotation to consult. Papers with any
+ * other number of completed reviews are skipped rather than guessed at:
+ * with three or more there is no canonical pair, and judging an arbitrary
+ * one would put verdicts in the table that no comparison corresponds to.
+ *
+ * Display order here is the reviews' stored order, not the coin flip the
+ * voter saw — the voter may not even have arrived yet. That costs nothing,
+ * because every pair is judged in both orders anyway and a judge that
+ * disagrees with itself across the two is recorded as a tie.
+ */
+async function scoreArenaPair(
+  paperId: string,
+  judge: JudgeClient,
+  paperTextArg: string | undefined,
+  force: boolean,
+): Promise<void> {
+  const slugs = await arenaPanelSlugs();
+  if (slugs.length === 0) {
+    logger.debug({ paperId }, "judge_skipped_arena_no_panel");
+    return;
+  }
+
+  const completed = await db.query.reviews.findMany({
+    where: and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")),
+    columns: { id: true },
+    orderBy: asc(reviews.id),
+  });
+  if (completed.length !== 2) {
+    logger.debug(
+      { paperId, completed: completed.length },
+      "judge_skipped_arena_pair_not_ready",
+    );
+    return;
+  }
+
+  const ids: [string, string] = [completed[0]!.id, completed[1]!.id];
+  const claimed = await claimPair(ids);
+  if (!claimed) return;
+
+  const panel = await loadPanel(slugs);
+  if (panel.length === 0) {
+    // Release the claim we just took: nothing is going to judge this pair.
+    await db
+      .update(reviews)
+      .set({ judgeStatus: "PENDING", updatedAt: new Date() })
+      .where(and(inArray(reviews.id, ids), eq(reviews.judgeStatus, "RUNNING")));
+    logger.warn({ paperId, slugs }, "judge_arena_panel_empty_after_load");
+    return;
+  }
+
+  const paperText = paperTextArg ?? (await loadPaperText(paperId));
+  await scoreClaimedPair(paperId, claimed, judge, paperText, panel, force);
 }
 
 /** Slugs of panel members that already have a verdict for this pair (either order). */
@@ -326,14 +400,9 @@ export async function scorePaper(paperId: string, judge: JudgeClient, force = fa
   if (!paper || !paper.parsedStructure) {
     throw new Error(`paper ${paperId} not parsed yet`);
   }
-  const isStudy = await db.query.studyComparisons.findFirst({
-    where: eq(studyComparisons.paperId, paperId),
-    columns: { id: true },
-  });
-  if (!isStudy) {
-    logger.info({ paperId }, "judge_skipped_arena");
-    return;
-  }
+  // Arena papers are judged too (their single pair), so this no longer
+  // returns early for them — scorePairIfReady dispatches on whether the
+  // paper has rotation comparisons.
   const parsed = paper.parsedStructure as unknown as ParsedPaper;
 
   await db

@@ -478,31 +478,50 @@ function SettingsTab({
   onTokenChange: (next: string) => void;
   onSignOut: () => void;
 }) {
+  type AdminSettings = {
+    judgeEnabled: boolean;
+    judgeLockedOff: boolean;
+    /** Raw setting: null = "all", [] = none, else the chosen subset. */
+    judgeModels: string[] | null;
+    /** What will actually judge an arena pair, after resolution. */
+    arenaJudgeSlugs: string[];
+    /** The preregistered panel — the choices available. */
+    panelSlugs: string[];
+  };
   const qc = useQueryClient();
   const settings = useQuery({
     queryKey: ["admin-settings", token],
-    queryFn: () =>
-      adminFetch<{ judgeEnabled: boolean; judgeLockedOff: boolean }>(
-        "/admin/settings",
-        token,
-      ),
+    queryFn: () => adminFetch<AdminSettings>("/admin/settings", token),
   });
+  const patchSettings = (
+    body: Partial<Pick<AdminSettings, "judgeEnabled" | "judgeModels">>,
+  ) =>
+    adminFetch<AdminSettings>("/admin/settings", token, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   const toggleJudge = useMutation({
-    mutationFn: (judgeEnabled: boolean) =>
-      adminFetch<{ judgeEnabled: boolean; judgeLockedOff: boolean }>(
-        "/admin/settings",
-        token,
-        {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ judgeEnabled }),
-        },
-      ),
+    mutationFn: (judgeEnabled: boolean) => patchSettings({ judgeEnabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-settings"] }),
+  });
+
+  const setJudgeModels = useMutation({
+    mutationFn: (judgeModels: string[] | null) => patchSettings({ judgeModels }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-settings"] }),
   });
 
   const judgeEnabled = settings.data?.judgeEnabled ?? true;
   const lockedOff = settings.data?.judgeLockedOff ?? false;
+  const panelSlugs = settings.data?.panelSlugs ?? [];
+  const arenaJudges = settings.data?.arenaJudgeSlugs ?? [];
+  const usingDefault = (settings.data?.judgeModels ?? null) === null;
+  const toggleOne = (slug: string) => {
+    const next = arenaJudges.includes(slug)
+      ? arenaJudges.filter((s) => s !== slug)
+      : [...arenaJudges, slug];
+    setJudgeModels.mutate(next);
+  };
 
   return (
     <div className="space-y-4">
@@ -549,6 +568,74 @@ function SettingsTab({
             <p className="text-sm text-muted-foreground">
               Remember to turn this back on before a real session — an unjudged
               pair contributes nothing to the judge-agreement analysis.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Arena judges</CardTitle>
+          <CardDescription>
+            Which models judge pairs uploaded through the open arena. Each
+            selected model costs two provider calls per arena paper (the pair
+            is judged in both display orders), so this is the lever for arena
+            spend. Select none to leave arena pairs unjudged.{" "}
+            <strong>The study is unaffected</strong>: study papers are always
+            judged by the full preregistered panel, because a partial panel
+            would produce judge data that cannot be compared with the rest and
+            cannot be recovered afterwards.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {panelSlugs.map((slug) => {
+              const on = arenaJudges.includes(slug);
+              return (
+                <Button
+                  key={slug}
+                  size="sm"
+                  variant={on ? "default" : "outline"}
+                  disabled={settings.isLoading || setJudgeModels.isPending}
+                  onClick={() => toggleOne(slug)}
+                >
+                  {on ? "\u2713 " : ""}
+                  {slug}
+                </Button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={settings.isLoading || setJudgeModels.isPending}
+              onClick={() => setJudgeModels.mutate(null)}
+            >
+              All (default)
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={settings.isLoading || setJudgeModels.isPending}
+              onClick={() => setJudgeModels.mutate([])}
+            >
+              None
+            </Button>
+            <Badge variant="outline">
+              {settings.isLoading
+                ? "checking\u2026"
+                : setJudgeModels.isPending
+                  ? "saving\u2026"
+                  : arenaJudges.length === 0
+                    ? "arena pairs unjudged"
+                    : `${arenaJudges.length} of ${panelSlugs.length}${usingDefault ? " (default)" : ""}`}
+            </Badge>
+          </div>
+          {!judgeEnabled && (
+            <p className="text-sm text-muted-foreground">
+              Judging is switched off entirely above, so this selection has no
+              effect until it is switched back on.
             </p>
           )}
         </CardContent>
