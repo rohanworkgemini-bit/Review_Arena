@@ -69,6 +69,10 @@ apps/api/prisma/generated/
 *.pptx
 /*.pdf
 
+# Database dumps (deploy/backup.sh) and one-off table exports. These hold
+# the human vote log — the thesis dataset, and participant data. Never in git.
+backups/
+
 # Private working documents — thesis drafts, runbooks, internal notes.
 # Deliberately never committed: purged from history 2026-09-07 and kept
 # local only. Back them up outside the repo.

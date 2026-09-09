@@ -22,7 +22,8 @@
     "db:browser": "tsx scripts/db-browser.ts",
     "preflight": "tsx scripts/preflight.ts",
     "study:status": "tsx scripts/study-status.ts",
-    "demo:votes": "tsx scripts/seed-demo-votes.ts"
+    "demo:votes": "tsx scripts/seed-demo-votes.ts",
+    "pair:check": "tsx scripts/check-sampling.ts"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^2.2.2",

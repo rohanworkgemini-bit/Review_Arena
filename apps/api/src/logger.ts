@@ -10,8 +10,13 @@ import pino from "pino";
 // with a fallback is safe; the level is the only thing the logger needs.
 const isDev = process.env.NODE_ENV !== "production";
 
+// LOG_LEVEL overrides the default when set, for scripts that call into API
+// code in a loop and would otherwise bury their own output in debug lines
+// (`LOG_LEVEL=warn pnpm ... check-sampling.ts`). Unset, dev behaves as before.
+const level = process.env.LOG_LEVEL ?? (isDev ? "debug" : "info");
+
 export const logger = pino({
-  level: isDev ? "debug" : "info",
+  level,
   // In dev, pipe through pino-pretty so the terminal sees colored,
   // single-line output instead of a 1 KB JSON blob per request. In prod
   // we leave it as JSON so the log shipper / cloud aggregator can parse
