@@ -3,14 +3,6 @@ import { useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
-} from "recharts";
-import {
   Card,
   CardContent,
   CardDescription,
@@ -24,18 +16,18 @@ import {
   DIMENSION_LABELS,
   type SubmitVoteResponse,
   type RevealSide,
+  type JudgeVerdict,
 } from "@reviewarena/shared-types";
 import { getReveal } from "@/lib/api";
 
 type RevealHeader = SubmitVoteResponse["reveal"];
 
 const PLACEHOLDER_HEADER: RevealHeader = {
+  winner: "A",
   reviewA: {
     reviewId: "rev-a",
     systemSlug: "gpt-5-mini",
     systemName: "GPT-5-mini",
-    eloBefore: 1100,
-    eloAfter: 1112,
     btBefore: 1094.2,
     btAfter: 1101.7,
   },
@@ -43,20 +35,17 @@ const PLACEHOLDER_HEADER: RevealHeader = {
     reviewId: "rev-b",
     systemSlug: "gemini-2.5-flash",
     systemName: "Gemini 2.5 Flash",
-    eloBefore: 1080,
-    eloAfter: 1068,
     btBefore: 1071.5,
     btAfter: 1064.3,
   },
 };
 
 const ERROR_HEADER: RevealHeader = {
+  winner: "TIE",
   reviewA: {
     reviewId: "",
     systemSlug: "error",
     systemName: "Error",
-    eloBefore: 0,
-    eloAfter: 0,
     btBefore: null,
     btAfter: null,
   },
@@ -64,8 +53,6 @@ const ERROR_HEADER: RevealHeader = {
     reviewId: "",
     systemSlug: "error",
     systemName: "Error",
-    eloBefore: 0,
-    eloAfter: 0,
     btBefore: null,
     btAfter: null,
   },
@@ -118,11 +105,25 @@ export function RevealPage() {
 
   const usingPlaceholder = !params.get("state");
   const detail = revealQuery.data;
-  // Arena pairs are never judged and come back PENDING. Rather than render
-  // an empty panel explaining its own absence, the whole judge section is
-  // withheld until we know the pair was actually judged — which also means
-  // it never flashes in during load, and never appears at all on the arena.
-  const judged = !!detail && detail.judgeStatus !== "PENDING";
+  // The judge section is withheld unless there is something real to show.
+  //
+  // PENDING covers every "no judges" case: judging switched off, or an
+  // empty judge selection in admin settings, or an arena pair the panel
+  // never claimed. Those pairs are simply never judged, so rather than
+  // render a panel explaining its own absence — or worse, a radar of
+  // zeros — the section does not appear at all. It also cannot flash in
+  // during load.
+  //
+  // COMPLETE with no verdict is possible for rows predating judge-status
+  // tracking (the column defaulted to COMPLETE), and is treated the same
+  // way. RUNNING and FAILED still render, because "in progress" and
+  // "unavailable" are things the voter should be told.
+  const judged =
+    !!detail &&
+    detail.judgeStatus !== "PENDING" &&
+    (!!detail.judgeVerdict ||
+      detail.judgeStatus === "RUNNING" ||
+      detail.judgeStatus === "FAILED");
   const scoringPending = judged && detail.judgeStatus === "RUNNING";
   const panelSize = detail?.judgeVerdict?.judgesExpected ?? 0;
   // Guard: in prod, require state param (no mocking system IDs)
@@ -140,19 +141,20 @@ export function RevealPage() {
     );
   }
 
-  const radarData = VOTE_DIMENSIONS.map((d) => ({
-    dimension: DIMENSION_LABELS[d],
-    A: detail?.reviewA.judgeDimensions?.[d] ?? 0,
-    B: detail?.reviewB.judgeDimensions?.[d] ?? 0,
-  }));
+  // Only chart dimensions the panel actually scored. Defaulting a missing
+  // score to 0 would draw a collapsed shape that reads as "both reviews
+  // scored zero" rather than "not scored".
+  const hasDimensionScores =
+    !!detail?.reviewA.judgeDimensions || !!detail?.reviewB.judgeDimensions;
 
-  const aDelta = header.reviewA.eloAfter - header.reviewA.eloBefore;
+  // The API echoes the verdict back, so the headline never has to be
+  // inferred from rating movement (which can be null for an unplaced system).
   const winnerLabel =
-    Math.abs(aDelta) < 0.01
+    header.winner === "TIE"
       ? "Tie"
-      : aDelta > 0
-      ? `${header.reviewA.systemName} (A)`
-      : `${header.reviewB.systemName} (B)`;
+      : header.winner === "A"
+        ? `${header.reviewA.systemName} (A)`
+        : `${header.reviewB.systemName} (B)`;
 
   return (
     <div className="container py-8 space-y-6">
@@ -180,12 +182,12 @@ export function RevealPage() {
       </div>
 
       <p className="font-mono text-[11px] text-graphite">
-        Bradley-Terry (large) refits every comparison in the log and is what the{" "}
+        Ratings are Bradley-Terry: every comparison in the log is refit before
+        and after your vote, on the same 1000-point scale the{" "}
         <Link to="/leaderboard" className="underline underline-offset-2">
           standings
         </Link>{" "}
-        rank by; Elo (small) is the running per-vote update. Both sit on the same
-        1000-point scale, where 400 points is ten-to-one odds.
+        rank by, where 400 points is ten-to-one odds.
       </p>
 
       {judged && (
@@ -209,45 +211,19 @@ export function RevealPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[420px] font-mono text-xs">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#ddd8cc" />
-                <PolarAngleAxis dataKey="dimension" tick={{ fill: "#6d685f", fontSize: 11 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: "#6d685f", fontSize: 10 }} />
-                {/* Token palette only. A = ink, B = graphite — using the
-                    red for either side would mis-signal "worse" before
-                    the user has read anything. */}
-                <Radar
-                  name="Review A"
-                  dataKey="A"
-                  stroke="#191815"
-                  fill="#191815"
-                  fillOpacity={0.22}
-                />
-                <Radar
-                  name="Review B"
-                  dataKey="B"
-                  stroke="#6d685f"
-                  fill="#6d685f"
-                  fillOpacity={0.18}
-                />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-2 flex gap-5 font-mono text-[11px] text-graphite">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 bg-ink" /> Review A
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2.5 w-2.5 bg-graphite" /> Review B
-            </span>
-          </div>
+          {hasDimensionScores && (
+            <DimensionScores
+              a={detail.reviewA.judgeDimensions}
+              b={detail.reviewB.judgeDimensions}
+              nameA={header.reviewA.systemName}
+              nameB={header.reviewB.systemName}
+            />
+          )}
 
           {detail.judgeVerdict && (
             <div className="mt-5 border-t border-dashed border-rule2 pt-4">
               <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.1em] text-graphite">
-                Panel verdict (same A/B comparison you made)
+                Panel scores (same comparison you made)
               </div>
               <p className="mb-3 text-sm">
                 {detail.judgeVerdict.overall === "TIE" ? (
@@ -260,8 +236,6 @@ export function RevealPage() {
                     {detail.judgeVerdict.counts[detail.judgeVerdict.overall]} of{" "}
                     {detail.judgeVerdict.judgesReturned} judges preferred{" "}
                     <span className="font-medium">
-                      Review {detail.judgeVerdict.overall}
-                      {" — "}
                       {detail.judgeVerdict.overall === "A"
                         ? header.reviewA.systemName
                         : header.reviewB.systemName}
@@ -275,39 +249,13 @@ export function RevealPage() {
                   </span>
                 )}
               </p>
-              <ul className="mb-4 space-y-0.5 font-mono text-[11px]">
-                {detail.judgeVerdict.judges.map((j) => (
-                  <li key={j.judge} className="flex items-baseline gap-2">
-                    <span className="w-44 truncate text-graphite">{j.judgeName}</span>
-                    <span className={j.overall === "TIE" ? "text-graphite" : "font-medium"}>
-                      {j.overall === "TIE" ? "tie" : `Review ${j.overall}`}
-                    </span>
-                    {j.selfJudging && (
-                      <span className="text-graphite" title="This judge wrote one of the two reviews">
-                        · judged own review
-                      </span>
-                    )}
-                    {j.passesUsed < 2 && (
-                      <span className="text-graphite" title="Order-swap check unavailable">
-                        · single pass
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[11px] sm:grid-cols-4">
-                {VOTE_DIMENSIONS.map((d) => {
-                  const p = detail.judgeVerdict!.dimensions[d];
-                  return (
-                    <span key={d} className="flex items-baseline justify-between gap-2">
-                      <span className="truncate text-graphite">{DIMENSION_LABELS[d]}</span>
-                      <span className={p === "TIE" ? "text-graphite" : "font-medium"}>
-                        {p === "TIE" ? "=" : p}
-                      </span>
-                    </span>
-                  );
-                })}
-              </div>
+              <JudgeScores
+                judges={detail.judgeVerdict.judges}
+                nameA={header.reviewA.systemName}
+                nameB={header.reviewB.systemName}
+                slugA={header.reviewA.systemSlug}
+                slugB={header.reviewB.systemSlug}
+              />
             </div>
           )}
         </CardContent>
@@ -344,7 +292,6 @@ function RevealCard({
   reveal: RevealHeader["reviewA"];
   detail?: RevealSide;
 }) {
-  const delta = reveal.eloAfter - reveal.eloBefore;
   // Bradley-Terry has no incremental update, so these two numbers are the
   // board refit over every comparison before this vote and again after it —
   // already converted to the same 1000-point scale the standings use.
@@ -388,22 +335,6 @@ function RevealCard({
               </div>
             </div>
           )}
-          <div className="flex items-baseline gap-3">
-            <div className="font-mono text-base text-muted-foreground">
-              {Math.round(reveal.eloAfter)}
-            </div>
-            <div
-              className={`font-mono text-xs ${
-                delta >= 0 ? "text-up" : "text-red"
-              }`}
-            >
-              {delta >= 0 ? "+" : ""}
-              {delta.toFixed(1)} Elo
-            </div>
-            <div className="ml-auto font-mono text-xs text-muted-foreground">
-              was {Math.round(reveal.eloBefore)}
-            </div>
-          </div>
         </div>
 
         {detail?.judgeOverall != null && (
@@ -416,5 +347,199 @@ function RevealCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Per-judge scores ───────────────────────────────────────────────────────
+//
+// Six systems play two roles here: a system AUTHORS a review and also JUDGES
+// the pair. A grouped bar chart made that unreadable — the same name appeared
+// as a row (judge) and as a series (author) with nothing distinguishing them.
+//
+// This is a table instead: rows are judges, the two columns are the two
+// reviews. The "own" mark then lands on the single CELL where the judge is
+// scoring its own work, which is exactly what self-judging means and is far
+// clearer than flagging the whole row.
+//
+// Scores are each judge's 0-10 rating, not a preference. A judge can score
+// both reviews highly and still prefer one; the preference lives in the
+// pairwise verdict, not in the gap between these two numbers.
+
+function ScoreBar({
+  value,
+  own,
+  tone,
+  lead = false,
+}: {
+  value: number | null;
+  own: boolean;
+  tone: "a" | "b";
+  /** This side scored higher on this row — marked so the comparison does
+   *  not depend on eyeballing two bar lengths that differ by a few pixels. */
+  lead?: boolean;
+}) {
+  if (value === null) {
+    return <span className="text-graphite/60">not scored</span>;
+  }
+  const pct = Math.max(0, Math.min(100, (value / 10) * 100));
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative h-[9px] w-full min-w-[70px] border border-rule bg-paper2">
+        <div
+          className={`absolute bottom-0 left-0 top-0 ${tone === "a" ? "bg-ink" : "bg-graphite"}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span
+        className={`w-9 shrink-0 text-right tabular-nums ${lead ? "font-medium text-ink" : "text-graphite"}`}
+      >
+        {value.toFixed(1)}
+      </span>
+      {lead && (
+        <span className="shrink-0 text-[10px] text-ink" title="Higher score on this dimension">
+          ▲
+        </span>
+      )}
+      {own && (
+        <span
+          className="shrink-0 rounded-sm border border-rule px-1 text-[9.5px] uppercase tracking-[0.08em] text-graphite"
+          title="This judge wrote the review it is scoring here"
+        >
+          own
+        </span>
+      )}
+    </div>
+  );
+}
+
+function JudgeScores({
+  judges,
+  nameA,
+  nameB,
+  slugA,
+  slugB,
+}: {
+  judges: JudgeVerdict["judges"];
+  nameA: string;
+  nameB: string;
+  slugA: string;
+  slugB: string;
+}) {
+  const rows = judges.filter((j) => j.scoreA !== null || j.scoreB !== null);
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[12.5px]">
+        <thead>
+          <tr className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-graphite">
+            <th className="border-b border-rule2 pb-2 pr-4 text-left font-medium">Judge</th>
+            <th className="w-[34%] border-b border-rule2 px-3 pb-2 text-left font-medium">
+              <span className="mr-1.5 inline-block h-2 w-2 bg-ink align-middle" />
+              review by {nameA}
+            </th>
+            <th className="w-[34%] border-b border-rule2 px-3 pb-2 text-left font-medium">
+              <span className="mr-1.5 inline-block h-2 w-2 bg-graphite align-middle" />
+              review by {nameB}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="font-mono text-[11.5px]">
+          {rows.map((j) => (
+            <tr key={j.judge}>
+              <td className="whitespace-nowrap border-b border-rule py-2.5 pr-4 text-ink2">
+                {j.judgeName}
+                {j.passesUsed < 2 && (
+                  <span
+                    className="ml-1.5 text-graphite"
+                    title="Only one display order returned, so the order-swap check is unavailable for this judge"
+                  >
+                    ·1 pass
+                  </span>
+                )}
+              </td>
+              <td className="border-b border-rule px-3 py-2.5">
+                <ScoreBar value={j.scoreA} own={j.judge === slugA} tone="a" />
+              </td>
+              <td className="border-b border-rule px-3 py-2.5">
+                <ScoreBar value={j.scoreB} own={j.judge === slugB} tone="b" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2.5 max-w-prose text-[11px] leading-relaxed text-graphite">
+        Each judge scores both reviews out of 10.{" "}
+        <span className="uppercase tracking-[0.08em]">own</span> marks the cell
+        where a judge is scoring its own review — every system both writes
+        reviews and sits on the panel, so two of the judges always meet their
+        own work. A score is not a preference: a judge can rate both reviews
+        highly and still prefer one.
+      </p>
+    </div>
+  );
+}
+
+// ─── Per-dimension panel scores ─────────────────────────────────────────────
+//
+// This was a radar chart. Two overlaid translucent polygons in a two-tone
+// palette are unreadable when the systems score similarly — which is the
+// common case — and a reader cannot tell which shape is which review. The
+// same numbers as a table answer the actual question ("which review scored
+// better on this dimension, and by how much") directly.
+
+function DimensionScores({
+  a,
+  b,
+  nameA,
+  nameB,
+}: {
+  a: Record<string, number> | null;
+  b: Record<string, number> | null;
+  nameA: string;
+  nameB: string;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-[12.5px]">
+        <thead>
+          <tr className="font-mono text-[10.5px] uppercase tracking-[0.1em] text-graphite">
+            <th className="border-b border-rule2 pb-2 pr-4 text-left font-medium">Dimension</th>
+            <th className="w-[32%] border-b border-rule2 px-3 pb-2 text-left font-medium">
+              <span className="mr-1.5 inline-block h-2 w-2 bg-ink align-middle" />
+              review by {nameA}
+            </th>
+            <th className="w-[32%] border-b border-rule2 px-3 pb-2 text-left font-medium">
+              <span className="mr-1.5 inline-block h-2 w-2 bg-graphite align-middle" />
+              review by {nameB}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="font-mono text-[11.5px]">
+          {VOTE_DIMENSIONS.map((d) => {
+            const va = a?.[d] ?? null;
+            const vb = b?.[d] ?? null;
+            return (
+              <tr key={d}>
+                <td className="border-b border-rule py-2.5 pr-4 text-ink2">
+                  {DIMENSION_LABELS[d]}
+                </td>
+                <td className="border-b border-rule px-3 py-2.5">
+                  <ScoreBar value={va} own={false} tone="a" lead={va !== null && vb !== null && va > vb} />
+                </td>
+                <td className="border-b border-rule px-3 py-2.5">
+                  <ScoreBar value={vb} own={false} tone="b" lead={va !== null && vb !== null && vb > va} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-2.5 max-w-prose text-[11px] leading-relaxed text-graphite">
+        Mean score out of 10 across the judges that returned, per dimension.
+        The higher of the two is marked. These are the panel's scores, not
+        yours.
+      </p>
+    </div>
   );
 }
