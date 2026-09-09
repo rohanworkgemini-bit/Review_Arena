@@ -6,25 +6,19 @@ import { cn } from "@/lib/cn";
 import {
   VOTE_DIMENSIONS,
   DIMENSION_LABELS,
-  type RatingMethod,
   type VoteDimension,
 } from "@reviewarena/shared-types";
 
-const METHOD_LABELS: Record<RatingMethod, string> = {
-  BT: "Bradley-Terry",
-  ELO: "Elo",
-};
-
 export function LeaderboardPage() {
   const [dimension, setDimension] = useState<VoteDimension | null>(null);
-  // Bradley-Terry is the board we lead with: it is the maximum-likelihood fit
-  // to the whole comparison log, so it does not depend on the order votes
-  // happened to arrive in. Elo stays one click away.
-  const [method, setMethod] = useState<RatingMethod>("BT");
+  // Bradley-Terry is the only board: the maximum-likelihood fit to the whole
+  // comparison log, so it does not depend on the order votes arrived in.
+  // Online Elo is no longer computed live; the thesis analysis recomputes it
+  // offline from the vote log purely to compare against this ranking.
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["leaderboard", dimension, method],
-    queryFn: () => getLeaderboard(dimension ?? undefined, method),
+    queryKey: ["leaderboard", dimension],
+    queryFn: () => getLeaderboard(dimension ?? undefined),
     placeholderData: keepPreviousData,
     retry: false,
   });
@@ -63,9 +57,9 @@ export function LeaderboardPage() {
   }, [entries]);
 
   const currentLabel = dimension ? DIMENSION_LABELS[dimension] : "Overall";
-  // One line. The rating toggle already names the method, and the footnote
-  // under the table gives the parameters — saying it three times was most
-  // of the chrome around a six-row table.
+  // One line. The header names the method, and the footnote under the table
+  // gives the parameters — saying it three times was most of the chrome
+  // around a six-row table.
   const currentDescription = dimension
     ? `How the systems rank on ${DIMENSION_LABELS[dimension]}, using only the comparisons that rated it.`
     : "How the review systems rank when people compare them blind.";
@@ -100,19 +94,9 @@ export function LeaderboardPage() {
             <h1 className="text-[28px] font-semibold tracking-[-0.01em]">
               Standings — {currentLabel}
             </h1>
-            <div className="flex items-center gap-1">
-              <span className="mr-1 font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">
-                Rating
-              </span>
-              {(["BT", "ELO"] as const).map((m) => (
-                <MethodTab
-                  key={m}
-                  label={METHOD_LABELS[m]}
-                  active={method === m}
-                  onClick={() => setMethod(m)}
-                />
-              ))}
-            </div>
+            <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-graphite">
+              Bradley-Terry rating
+            </span>
           </div>
           <p className="mt-1 max-w-prose text-sm text-graphite">
             {currentDescription}
@@ -152,7 +136,7 @@ export function LeaderboardPage() {
                     <tr>
                       <Th className="text-left">Rank spread</Th>
                       <Th className="text-left">System</Th>
-                      <Th className="text-right">{method === "BT" ? "BT score" : "Elo"}</Th>
+                      <Th className="text-right">BT score</Th>
                       <Th className="hidden w-[30%] pl-5 text-left md:table-cell">95% CI</Th>
                       <Th className="text-right">Votes</Th>
                     </tr>
@@ -221,28 +205,17 @@ export function LeaderboardPage() {
                   </tbody>
                 </table>
                 <p className="mt-4 font-mono text-[11px] text-graphite">
-                  {method === "BT" ? (
-                    <>
-                      Bradley-Terry maximum likelihood ·{" "}
-                      {data?.anchor === "BASELINE" && baselineSlug
-                        ? `${baselineSlug} pinned at 1000`
-                        : "mean-centred at 1000"}{" "}
-                      · 95% intervals from 100 bootstrap resamples
-                    </>
-                  ) : (
-                    <>
-                      Elo initialised at 1000 · online Elo (K=4, full-history replay) ·
-                      intervals from 100 bootstrap resamples · overlapping intervals
-                      widen the rank spread
-                    </>
-                  )}
+                  Bradley-Terry maximum likelihood ·{" "}
+                  {data?.anchor === "BASELINE" && baselineSlug
+                    ? `${baselineSlug} pinned at 1000`
+                    : "mean-centred at 1000"}{" "}
+                  · 95% intervals from 100 bootstrap resamples · overlapping
+                  intervals widen the rank spread
                 </p>
                 {data && data.unranked.length > 0 && (
                   <p className="mt-1 font-mono text-[11px] text-graphite">
                     Not yet ranked: {data.unranked.map((u) => u.systemName).join(", ")}
-                    {method === "BT"
-                      ? " — too few comparisons to place them yet."
-                      : " — no votes on this board yet."}
+                    {" — too few comparisons to place them yet."}
                   </p>
                 )}
               </>
@@ -285,32 +258,6 @@ function CategoryRow({
         active
           ? "border-red text-red"
           : "border-transparent text-graphite hover:bg-paper2 hover:text-ink",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function MethodTab({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "border px-2.5 py-1 font-mono text-[11.5px] tracking-[0.02em] transition-colors",
-        active
-          ? "border-red text-red"
-          : "border-rule text-graphite hover:bg-paper2 hover:text-ink",
       )}
     >
       {label}

@@ -268,7 +268,7 @@ export function ComparisonPage() {
   });
 
   // Placeholder gating: in DEV we show mock data when no pair is loaded;
-  // in PROD we never render mock (would skew Elo). PLACEHOLDER_PAIR is
+  // in PROD we never render mock (would skew the ratings). PLACEHOLDER_PAIR is
   // ALWAYS the fallback for `pair` so the downstream hooks (useMutation,
   // useReviewStream) always get a defined value with the right shape —
   // this is purely a Rules-of-Hooks safety measure. In prod when there's

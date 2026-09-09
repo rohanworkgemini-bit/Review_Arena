@@ -6,7 +6,6 @@ import type {
   SubmitVoteRequest,
   SubmitVoteResponse,
   LeaderboardResponse,
-  RatingMethod,
   UploadPaperResponse,
   VoteDimension,
 } from "@reviewarena/shared-types";
@@ -150,14 +149,11 @@ export async function getSession(): Promise<{ sessionId: string }> {
   return jsonOrThrow<{ sessionId: string }>(res);
 }
 
-export async function getLeaderboard(
-  dimension?: string,
-  method?: RatingMethod,
-): Promise<LeaderboardResponse> {
+export async function getLeaderboard(dimension?: string): Promise<LeaderboardResponse> {
+  // Bradley-Terry is the only board the API serves; there is no method
+  // parameter any more.
   const url = new URL(`${BASE}/leaderboard`, window.location.origin);
   if (dimension) url.searchParams.set("dimension", dimension);
-  // Omitted => the API's default board, Bradley-Terry.
-  if (method) url.searchParams.set("method", method);
   const res = await fetch(url.toString(), { credentials: "include" });
   return jsonOrThrow<LeaderboardResponse>(res);
 }

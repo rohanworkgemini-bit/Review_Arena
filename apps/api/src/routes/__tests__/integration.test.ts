@@ -259,12 +259,13 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       });
     });
 
-    it("should compute Elo snapshot after vote", () => {
+    it("should compute a Bradley-Terry snapshot after vote", () => {
       // After vote persists, snapshotLeaderboard() runs:
       // 1. Load all COMPLETED votes (B1 fairness filter)
-      // 2. Compute full-history Elo (FastChat port, K=4)
+      // 2. Fit Bradley-Terry over the full history (FastChat port, MM fixed point)
       // 3. Bootstrap CI (100 resamples, 2.5/97.5 percentile)
-      // 4. Insert elo_snapshots row
+      // 4. Insert BT rows into elo_snapshots (the table name is historical;
+      //    online Elo is no longer computed at runtime)
 
       const snapshot = {
         reviewSystemId: createId(),
@@ -281,8 +282,8 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       expect(snapshot.voteCount).toBeGreaterThan(0);
     });
 
-    it("should exclude non-COMPLETED reviews from Elo (B1)", () => {
-      // Fairness control: only COMPLETED reviews counted in Elo
+    it("should exclude non-COMPLETED reviews from the ratings (B1)", () => {
+      // Fairness control: only COMPLETED reviews counted in the ratings
       // FAILED/GENERATING/PENDING excluded (infra failure, not quality)
       const validStatuses = ["COMPLETED"] as const;
       const excludedStatuses = ["FAILED", "GENERATING", "PENDING"] as const;
@@ -293,7 +294,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       });
     });
 
-    it("should exclude only judge_status FAILED from Elo (panel rule)", () => {
+    it("should exclude only judge_status FAILED from the ratings (panel rule)", () => {
       // FAILED = no judge-panel member scored the pair. PARTIAL and PENDING
       // (arena papers are never judged) still count toward the board.
       const countedStatuses = ["PENDING", "COMPLETE", "PARTIAL"] as const;
@@ -310,12 +311,11 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       const voteResponse = {
         voteId: createId(),
         reveal: {
+          winner: "A",
           reviewA: {
             reviewId: reviewAId,
             systemSlug: "gpt-5",
             systemName: "GPT-5 (zero-shot)",
-            eloBefore: 1000,
-            eloAfter: 1008,
             btBefore: 1002.4,
             btAfter: 1009.1,
           },
@@ -323,8 +323,6 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
             reviewId: reviewBId,
             systemSlug: "claude-opus-4-8",
             systemName: "Claude Opus 4.8 (zero-shot)",
-            eloBefore: 995,
-            eloAfter: 987,
             btBefore: 993.6,
             btAfter: 986.9,
           },
@@ -336,12 +334,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
 
       if (result.success) {
         expect(result.data.voteId).toBeTruthy();
-        expect(result.data.reveal.reviewA.eloAfter).toBeGreaterThan(
-          result.data.reveal.reviewA.eloBefore,
-        );
-        expect(result.data.reveal.reviewB.eloAfter).toBeLessThan(
-          result.data.reveal.reviewB.eloBefore,
-        );
+        expect(result.data.reveal.winner).toBe("A");
         // BT is refit rather than nudged, but a win still has to move the
         // winner up and the loser down.
         expect(result.data.reveal.reviewA.btAfter!).toBeGreaterThan(
@@ -359,12 +352,11 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       const voteResponse = {
         voteId: createId(),
         reveal: {
+          winner: "A",
           reviewA: {
             reviewId: reviewAId,
             systemSlug: "brand-new-system",
             systemName: "Brand New System",
-            eloBefore: 1000,
-            eloAfter: 1004,
             btBefore: null,
             btAfter: null,
           },
@@ -372,8 +364,6 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
             reviewId: reviewBId,
             systemSlug: "claude-opus-4-8",
             systemName: "Claude Opus 4.8 (zero-shot)",
-            eloBefore: 995,
-            eloAfter: 991,
             btBefore: 993.6,
             btAfter: 993.6,
           },
@@ -382,27 +372,75 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       expect(SubmitVoteResponseSchema.safeParse(voteResponse).success).toBe(true);
     });
 
-    it("should show delta as incremental update (not full-history Elo)", () => {
-      // The reveal screen shows incremental delta (fast to compute),
-      // not the true full-history Elo (which is on the leaderboard).
-      // This is a UX hint; the leaderboard always uses full-history.
-
-      const reveal = {
-        reviewA: { eloBefore: 1000, eloAfter: 1008 }, // delta
-        reviewB: { eloBefore: 995, eloAfter: 987 },
+    it("carries the rater's verdict so a tie needs no rating movement to display", () => {
+      // The reveal headline used to be inferred from an Elo delta; with Elo
+      // gone from the runtime the API echoes the winner explicitly, which
+      // also covers the case where BT cannot place either system yet.
+      const voteResponse = {
+        voteId: createId(),
+        reveal: {
+          winner: "TIE",
+          reviewA: {
+            reviewId: reviewAId,
+            systemSlug: "gpt-5",
+            systemName: "GPT-5 (zero-shot)",
+            btBefore: null,
+            btAfter: null,
+          },
+          reviewB: {
+            reviewId: reviewBId,
+            systemSlug: "claude-opus-4-8",
+            systemName: "Claude Opus 4.8 (zero-shot)",
+            btBefore: null,
+            btAfter: null,
+          },
+        },
       };
+      const result = SubmitVoteResponseSchema.safeParse(voteResponse);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.reveal.winner).toBe("TIE");
 
-      const deltaA = reveal.reviewA.eloAfter - reveal.reviewA.eloBefore;
-      const deltaB = reveal.reviewB.eloAfter - reveal.reviewB.eloBefore;
+      // Elo fields are gone from the contract entirely.
+      const withElo = {
+        ...voteResponse,
+        reveal: {
+          ...voteResponse.reveal,
+          reviewA: { ...voteResponse.reveal.reviewA, eloBefore: 1000, eloAfter: 1004 },
+        },
+      };
+      const parsed = SubmitVoteResponseSchema.safeParse(withElo);
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect("eloBefore" in parsed.data.reveal.reviewA).toBe(false);
+      }
+    });
 
-      expect(deltaA).toBe(8);
-      expect(deltaB).toBe(-8);
-      // Deltas should roughly sum to zero (K=4, so ±4 typical)
+    it("rejects a reveal payload without a winner", () => {
+      const noWinner = {
+        voteId: createId(),
+        reveal: {
+          reviewA: {
+            reviewId: reviewAId,
+            systemSlug: "gpt-5",
+            systemName: "GPT-5 (zero-shot)",
+            btBefore: 1002.4,
+            btAfter: 1009.1,
+          },
+          reviewB: {
+            reviewId: reviewBId,
+            systemSlug: "claude-opus-4-8",
+            systemName: "Claude Opus 4.8 (zero-shot)",
+            btBefore: 993.6,
+            btAfter: 986.9,
+          },
+        },
+      };
+      expect(SubmitVoteResponseSchema.safeParse(noWinner).success).toBe(false);
     });
   });
 
   describe("8. Leaderboard Consistency", () => {
-    it("should reflect new Elo in leaderboard after vote", () => {
+    it("should reflect the new rating in the leaderboard after vote", () => {
       const leaderboardEntry = {
         rank: 1,
         systemSlug: "gpt-5",
@@ -430,9 +468,9 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
   });
 
   describe("9. Dimension Leaderboards", () => {
-    it("should compute per-dimension Elo independently", () => {
+    it("should compute per-dimension ratings independently", () => {
       // Each dimension (CONTRIBUTION_ACCURACY, CRITIQUE_CLARITY, etc.) has its own
-      // battle history and separate Elo snapshot.
+      // battle history and separate Bradley-Terry snapshot.
 
       const dimensionSnapshots = [
         { dimension: "CONTRIBUTION_ACCURACY", rating: 1030, voteCount: 5 },

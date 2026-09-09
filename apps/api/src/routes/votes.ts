@@ -14,15 +14,7 @@ import {
   votes,
 } from "../db/schema.js";
 import { verifyPairToken } from "./pair.js";
-import {
-  computeElo,
-  bootstrapEloCI,
-  incrementalEloUpdate,
-  DEFAULT_ELO,
-  type Battle,
-  type BootstrapInterval,
-  type Outcome,
-} from "../elo/elo.js";
+import type { Battle, BootstrapInterval, Outcome } from "../elo/elo.js";
 import { computeBT, bootstrapBTCI } from "../elo/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
@@ -32,8 +24,8 @@ import { invalidateLeaderboardCache } from "./leaderboard.js";
 // Any constant int8 works; 0xE10E10 = "eloelo" mnemonic, no clash.
 const ELO_WRITER_LOCK = 0xe10e10;
 
-// Resamples per snapshot, shared by both rating systems so their intervals
-// are comparable. FastChat uses 100 for the public board.
+// Resamples per Bradley-Terry snapshot. FastChat uses 100 for the public
+// board. (Online Elo is no longer computed here — see snapshotLeaderboard.)
 const BOOTSTRAP_ROUNDS = 100;
 
 /** Detect Postgres unique-violation errors thrown through node-postgres /
@@ -99,7 +91,7 @@ export function votesRouter(config: Config): Router {
       const outcome: Outcome = body.winner === "A" ? 1 : body.winner === "B" ? 0 : 0.5;
 
       // Quality flagging: votes with decision time < 3s flagged for potential
-      // botting. Flagged votes recorded but excluded from Elo (fairness B4).
+      // botting. Flagged votes recorded but excluded from the ratings (B4).
       const DECISION_TIME_FLOOR_MS = 3000;
       const qualityFlagged = (body.decisionMs ?? Infinity) < DECISION_TIME_FLOOR_MS;
       if (qualityFlagged) {
@@ -109,24 +101,15 @@ export function votesRouter(config: Config): Router {
         );
       }
 
-      // eloBefore on the pre-vote history; eloAfter via incremental update
-      // for the reveal screen's delta.
-      const beforeBattles = await loadBattles(db);
-      const beforeRatings = computeElo(beforeBattles);
-      const ratingABefore = beforeRatings.get(reviewA.reviewSystem.slug) ?? DEFAULT_ELO.INIT_RATING;
-      const ratingBBefore = beforeRatings.get(reviewB.reviewSystem.slug) ?? DEFAULT_ELO.INIT_RATING;
-      const { ratingA: ratingAAfter, ratingB: ratingBAfter } = incrementalEloUpdate(
-        ratingABefore,
-        ratingBBefore,
-        outcome,
-      );
-
-      // BT has no incremental update — it refits from the whole log — so the
-      // reveal delta is a genuine before/after refit rather than Elo's
-      // one-battle approximation. Both are point MLEs, which drift a little
-      // from the bootstrap medians the leaderboard stores; same caveat that
-      // already applies to the Elo numbers here.
+      // The reveal's before/after is a genuine Bradley-Terry refit on the
+      // pre-vote log and again with this vote appended — BT has no
+      // incremental update. (Online Elo, which used to supply a one-battle
+      // approximation here, is no longer computed at runtime; the thesis
+      // analysis replays it offline to compare against BT.) Both fits are
+      // point MLEs, which drift a little from the bootstrap medians the
+      // leaderboard stores.
       //
+      const beforeBattles = await loadBattles(db);
       // The battle only enters the "after" fit if it would survive
       // loadBattles' filters, so a flagged or failed comparison correctly
       // shows no movement.
@@ -156,12 +139,10 @@ export function votesRouter(config: Config): Router {
         {
           votePayload: { winner: body.winner, decisionMs: body.decisionMs },
           systems: { A: reviewA.reviewSystem.slug, B: reviewB.reviewSystem.slug },
+          btBeforeA,
+          btBeforeB,
           btAfterA,
           btAfterB,
-          eloBeforeA: ratingABefore,
-          eloBeforeB: ratingBBefore,
-          eloAfterA: ratingAAfter,
-          eloAfterB: ratingBAfter,
           battleCount: beforeBattles.length,
         },
         "vote_submitted: before snapshot",
@@ -231,12 +212,13 @@ export function votesRouter(config: Config): Router {
             voteId: existing?.id ?? null,
             reveal: existing
               ? {
+                  // The verdict already on record, not the retried body —
+                  // they should agree, but the stored one is the truth.
+                  winner: existing.winner,
                   reviewA: {
                     reviewId: reviewA.id,
                     systemSlug: reviewA.reviewSystem.slug,
                     systemName: reviewA.reviewSystem.name,
-                    eloBefore: ratingABefore,
-                    eloAfter: ratingAAfter,
                     btBefore: btBeforeA,
                     btAfter: btAfterA,
                   },
@@ -244,8 +226,6 @@ export function votesRouter(config: Config): Router {
                     reviewId: reviewB.id,
                     systemSlug: reviewB.reviewSystem.slug,
                     systemName: reviewB.reviewSystem.name,
-                    eloBefore: ratingBBefore,
-                    eloAfter: ratingBAfter,
                     btBefore: btBeforeB,
                     btAfter: btAfterB,
                   },
@@ -264,12 +244,11 @@ export function votesRouter(config: Config): Router {
       res.status(201).json({
         voteId,
         reveal: {
+          winner: body.winner,
           reviewA: {
             reviewId: reviewA.id,
             systemSlug: reviewA.reviewSystem.slug,
             systemName: reviewA.reviewSystem.name,
-            eloBefore: ratingABefore,
-            eloAfter: ratingAAfter,
             btBefore: btBeforeA,
             btAfter: btAfterA,
           },
@@ -277,8 +256,6 @@ export function votesRouter(config: Config): Router {
             reviewId: reviewB.id,
             systemSlug: reviewB.reviewSystem.slug,
             systemName: reviewB.reviewSystem.name,
-            eloBefore: ratingBBefore,
-            eloAfter: ratingBAfter,
             btBefore: btBeforeB,
             btAfter: btAfterB,
           },
@@ -308,7 +285,7 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
   });
   // FAIRNESS B1 — a comparison where either side did not COMPLETE is an
   // infra failure (cold-start, loop, empty stream), not low review
-  // quality. Exclude those from the quality Elo so the leaderboard ranks
+  // quality. Exclude those from the ratings so the leaderboard ranks
   // reviewing, not uptime. (Reliability is reported separately.)
   // Also exclude judge_status FAILED (no panel member scored the pair) so a
   // silent judge failure can't corrupt the human-vs-judge analysis. PARTIAL
@@ -418,9 +395,10 @@ export async function snapshotLeaderboard(
 
   if (battles.length === 0) return;
 
-  // Both systems, same battle set, same number of resamples — so the two
-  // boards are always reading the same evidence and can be compared directly.
-  const eloCI = bootstrapEloCI(battles, BOOTSTRAP_ROUNDS);
+  // Bradley-Terry only. Online Elo rows are no longer written: the thesis
+  // analysis recomputes Elo offline from the vote log to compare against BT,
+  // and rows written under method=ELO before this change stay in the table
+  // unread.
   const btCI = bootstrapBTCI(battles, BOOTSTRAP_ROUNDS, { baselineSlug });
   // BT is anchored on the baseline only where the baseline actually appears
   // on this board; sparse per-dimension boards fall back to mean-centring.
@@ -431,7 +409,7 @@ export async function snapshotLeaderboard(
 
   const toRows = (
     ci: Map<string, BootstrapInterval>,
-    method: "ELO" | "BT",
+    method: "BT",
     anchor: string | null,
   ) =>
     [...ci.entries()]
@@ -453,9 +431,9 @@ export async function snapshotLeaderboard(
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
   // Systems BT could not place (outside the connected component) simply get
-  // no BT row — the leaderboard reports them as unranked rather than
-  // inventing a number for them.
-  const rows = [...toRows(eloCI, "ELO", null), ...toRows(btCI, "BT", btAnchor)];
+  // no row — the leaderboard reports them as unranked rather than inventing
+  // a number for them.
+  const rows = toRows(btCI, "BT", btAnchor);
 
   if (rows.length > 0) await executor.insert(eloSnapshots).values(rows);
 }

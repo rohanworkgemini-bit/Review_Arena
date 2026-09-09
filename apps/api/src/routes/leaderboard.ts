@@ -1,10 +1,16 @@
 import { Router } from "express";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { RatingMethodSchema, VoteDimensionSchema } from "@reviewarena/shared-types";
+import { VoteDimensionSchema } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
 import { eloSnapshots, papers, reviewSystems, votes } from "../db/schema.js";
 import { LeaderboardResponseSchema } from "./schemas.js";
 import type { Config } from "../config.js";
+
+// The only board served. Online Elo rows are no longer written (see
+// votes.ts snapshotLeaderboard); rows from before that change still sit in
+// elo_snapshots under method=ELO and are simply never read here. The thesis
+// analysis recomputes Elo offline from the vote log to compare against BT.
+const METHOD = "BT" as const;
 
 // In-memory cache for leaderboard results. Invalidated on each vote.
 // Key: "<method>:<overall | dimension>", Value: { result, expiresAt }
@@ -27,9 +33,7 @@ export function invalidateLeaderboardCache(dimension: string | null = null): voi
     // Invalidate all caches on vote
     leaderboardCache.clear();
   } else {
-    for (const method of RatingMethodSchema.options) {
-      leaderboardCache.delete(getCacheKey(method, dimension));
-    }
+    leaderboardCache.delete(getCacheKey(METHOD, dimension));
   }
 }
 
@@ -40,12 +44,9 @@ export function leaderboardRouter(config: Config): Router {
     try {
       const dimParse = VoteDimensionSchema.safeParse(req.query.dimension);
       const dimension = dimParse.success ? dimParse.data : null;
-      // ?method=bt|elo, case-insensitive. Bradley-Terry is the default board:
-      // it is order-independent and it is what LMArena reports publicly.
-      const methodParse = RatingMethodSchema.safeParse(
-        String(req.query.method ?? "").toUpperCase(),
-      );
-      const method = methodParse.success ? methodParse.data : "BT";
+      // Bradley-Terry only: order-independent, and what LMArena reports
+      // publicly. A legacy ?method= query parameter is ignored.
+      const method = METHOD;
       const cacheKey = getCacheKey(method, dimension);
 
       // Check cache first
@@ -89,13 +90,13 @@ export function leaderboardRouter(config: Config): Router {
         }));
 
       // Every BT row on a board shares one anchoring rule, so the first row
-      // speaks for the board. Elo rows carry none.
-      const anchor = method === "BT" ? (latest[0]?.anchor ?? null) : null;
+      // speaks for the board.
+      const anchor = latest[0]?.anchor ?? null;
       const anchorParse = LeaderboardResponseSchema.shape.anchor.safeParse(anchor);
 
-      // Enabled systems with no row on this board. On BT that is usually the
-      // connectivity guard (too few comparisons to place them against the
-      // field); on either board it also covers systems with no votes at all.
+      // Enabled systems with no row on this board: usually the connectivity
+      // guard (too few comparisons to place them against the field), and
+      // systems with no votes at all.
       const ranked = new Set(entries.map((e) => e.systemSlug));
       const enabled = await db
         .select({ slug: reviewSystems.slug, name: reviewSystems.name })

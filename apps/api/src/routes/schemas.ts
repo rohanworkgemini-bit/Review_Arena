@@ -26,7 +26,7 @@ export const LeaderboardResponseSchema = z.object({
   dimension: z.string().nullable(),
   // Kept in sync with LeaderboardResponseSchema in
   // packages/shared-types/src/api.ts — that copy is what the web app parses.
-  method: z.enum(["BT", "ELO"]),
+  method: z.enum(["BT"]),
   totalPapers: z.number().int().nonnegative(),
   totalVotes: z.number().int().nonnegative(),
   entries: z.array(LeaderboardEntrySchema),

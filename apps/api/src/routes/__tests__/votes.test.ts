@@ -160,9 +160,9 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
 
 describe("Vote Battle Inclusion Filters", () => {
   // FAIRNESS B1: only COMPLETED reviews with COMPLETE judge status
-  // should be included in Elo computation.
+  // should be included in the rating computation.
 
-  it("should exclude non-COMPLETED reviews from Elo", () => {
+  it("should exclude non-COMPLETED reviews from the ratings", () => {
     const battle1 = {
       a: "system-a",
       b: "system-b",
@@ -175,7 +175,7 @@ describe("Vote Battle Inclusion Filters", () => {
     expect(["COMPLETED", "FAILED", "PENDING"]).not.toContain("GENERATING");
   });
 
-  it("should exclude only judge_status FAILED from Elo (panel rule)", () => {
+  it("should exclude only judge_status FAILED from the ratings (panel rule)", () => {
     const statuses = ["PENDING", "COMPLETE", "PARTIAL", "FAILED"] as const;
 
     // Mirrors loadBattles() in votes.ts: FAILED = no panel member scored
