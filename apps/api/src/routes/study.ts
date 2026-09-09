@@ -1,7 +1,7 @@
 /**
  * Controlled-study routes (/study/*).
  *
- * The arena's adaptive sampler is replaced by the preregistered design in
+ * The arena's uniform sampler is replaced by the preregistered design in
  * src/study/rotation.ts: 20 participants × 2 papers × 3 disjoint pairs,
  * every one of the 15 system pairs measured exactly 8 times. Participants
  * authenticate with a pre-assigned secret code (capability token, no PII).

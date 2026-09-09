@@ -22,14 +22,15 @@ TU Darmstadt.**
    Actionability, Constructiveness, Objectivity, Relevance,
    Technical Terms.
 5. Votes update an overall and per-dimension ranking with bootstrapped
-   95% CIs (verbatim FastChat port). Two rating systems are computed on
-   every vote and stored side by side: **Bradley-Terry** (maximum
-   likelihood over the whole comparison log — the default board, and what
-   LMArena publishes) and **online Elo** (order-dependent, incremental).
-   The leaderboard has a toggle; BT leads.
-6. The reveal screen shows which system produced A and B, both ratings
-   before/after on the same 1000-point scale, and a radar of LLM-judge
-   dimension scores.
+   95% CIs (verbatim FastChat port). The rating is **Bradley-Terry**:
+   maximum likelihood over the whole comparison log, order-independent,
+   and what LMArena publishes. Online Elo is *not* computed at runtime —
+   `src/elo/elo.ts` is kept only so the thesis analysis
+   (`src/thesis-analysis.ts`) can replay the vote log offline and compare
+   Elo's order-dependent ranking against BT's.
+6. The reveal screen shows which system produced A and B, the
+   Bradley-Terry rating of each before/after the vote on the same
+   1000-point scale, and a radar of LLM-judge dimension scores.
 
 ## Live review systems
 
@@ -317,14 +318,16 @@ parsed structure (jsonb) and review outputs are stored.
 Both rating systems are ported from
 [LMSYS FastChat](https://github.com/lm-sys/FastChat) (Apache 2.0),
 `fastchat/serve/monitor/rating_systems.py`. Constants are FastChat's
-defaults (K=4, BASE=10, SCALE=400, INIT=1000). The LMArena
-`get_battle_pair` weighted sampler is similarly ported to
-[apps/api/src/pair/select-pair.ts](apps/api/src/pair/select-pair.ts).
+defaults (K=4, BASE=10, SCALE=400, INIT=1000). LMArena's
+`get_battle_pair` weighted sampler is *not* used: with six systems and a
+120-comparison budget there is nothing for it to skip, so
+[apps/api/src/pair/select-pair.ts](apps/api/src/pair/select-pair.ts) draws
+uniformly over eligible pairs and keeps only its eligibility rules.
 
 - **Elo** — `compute_elo` / `compute_bootstrap_elo`, in
-  [apps/api/src/elo/elo.ts](apps/api/src/elo/elo.ts). Order-dependent and
-  incremental, which is what the pair sampler reads and what the reveal
-  screen's per-vote delta is.
+  [apps/api/src/elo/elo.ts](apps/api/src/elo/elo.ts). Order-dependent, and
+  no longer computed at runtime: kept so the thesis analysis can replay the
+  vote log and compare its ranking against Bradley-Terry's.
 - **Bradley-Terry** — `preprocess_for_bt` / `fit_bt` / `scale_and_offset`
   / `compute_bt` / `compute_bootstrap_bt`, in
   [apps/api/src/elo/bt.ts](apps/api/src/elo/bt.ts). This is the default
@@ -389,9 +392,9 @@ pnpm --filter @reviewarena/web typecheck
 - **Chandra (Datalab), not GROBID.** Chandra preserves equations +
   tables; GROBID's TEI XML lost both, on top of being a 6 GB Docker
   image. Hosted, so there is nothing to operate.
-- **LMArena pair selection** (was random) — Elo-aware weighted sample.
-- **Pre-select 2, then generate** (was fan-out to all enabled systems)
-  saves ~50% of API spend per paper.
+- **Pre-select 2, then generate** (was fan-out to all enabled systems) —
+  2 reviews per arena paper instead of one per enabled system, so the cost
+  of a paper no longer grows with the pool (2 of 6 today).
 - **SSE end-to-end streaming** — keeps the connection alive across
   multi-minute reasoning runs instead of one long blocking request.
 - **Frontier commercial systems only.** The open-weight specialists

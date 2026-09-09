@@ -411,11 +411,11 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         })
         .where(eq(papers.id, paperId))
         .returning();
-      // LMArena-style: pick exactly 2 systems via the weighted Elo-aware
-      // pair selector and precreate review rows. The browser opens SSE
+      // LMArena-style: pick exactly 2 systems with the uniform pair
+      // selector and precreate review rows. The browser opens SSE
       // streams to /reviews/stream/:reviewId which trigger the model
       // calls and forward tokens live.
-      const pairSlugs = await resolvePairSlugs();
+      const pairSlugs = await resolvePairSlugs(paperId);
       await orchestrator.precreateReviews(updated!, pairSlugs);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -455,7 +455,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         })
         .where(eq(papers.id, paperId))
         .returning();
-      const pairSlugs = await resolvePairSlugs();
+      const pairSlugs = await resolvePairSlugs(paperId);
       await orchestrator.precreateReviews(updated!, pairSlugs);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -467,17 +467,19 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
     }
   }
 
-  // Pick exactly 2 systems via the weighted Elo-aware LMArena pair
-  // selector — we only generate those 2, saving ~50% of GPU/API cost
-  // compared to fanning out to every enabled system.
-  async function resolvePairSlugs(): Promise<readonly string[]> {
+  // Pick exactly 2 systems, uniformly at random over eligible pairs — we
+  // only generate those 2, so an arena paper costs 2 review calls rather
+  // than one per enabled system (2 of 6 today), and that does not change
+  // as the pool grows. Study papers are the exception: they generate all
+  // six, because the rotation needs three disjoint pairs from one paper.
+  async function resolvePairSlugs(paperId: string): Promise<readonly string[]> {
     const pair = await selectUploadPair();
     if (!pair) {
       // Fewer than 2 enabled systems — let the orchestrator fan out to
       // whatever it finds (likely 0 or 1) so the failure surfaces
       // honestly as "no reviews generated".
       logger.warn(
-        { paperId: "<upload>" },
+        { paperId },
         "selectUploadPair returned null; orchestrator will use all enabled systems as fallback",
       );
       return [];

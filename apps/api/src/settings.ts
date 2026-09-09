@@ -12,6 +12,7 @@ import { appSettings } from "./db/schema.js";
  */
 
 export const JUDGE_ENABLED = "judge_enabled";
+export const JUDGE_MODELS = "judge_models";
 
 // The judge panel is read on every review completion, so an uncached read
 // would put a query on the hot path for a value that changes a handful of
@@ -69,6 +70,42 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 export async function isJudgeEnabled(): Promise<boolean> {
   if (String(process.env.JUDGE_ENABLED ?? "").toLowerCase() === "false") return false;
   return getSetting<boolean>(JUDGE_ENABLED, true);
+}
+
+/**
+ * Which systems sit on the judge panel for ARENA papers.
+ *
+ * `null` (the default, and what an absent setting means) is "every system
+ * on the preregistered panel" — the same six the study uses. An empty
+ * array is "none": arena pairs are then left unjudged, exactly as they
+ * were before arena judging existed. Anything else is the chosen subset,
+ * and unknown or disabled slugs are dropped when the panel is loaded.
+ *
+ * This setting deliberately does NOT apply to study papers. The study's
+ * panel is preregistered at six members, and a run with a partial panel
+ * would produce RQ2 data that cannot be compared with the rest — an
+ * unrecoverable loss, since the reviews cannot be re-judged after the
+ * participant has gone. Restricting the panel is therefore a lever for
+ * arena cost, not a lever on the experiment.
+ */
+export async function getJudgeModels(): Promise<string[] | null> {
+  const raw = await getSetting<unknown>(JUDGE_MODELS, null);
+  if (raw === null || raw === undefined) return null;
+  if (!Array.isArray(raw)) return null;
+  return raw.filter((s): s is string => typeof s === "string" && s.length > 0);
+}
+
+/**
+ * Remove a setting so the code-level default applies again.
+ *
+ * `app_settings.value` is NOT NULL, so "no value" cannot be represented by
+ * storing null — the row has to go. Callers that treat absence as a
+ * meaningful state (getJudgeModels: absent = the whole panel) use this
+ * rather than setSetting(key, null).
+ */
+export async function clearSetting(key: string): Promise<void> {
+  await db.delete(appSettings).where(eq(appSettings.key, key));
+  cache.delete(key);
 }
 
 /** Test seam — drops the memoised values so a change is seen immediately. */

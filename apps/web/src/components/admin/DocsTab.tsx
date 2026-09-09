@@ -152,7 +152,7 @@ export function DocsTab() {
               [
                 <strong>Arena</strong>,
                 "Anyone, from the public site",
-                "Adaptive sampler picks the pair",
+                "Uniform random over eligible pairs",
                 "No",
               ],
               [
@@ -325,11 +325,12 @@ export function DocsTab() {
             budget cannot afford.
           </p>
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-            This is deliberately <em>not</em> the arena's adaptive sampler. With
-            six systems there are only fifteen pairs, and 120 comparisons is a
-            census rather than a selection — adaptive sampling solves a problem
-            that does not exist at this scale, and would break the assumption
-            the confidence intervals rest on.
+            The arena draws its pairs uniformly at random for a related
+            reason: with six systems there are only fifteen pairs, and 120
+            comparisons is a census rather than a selection. Adaptive sampling
+            solves a problem that does not exist at this scale, and its
+            rating-dependent draw would need a correction in the estimator
+            that ours does not apply.
           </p>
         </CardContent>
       </Card>

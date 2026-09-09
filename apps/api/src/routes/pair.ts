@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { papers, reviews, reviewSystems, votes } from "../db/schema.js";
-import { selectPair, pairKey, type SystemForPairing } from "../pair/select-pair.js";
-import { computeElo, DEFAULT_ELO, type Battle } from "../elo/elo.js";
+import { selectPairUniform, pairKey, type SystemForPairing } from "../pair/select-pair.js";
 import type { Config } from "../config.js";
 
 // pairToken: HMAC over (paperId, reviewAId, reviewBId, sessionId, iat) so
@@ -183,18 +182,13 @@ export function pairRouter(config: Config): Router {
         // selection — silent recovery rather than 4xx.
       }
 
-      const currentRatings = await currentEloMap();
       const candidates: SystemForPairing[] = eligible.map((r) => ({
         systemId: r.reviewSystemId,
         reviewId: r.id,
         slug: r.reviewSystem.slug,
-        rating: currentRatings.get(r.reviewSystem.slug) ?? DEFAULT_ELO.INIT_RATING,
         sampleWeight: r.reviewSystem.sampleWeight,
-        boost: r.reviewSystem.boost,
         outage: r.reviewSystem.outage,
         anon: r.reviewSystem.anon,
-        battleTargets: r.reviewSystem.battleTargets,
-        battleStrictTargets: r.reviewSystem.battleStrictTargets,
       }));
 
       const seenVotes = await db.query.votes.findMany({
@@ -205,7 +199,9 @@ export function pairRouter(config: Config): Router {
         seenVotes.map((v) => pairKey(v.reviewA.reviewSystemId, v.reviewB.reviewSystemId)),
       );
 
-      const chosen = selectPair(candidates, { alreadySeenPairs: alreadySeen });
+      // Same sampler as the upload path; only matters for papers that
+      // carry more than two reviews.
+      const chosen = selectPairUniform(candidates, { alreadySeenPairs: alreadySeen });
       if (!chosen) {
         res.status(404).json({ error: "Exhausted", message: "No new pairs for this session." });
         return;
@@ -249,39 +245,4 @@ export function pairRouter(config: Config): Router {
   });
 
   return router;
-}
-
-// Pair selection reads ratings for weighting only — 5s staleness is
-// invisible there, and without this cache a classroom burst of /pair
-// requests would each rescan the full vote history and refit Elo on the
-// event loop.
-let eloMapCache: { at: number; map: Map<string, number> } | null = null;
-const ELO_MAP_TTL_MS = 5_000;
-
-async function currentEloMap(): Promise<Map<string, number>> {
-  if (eloMapCache && Date.now() - eloMapCache.at < ELO_MAP_TTL_MS) {
-    return eloMapCache.map;
-  }
-  const history = await db.query.votes.findMany({
-    orderBy: asc(votes.createdAt),
-    with: {
-      reviewA: { with: { reviewSystem: true } },
-      reviewB: { with: { reviewSystem: true } },
-    },
-  });
-  // FAIRNESS B1 — pairing ratings use only completed comparisons, matching
-  // the leaderboard's exclusion of infra failures.
-  const battles: Battle[] = history
-    .filter(
-      (v) =>
-        v.reviewA.status === "COMPLETED" && v.reviewB.status === "COMPLETED",
-    )
-    .map((v) => ({
-      a: v.reviewA.reviewSystem.slug,
-      b: v.reviewB.reviewSystem.slug,
-      outcome: v.winner === "A" ? 1 : v.winner === "B" ? 0 : 0.5,
-    }));
-  const map = computeElo(battles);
-  eloMapCache = { at: Date.now(), map };
-  return map;
 }

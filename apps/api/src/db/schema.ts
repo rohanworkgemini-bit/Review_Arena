@@ -204,16 +204,17 @@ export const reviewSystems = pgTable(
     adapterKey: text("adapter_key").notNull(),
     config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
     enabled: boolean("enabled").notNull().default(true),
-    // ─── LMArena-style pair-selection knobs ────────────────────────────────
-    // Mirror fastchat/serve/gradio_block_arena_anony.py:get_battle_pair so
-    // operators can steer sampling without code changes. See
-    // apps/api/src/pair/select-pair.ts for how each field is used.
+    // ─── Pair-selection eligibility ────────────────────────────────────────
+    // The sampler is a uniform draw over eligible pairs (select-pair.ts), so
+    // every field here decides whether a matchup is ALLOWED. There is
+    // deliberately no field that weights one allowed matchup above another:
+    // the weighting knobs this table used to carry (boost, battle_targets)
+    // belonged to the adaptive sampler and were dropped with it, as was the
+    // battle_strict_targets whitelist, which no system ever set.
     //
-    // Base weight for stage-1 pick. 1.0 is neutral; 0 disables the system.
+    // Positive = eligible; 0 disables the system. The magnitude is not read:
+    // a uniform draw has no weights to scale.
     sampleWeight: doublePrecision("sample_weight").notNull().default(1.0),
-    // Cold-start lever — 5× multiplier on sampleWeight. Flip on for newly-
-    // added systems until their voteCount stabilises, then flip back off.
-    boost: boolean("boost").notNull().default(false),
     // Temporarily exclude from pairing (e.g. adapter is rate-limited or
     // broken). Different from `enabled`: enabled=false stops *generation*;
     // outage=true keeps existing reviews queryable but skips them in pairs.
@@ -222,12 +223,6 @@ export const reviewSystems = pgTable(
     // Currently unused in our flow (all systems revealed on the reveal screen)
     // but kept for parity in case a future "stealth" model is added.
     anon: boolean("anon").notNull().default(false),
-    // Soft preference: slugs of rivals to up-weight when *this* system is
-    // picked first. Empty = no preference.
-    battleTargets: jsonb("battle_targets").$type<string[]>().notNull().default([]),
-    // Hard whitelist (regex strings, "*" treated as ".*"). If non-empty,
-    // rivals MUST match one of these patterns. Both sides are checked.
-    battleStrictTargets: jsonb("battle_strict_targets").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

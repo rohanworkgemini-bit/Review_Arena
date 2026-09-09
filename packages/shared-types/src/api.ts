@@ -113,15 +113,18 @@ export const SubmitVoteResponseSchema = z.object({
   // Reveal payload — sent in the same response so the UI can transition
   // straight to the reveal screen without a second round-trip.
   reveal: z.object({
+    // The verdict the rater just cast, echoed back so the reveal can name
+    // the preferred side without inferring it from rating movement.
+    winner: z.enum(["A", "B", "TIE"]),
     reviewA: z.object({
       reviewId: CuidSchema,
       systemSlug: z.string(),
       systemName: z.string(),
-      eloBefore: z.number(),
-      eloAfter: z.number(),
       // Bradley-Terry refit before and after this vote, on the same 1000-point
       // scale as the leaderboard. null when the system is not on the BT board
       // yet — too few comparisons to connect it to the rest of the field.
+      // (Online Elo is no longer computed at runtime; the thesis analysis
+      // recomputes it offline from the vote log to compare against BT.)
       btBefore: z.number().nullable(),
       btAfter: z.number().nullable(),
     }),
@@ -129,8 +132,6 @@ export const SubmitVoteResponseSchema = z.object({
       reviewId: CuidSchema,
       systemSlug: z.string(),
       systemName: z.string(),
-      eloBefore: z.number(),
-      eloAfter: z.number(),
       btBefore: z.number().nullable(),
       btAfter: z.number().nullable(),
     }),
@@ -203,10 +204,12 @@ export type RevealDetailResponse = z.infer<typeof RevealDetailResponseSchema>;
 
 // ─── GET /leaderboard ───────────────────────────────────────────────────────
 
-// Which rating system a board was computed with. BT (Bradley-Terry MLE) is
-// the default and what LMArena publishes; ELO is the online, order-dependent
-// system, kept as a second view.
-export const RatingMethodSchema = z.enum(["BT", "ELO"]);
+// Which rating system a board was computed with. Only Bradley-Terry — the
+// maximum-likelihood fit over the whole comparison log, what LMArena
+// publishes — is computed and served. Online Elo is no longer run at
+// runtime: the thesis analysis recomputes it offline from the vote log,
+// purely to compare its order-dependent ranking against BT's.
+export const RatingMethodSchema = z.enum(["BT"]);
 export type RatingMethod = z.infer<typeof RatingMethodSchema>;
 
 export const LeaderboardEntrySchema = z.object({
@@ -233,7 +236,7 @@ export const LeaderboardResponseSchema = z.object({
   // BT only. "BASELINE": baselineSlug is pinned to 1000, so the scale's
   // origin is fixed and boards stay comparable over time. "MEAN": that system
   // has not battled here, so this board is mean-centred on 1000 instead.
-  // null for the Elo board, which has no free constant to fix.
+  // null only when the board has no rows yet.
   anchor: z.enum(["BASELINE", "MEAN"]).nullable(),
   baselineSlug: z.string().nullable(),
   computedAt: z.string(),

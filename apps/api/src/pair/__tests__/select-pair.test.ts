@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { selectPair, pairKey, type SystemForPairing } from "../select-pair.js";
+import { selectPairUniform, pairKey, type SystemForPairing } from "../select-pair.js";
 
 function seededRng(seed: number): () => number {
   let s = seed >>> 0;
@@ -9,294 +9,125 @@ function seededRng(seed: number): () => number {
   };
 }
 
-const sys = (
-  id: string,
-  rating: number,
-  overrides: Partial<SystemForPairing> = {},
-): SystemForPairing => ({
+const sys = (id: string, overrides: Partial<SystemForPairing> = {}): SystemForPairing => ({
   systemId: id,
   reviewId: `rev-${id}`,
   slug: id,
-  rating,
   sampleWeight: 1.0,
-  boost: false,
   outage: false,
   anon: false,
-  battleTargets: [],
-  battleStrictTargets: [],
   ...overrides,
 });
 
-describe("pairKey", () => {
-  it("is order-independent", () => {
-    expect(pairKey("a", "b")).toBe(pairKey("b", "a"));
-  });
-});
+/** Empirical frequency of each unordered pair over N draws. */
+function pairFrequencies(
+  draw: (rng: () => number) => { reviewA: SystemForPairing; reviewB: SystemForPairing } | null,
+  n: number,
+  seed = 7,
+): Map<string, number> {
+  const rng = seededRng(seed);
+  const counts = new Map<string, number>();
+  for (let i = 0; i < n; i++) {
+    const p = draw(rng);
+    if (!p) continue;
+    const k = pairKey(p.reviewA.systemId, p.reviewB.systemId);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return new Map([...counts].map(([k, c]) => [k, c / n]));
+}
 
-describe("selectPair", () => {
+describe("selectPairUniform", () => {
   it("returns null with fewer than 2 candidates", () => {
-    expect(selectPair([])).toBeNull();
-    expect(selectPair([sys("a", 1000)])).toBeNull();
+    expect(selectPairUniform([])).toBeNull();
+    expect(selectPairUniform([sys("a")])).toBeNull();
   });
 
   it("returns the only available pair when there are exactly two systems", () => {
-    const result = selectPair([sys("a", 1000), sys("b", 1100)], {
-      rng: seededRng(1),
-    });
-    expect(result).not.toBeNull();
-    const ids = [result!.reviewA.systemId, result!.reviewB.systemId].sort();
-    expect(ids).toEqual(["a", "b"]);
+    const p = selectPairUniform([sys("a"), sys("b")], { rng: seededRng(1) });
+    expect(p).not.toBeNull();
+    expect(new Set([p!.reviewA.systemId, p!.reviewB.systemId])).toEqual(new Set(["a", "b"]));
   });
 
-  it("favours close-rated pairs over distant ones", () => {
-    const candidates = [sys("a", 1000), sys("b", 1010), sys("c", 2000)];
-    const counts = new Map<string, number>();
-    const rng = seededRng(123);
-    const N = 5000;
-    for (let i = 0; i < N; i++) {
-      const r = selectPair(candidates, { rng })!;
-      const k = pairKey(r.reviewA.systemId, r.reviewB.systemId);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    const ab = counts.get(pairKey("a", "b")) ?? 0;
-    const ac = counts.get(pairKey("a", "c")) ?? 0;
-    const bc = counts.get(pairKey("b", "c")) ?? 0;
-    expect(ab).toBeGreaterThan(ac);
-    expect(ab).toBeGreaterThan(bc);
-    expect(ac).toBeGreaterThan(0);
-    expect(bc).toBeGreaterThan(0);
+  // The defining property: every eligible matchup is equally likely. This is
+  // what lets the study treat its comparison counts as a fixed design rather
+  // than as an outcome of the sampler.
+  it("draws every eligible pair equally often", () => {
+    const four = [sys("a"), sys("b"), sys("c"), sys("d")];
+    const freq = pairFrequencies((rng) => selectPairUniform(four, { rng }), 6000);
+    expect(freq.size).toBe(6);
+    for (const f of freq.values()) expect(f).toBeGreaterThan(1 / 6 - 0.03);
+    for (const f of freq.values()) expect(f).toBeLessThan(1 / 6 + 0.03);
   });
 
-  it("downweights already-seen pairs for the same session", () => {
-    const candidates = [sys("a", 1000), sys("b", 1000), sys("c", 1000)];
-    const seen = new Set([pairKey("a", "b")]);
-    const rng = seededRng(99);
-    const N = 3000;
-    let abCount = 0;
-    let nonAb = 0;
-    for (let i = 0; i < N; i++) {
-      const r = selectPair(candidates, { alreadySeenPairs: seen, rng })!;
-      const k = pairKey(r.reviewA.systemId, r.reviewB.systemId);
-      if (k === pairKey("a", "b")) abCount++;
-      else nonAb++;
-    }
-    expect(abCount).toBeLessThan(nonAb);
+  it("stays uniform over six systems — the study's fifteen matchups", () => {
+    const six = ["a", "b", "c", "d", "e", "f"].map((s) => sys(s));
+    const freq = pairFrequencies((rng) => selectPairUniform(six, { rng }), 15000);
+    expect(freq.size).toBe(15);
+    for (const f of freq.values()) expect(f).toBeGreaterThan(1 / 15 - 0.02);
+    for (const f of freq.values()) expect(f).toBeLessThan(1 / 15 + 0.02);
+  });
+
+  it("keeps the eligibility rules: outage and sampleWeight=0 exclude a system", () => {
+    const out = [sys("a", { outage: true }), sys("b"), sys("c")];
+    const freq = pairFrequencies((rng) => selectPairUniform(out, { rng }), 500);
+    expect([...freq.keys()]).toEqual([pairKey("b", "c")]);
+
+    const off = [sys("a", { sampleWeight: 0 }), sys("b"), sys("c")];
+    const freq2 = pairFrequencies((rng) => selectPairUniform(off, { rng }), 500);
+    expect([...freq2.keys()]).toEqual([pairKey("b", "c")]);
+  });
+
+  it("treats sampleWeight as an off switch, not a weight", () => {
+    // A positive weight is a positive weight: 5 does not beat 1, because a
+    // uniform draw has nothing to scale.
+    const weighted = [sys("a", { sampleWeight: 5 }), sys("b"), sys("c"), sys("d")];
+    const freq = pairFrequencies((rng) => selectPairUniform(weighted, { rng }), 6000);
+    expect(freq.size).toBe(6);
+    for (const f of freq.values()) expect(f).toBeGreaterThan(1 / 6 - 0.03);
+    for (const f of freq.values()) expect(f).toBeLessThan(1 / 6 + 0.03);
+  });
+
+  it("returns null when nothing is eligible", () => {
+    expect(
+      selectPairUniform([sys("a", { outage: true }), sys("b", { outage: true })]),
+    ).toBeNull();
+  });
+
+  it("forbids anon-vs-anon pairs", () => {
+    const anon = [sys("a", { anon: true }), sys("b", { anon: true }), sys("c")];
+    const freq = pairFrequencies((rng) => selectPairUniform(anon, { rng }), 600);
+    expect(freq.has(pairKey("a", "b"))).toBe(false);
+    expect(freq.has(pairKey("a", "c"))).toBe(true);
+    expect(freq.has(pairKey("b", "c"))).toBe(true);
+  });
+
+  it("prefers unseen pairs, then falls back to all eligible pairs", () => {
+    const three = [sys("a"), sys("b"), sys("c")];
+    const seenTwo = new Set([pairKey("a", "b"), pairKey("a", "c")]);
+    const freq = pairFrequencies(
+      (rng) => selectPairUniform(three, { rng, alreadySeenPairs: seenTwo }),
+      300,
+    );
+    expect([...freq.keys()]).toEqual([pairKey("b", "c")]);
+
+    const seenAll = new Set([pairKey("a", "b"), pairKey("a", "c"), pairKey("b", "c")]);
+    const freq2 = pairFrequencies(
+      (rng) => selectPairUniform(three, { rng, alreadySeenPairs: seenAll }),
+      3000,
+    );
+    expect(freq2.size).toBe(3);
+    for (const f of freq2.values()) expect(f).toBeGreaterThan(1 / 3 - 0.04);
   });
 
   it("randomises A/B ordering (~50/50)", () => {
-    const candidates = [sys("a", 1000), sys("b", 1000)];
-    let aOnLeft = 0;
-    const N = 4000;
-    const rng = seededRng(2024);
-    for (let i = 0; i < N; i++) {
-      const r = selectPair(candidates, { rng })!;
-      if (r.reviewA.systemId === "a") aOnLeft++;
+    const rng = seededRng(3);
+    let aFirst = 0;
+    const n = 2000;
+    for (let i = 0; i < n; i++) {
+      const p = selectPairUniform([sys("a"), sys("b")], { rng })!;
+      if (p.reviewA.systemId === "a") aFirst++;
     }
-    expect(aOnLeft).toBeGreaterThan(1900);
-    expect(aOnLeft).toBeLessThan(2100);
-  });
-
-  it("never returns a pair where A and B are the same system", () => {
-    const candidates = [sys("a", 1000), sys("b", 1050), sys("c", 1100)];
-    const rng = seededRng(5);
-    for (let i = 0; i < 1000; i++) {
-      const r = selectPair(candidates, { rng })!;
-      expect(r.reviewA.systemId).not.toBe(r.reviewB.systemId);
-    }
-  });
-
-  describe("LMArena knobs", () => {
-    it("boost gives a cold-start system more first-pick exposure", () => {
-      // a is boosted, three others are not. With proximity multiplying both
-      // sides, equal ratings keep proximity uniform, so boost dominates
-      // the first-pick distribution.
-      const candidates = [
-        sys("a", 1000, { boost: true }),
-        sys("b", 1000),
-        sys("c", 1000),
-        sys("d", 1000),
-      ];
-      const rng = seededRng(11);
-      let aAppearances = 0;
-      const N = 4000;
-      for (let i = 0; i < N; i++) {
-        const r = selectPair(candidates, { rng })!;
-        if (r.reviewA.systemId === "a" || r.reviewB.systemId === "a") aAppearances++;
-      }
-      // Without boost, a appears in ~half the pairs (2/4 systems per pair).
-      // With 5× boost on stage-1, a appears noticeably more.
-      expect(aAppearances).toBeGreaterThan(N * 0.6);
-    });
-
-    it("outage excludes a system from pairs entirely", () => {
-      const candidates = [
-        sys("a", 1000),
-        sys("b", 1000),
-        sys("c", 1000, { outage: true }),
-      ];
-      const rng = seededRng(42);
-      for (let i = 0; i < 1000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        expect(r.reviewA.systemId).not.toBe("c");
-        expect(r.reviewB.systemId).not.toBe("c");
-      }
-    });
-
-    it("returns null when all systems are in outage", () => {
-      const candidates = [
-        sys("a", 1000, { outage: true }),
-        sys("b", 1000, { outage: true }),
-      ];
-      expect(selectPair(candidates, { rng: seededRng(1) })).toBeNull();
-    });
-
-    it("anon-vs-anon pairs are forbidden", () => {
-      const candidates = [
-        sys("a", 1000, { anon: true }),
-        sys("b", 1000, { anon: true }),
-        sys("c", 1000),
-      ];
-      const rng = seededRng(7);
-      for (let i = 0; i < 1000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        // c must always be one of the two.
-        expect(slugs.has("c")).toBe(true);
-      }
-    });
-
-    it("strict targets restrict rivals to the whitelist", () => {
-      // a only fights b (via strict target). Even though c is rated close
-      // to a, c is never picked when a is the chosen system.
-      const candidates = [
-        sys("a", 1000, { battleStrictTargets: ["b"] }),
-        sys("b", 1500),
-        sys("c", 1001),
-      ];
-      const rng = seededRng(17);
-      // Force "a always picked first" by zeroing everyone else's stage-1
-      // weight (impossible via outage which also blocks rival role, so use
-      // sampleWeight=0 — but then they can't be rivals either). Instead,
-      // just count: when a is in the pair, the *other* must be b.
-      for (let i = 0; i < 2000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        if (slugs.has("a")) {
-          expect(slugs.has("b")).toBe(true);
-          expect(slugs.has("c")).toBe(false);
-        }
-      }
-    });
-
-    it("strict-target wildcards match", () => {
-      const candidates = [
-        sys("a", 1000, { battleStrictTargets: ["gpt-*"] }),
-        sys("gpt-4", 1000),
-        sys("gemini-pro", 1000),
-      ];
-      const rng = seededRng(33);
-      for (let i = 0; i < 1000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        if (slugs.has("a")) {
-          expect(slugs.has("gpt-4")).toBe(true);
-          expect(slugs.has("gemini-pro")).toBe(false);
-        }
-      }
-    });
-
-    it("battleTargets boosts the listed rival over each other rival", () => {
-      // All four systems are equally rated. When a is picked first, b is
-      // in battleTargets. LMArena's "0.5 × total / |targets|" formula
-      // doesn't make targeted rivals dominate the *sum* of the others,
-      // but it does dominate *each* individual non-target — that's the
-      // property we actually want to assert.
-      const candidates = [
-        sys("a", 1000, { battleTargets: ["b"] }),
-        sys("b", 1000),
-        sys("c", 1000),
-        sys("d", 1000),
-      ];
-      const rng = seededRng(55);
-      const counts = { ab: 0, ac: 0, ad: 0 };
-      const N = 8000;
-      for (let i = 0; i < N; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        if (slugs.has("a")) {
-          if (slugs.has("b")) counts.ab++;
-          else if (slugs.has("c")) counts.ac++;
-          else if (slugs.has("d")) counts.ad++;
-        }
-      }
-      expect(counts.ab).toBeGreaterThan(counts.ac);
-      expect(counts.ab).toBeGreaterThan(counts.ad);
-    });
-
-    it("boost is stage-1-only: a boosted rival gets no ×5 in stage 2 (FastChat parity)", () => {
-      // b is boosted. When a is chosen first, b and c compete as rivals at
-      // equal ratings — FastChat withholds sampling_boost_models in the
-      // rival loop, so b must NOT be favoured over c. Give a overwhelming
-      // stage-1 weight so it is picked first almost always.
-      const candidates = [
-        sys("a", 1000, { sampleWeight: 1000 }),
-        sys("b", 1000, { boost: true }),
-        sys("c", 1000),
-      ];
-      const rng = seededRng(77);
-      let bRival = 0;
-      let cRival = 0;
-      const N = 6000;
-      for (let i = 0; i < N; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        if (!slugs.has("a")) continue;
-        if (slugs.has("b")) bRival++;
-        if (slugs.has("c")) cRival++;
-      }
-      // Equal weights → roughly 50/50; a 5× boost leaking into stage 2
-      // would push b past ~83%. Allow generous sampling noise.
-      const bShare = bRival / (bRival + cRival);
-      expect(bShare).toBeGreaterThan(0.45);
-      expect(bShare).toBeLessThan(0.55);
-    });
-
-    it("strict-target patterns are start-anchored like Python re.match (FastChat parity)", () => {
-      // FastChat's is_model_match_pattern uses re.match with no trailing $,
-      // so the pattern "gpt" matches the slug "gpt-4".
-      const candidates = [
-        sys("a", 1000, { battleStrictTargets: ["gpt"] }),
-        sys("gpt-4", 1000),
-        sys("gemini-pro", 1000),
-      ];
-      const rng = seededRng(88);
-      let aSeen = 0;
-      for (let i = 0; i < 2000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        const slugs = new Set([r.reviewA.slug, r.reviewB.slug]);
-        if (slugs.has("a")) {
-          aSeen++;
-          expect(slugs.has("gpt-4")).toBe(true);
-          expect(slugs.has("gemini-pro")).toBe(false);
-        }
-      }
-      expect(aSeen).toBeGreaterThan(0);
-    });
-
-    it("sampleWeight=0 effectively disables a system", () => {
-      const candidates = [
-        sys("a", 1000),
-        sys("b", 1000),
-        sys("c", 1000, { sampleWeight: 0 }),
-      ];
-      const rng = seededRng(91);
-      // c can still appear as a rival when b is chosen... but c also has
-      // weight 0 in stage 2 (stageOneWeight). So c never appears at all.
-      for (let i = 0; i < 1000; i++) {
-        const r = selectPair(candidates, { rng })!;
-        expect(r.reviewA.systemId).not.toBe("c");
-        expect(r.reviewB.systemId).not.toBe("c");
-      }
-    });
+    expect(aFirst / n).toBeGreaterThan(0.45);
+    expect(aFirst / n).toBeLessThan(0.55);
   });
 });
