@@ -243,43 +243,70 @@ export function InstructionsPage() {
         and works a little differently from the open arena.
       </P>
 
+      <P>
+        In total you will make{" "}
+        <span className="text-ink">six pairwise judgements</span> across two
+        papers of your own choosing. Start to finish, step by step:
+      </P>
+
       <div className="mt-5">
-        <Step n="i." title="Enter your code">
-          It identifies your session and nothing else. No account, no name, no
-          e-mail. Do not share it — it is what keeps your two papers and six
-          comparisons together as one record.
+        <Step n="1." title="Enter your code">
+          You are given a link and a code. It identifies your session and
+          nothing else — no account, no name, no e-mail. Do not share it: it is
+          what keeps your two papers and six comparisons together as one
+          record.
         </Step>
-        <Step n="ii." title="Read the data-processing notice, then accept it">
-          It says exactly where your paper goes and what is kept. Worth two
-          minutes before you tick the box —{" "}
+        <Step n="2." title="Bring a paper you know well">
+          Your own submitted paper, if it is publicly available, or any public
+          paper you have read before. You will be judging whether a review
+          understood the work, which is hard to do with a paper you are reading
+          for the first time. Not a manuscript you are reviewing confidentially
+          for a venue — the text is sent to commercial AI providers.
+        </Step>
+        <Step n="3." title="Pick the review format, upload, and accept the notice">
+          Choose which venue's review form the systems should follow, then
+          either attach a PDF or paste an arXiv link. The upload button stays
+          disabled until you tick the data-processing box under it; the full
+          text is in the{" "}
           <Link
             to="/consent"
             className="font-medium text-ink underline decoration-rule underline-offset-2"
           >
-            read it here
-          </Link>
-          . Taking part is voluntary and you can stop at any point by closing
-          the tab.
+            data-processing document
+          </Link>{" "}
+          and is worth two minutes first. Taking part is voluntary and you can
+          stop at any point by closing the tab. Expect one to two minutes for
+          the paper to be parsed and the reviews written.
         </Step>
-        <Step n="iii." title="Upload two papers">
-          Your choice, one at a time. Papers you know well work best — you will
-          be judging whether a review understood them, which is hard to do with
-          a paper you are reading for the first time.
+        <Step n="4." title="Read the pair, left and right">
+          Two reviews of your paper, side by side and aligned section by
+          section. Neither is labelled. As you read you can select any passage
+          the way you would select text anywhere else — click and drag — and a
+          small menu offers the eight dimensions to tag it with. That
+          highlighting is a reading aid for you only: it is never submitted and
+          never stored.
         </Step>
-        <Step n="iv." title="Make three comparisons per paper">
-          Six in total. Each one is a fresh pair of reviews of that paper, and
-          which systems you get is decided in advance rather than at random, so
-          please work through all six. The reading tools described above are
-          all available — highlighting and rating as you go are worth the two
-          minutes it takes to try them on the first comparison.
+        <Step n="5." title="Cast all eight dimension votes and the overall verdict">
+          All nine picks are required before the vote submits. Each may be{" "}
+          <span className="text-ink">A</span>,{" "}
+          <span className="text-ink">B</span> or a tie, and each has an optional
+          note. Then the same again for the other two pairs of that paper —
+          three per paper, and which systems you are shown is decided in advance
+          rather than at random, so please work through all three.
         </Step>
-        <Step n="v." title="See the systems revealed">
-          After each paper you find out which models wrote the reviews you
-          judged. You will not see any scores or rankings during the session —
-          that is deliberate, so nothing you learn early nudges your later
-          choices.
+        <Step n="6." title="Then your second paper, the same way">
+          Three more comparisons, six pairwise judgements in total. The second
+          paper cannot be uploaded until the first is finished. After each paper
+          you find out which models wrote the reviews you judged — identities
+          only. No scores or rankings during the session, so that nothing you
+          learn early nudges your later choices.
         </Step>
       </div>
+
+      <P>
+        That is everything. Thank you for giving up an hour to this — and enjoy
+        the reading.
+      </P>
 
       <H2>What to expect on the day</H2>
       <div className="mt-3 space-y-2.5 text-[14.5px] leading-relaxed text-graphite">
