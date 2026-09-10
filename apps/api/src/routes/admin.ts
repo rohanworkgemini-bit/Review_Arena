@@ -409,7 +409,7 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
           db.query.votes.findMany({ with: { dimensions: true } }),
           db.query.metricScores.findMany(),
           db.query.judgeVerdicts.findMany(),
-          db.query.eloSnapshots.findMany(),
+          db.query.ratings.findMany(),
         ]);
       const payload = {
         exportedAt: new Date().toISOString(),
@@ -452,7 +452,10 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         ...VOTE_DIMENSIONS.map((d) => `dim_${d.toLowerCase()}`),
       ].join(",");
       const rows = voteRows.map((v) => {
-        const dimMap = new Map(v.dimensions.map((d) => [d.dimension, d.value]));
+        // Emits "A" / "B" / "TIE", matching the `winner` column beside it.
+        // These columns were signed integers before 2026-09-10; an export
+        // taken from an older build is not directly comparable.
+        const dimMap = new Map(v.dimensions.map((d) => [d.dimension, d.winner]));
         return [
           v.id,
           v.createdAt.toISOString(),

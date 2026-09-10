@@ -1,7 +1,7 @@
 // One-shot: TRUNCATE the data tables, keep schema + review_systems intact.
 //
 // Use when you want a "clean slate" for a study run — wipes papers,
-// reviews, votes, dimension_votes, elo_snapshots, metric_scores.
+// reviews, votes, dimension_votes, ratings, metric_scores.
 // Leaves review_systems (reviewer registry) so the app is immediately
 // functional — no db:seed needed afterwards.
 //
@@ -23,7 +23,7 @@ const DATA_TABLES = [
   "judge_verdicts",
   "study_comparisons",
   "metric_scores",
-  "elo_snapshots",
+  "ratings",
   "dimension_votes",
   "votes",
   "reviews",

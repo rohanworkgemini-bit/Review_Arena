@@ -358,9 +358,15 @@ export const dimensionVotes = pgTable(
       .notNull()
       .references(() => votes.id, { onDelete: "cascade" }),
     dimension: voteDimensionEnum("dimension").notNull(),
-    // Preference on this dimension:
-    //   -1 = A better, 0 = tie, +1 = B better.
-    value: integer("value").notNull(),
+    // Preference on this dimension, in the SAME encoding as the overall
+    // verdict on `votes.winner`: "A", "B" or "TIE" (2026-09-10; previously
+    // an integer -1 / 0 / +1). One convention across all nine boards means
+    // one conversion to a Bradley-Terry outcome (`outcomeOf` in elo/elo.ts)
+    // rather than an encoding per board, and the domain is enforced by the
+    // database here exactly as it is for the overall verdict — the integer
+    // column carried no CHECK, so its three-value domain held only by
+    // convention at the API layer.
+    winner: voteWinnerEnum("winner").notNull(),
     // Optional free-text rationale for this dimension's pick.
     note: text("note"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -372,10 +378,15 @@ export const dimensionVotes = pgTable(
   }),
 );
 
-// ─── Elo / leaderboard ────────────────────────────────────────────────────
+// ─── Ratings / leaderboard ────────────────────────────────────────────────
 
-export const eloSnapshots = pgTable(
-  "elo_snapshots",
+// One row per (system, board, method) rating computation. Renamed from
+// `elo_snapshots` on 2026-09-10: the table has held Bradley-Terry rows
+// since Elo went offline-only, and the old name made every reader ask
+// whether the leaderboard was still Elo. `method` still distinguishes the
+// two, so nothing is lost by naming the table after what it stores.
+export const ratings = pgTable(
+  "ratings",
   {
     id: cuid(),
     reviewSystemId: text("review_system_id")
@@ -400,13 +411,13 @@ export const eloSnapshots = pgTable(
     computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    systemDimMethodComputedIdx: index("elo_snapshots_system_dim_method_computed_idx").on(
+    systemDimMethodComputedIdx: index("ratings_system_dim_method_computed_idx").on(
       t.reviewSystemId,
       t.dimension,
       t.method,
       t.computedAt,
     ),
-    computedIdx: index("elo_snapshots_computed_idx").on(t.computedAt),
+    computedIdx: index("ratings_computed_idx").on(t.computedAt),
   }),
 );
 
@@ -527,7 +538,7 @@ export const papersRelations = relations(papers, ({ many }) => ({
 
 export const reviewSystemsRelations = relations(reviewSystems, ({ many }) => ({
   reviews: many(reviews),
-  eloSnapshots: many(eloSnapshots),
+  ratings: many(ratings),
 }));
 
 export const reviewsRelations = relations(reviews, ({ one, many }) => ({
@@ -558,13 +569,13 @@ export const dimensionVotesRelations = relations(dimensionVotes, ({ one }) => ({
   vote: one(votes, { fields: [dimensionVotes.voteId], references: [votes.id] }),
 }));
 
-export const eloSnapshotsRelations = relations(eloSnapshots, ({ one }) => ({
+export const ratingsRelations = relations(ratings, ({ one }) => ({
   reviewSystem: one(reviewSystems, {
-    fields: [eloSnapshots.reviewSystemId],
+    fields: [ratings.reviewSystemId],
     references: [reviewSystems.id],
   }),
   triggerVote: one(votes, {
-    fields: [eloSnapshots.triggerVoteId],
+    fields: [ratings.triggerVoteId],
     references: [votes.id],
   }),
 }));
@@ -597,6 +608,6 @@ export type NewReview = typeof reviews.$inferInsert;
 export type Vote = typeof votes.$inferSelect;
 export type NewVote = typeof votes.$inferInsert;
 export type DimensionVote = typeof dimensionVotes.$inferSelect;
-export type EloSnapshot = typeof eloSnapshots.$inferSelect;
+export type Rating = typeof ratings.$inferSelect;
 export type MetricScore = typeof metricScores.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;

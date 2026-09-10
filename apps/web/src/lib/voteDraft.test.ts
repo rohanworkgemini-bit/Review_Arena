@@ -16,7 +16,7 @@ const mark = {
 };
 const filled = {
   note: "A read the paper more carefully.",
-  values: { CRITIQUE_CLARITY: -1 as const },
+  values: { CRITIQUE_CLARITY: "A" as const },
   notes: { CRITIQUE_CLARITY: "A's questions are actionable." },
   marksA: [mark],
   marksB: [],
@@ -31,7 +31,7 @@ describe("saveDraft / loadDraft", () => {
     saveDraft(KEY, filled);
     const d = loadDraft(KEY);
     expect(d?.note).toBe(filled.note);
-    expect(d?.values.CRITIQUE_CLARITY).toBe(-1);
+    expect(d?.values.CRITIQUE_CLARITY).toBe("A");
     expect(d?.notes.CRITIQUE_CLARITY).toBe("A's questions are actionable.");
     expect(d?.startedAt).toBe(filled.startedAt);
   });

@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 
 const { db } = await import("./db/client.js");
-const { computeElo, bootstrapEloCI } = await import("./elo/elo.js");
+const { computeElo, bootstrapEloCI, outcomeOf } = await import("./elo/elo.js");
 const { computeBT, bootstrapBTCI } = await import("./elo/bt.js");
 const { asc, eq } = await import("drizzle-orm");
 const schema = await import("./db/schema.js");
@@ -93,7 +93,7 @@ const PRIMARY = VARIANTS[1]!; // noSelf
 const overallBattles: Battle[] = cleanVotes.map((v) => ({
   a: reviewSys.get(v.reviewAId)!,
   b: reviewSys.get(v.reviewBId)!,
-  outcome: v.winner === "A" ? 1 : v.winner === "B" ? 0 : 0.5,
+  outcome: outcomeOf(v.winner),
 }));
 
 const DIMS = schema.voteDimensionEnum.enumValues as readonly string[];
@@ -103,8 +103,9 @@ for (const v of cleanVotes) {
     dimBattles.get(dv.dimension)!.push({
       a: reviewSys.get(v.reviewAId)!,
       b: reviewSys.get(v.reviewBId)!,
-      // dimension value: -1 = A better, +1 = B better, 0 = tie
-      outcome: dv.value === -1 ? 1 : dv.value === 1 ? 0 : 0.5,
+      // Same converter as the overall battles above; dimension verdicts
+      // carry the same "A" / "B" / "TIE" encoding as the overall one.
+      outcome: outcomeOf(dv.winner),
     });
   }
 }

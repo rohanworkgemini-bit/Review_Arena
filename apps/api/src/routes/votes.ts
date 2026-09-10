@@ -7,14 +7,14 @@ import {
 import { db } from "../db/client.js";
 import {
   dimensionVotes,
-  eloSnapshots,
+  ratings,
   reviewSystems,
   reviews,
   voteDimensionEnum,
   votes,
 } from "../db/schema.js";
 import { verifyPairToken } from "./pair.js";
-import type { Battle, BootstrapInterval, Outcome } from "../elo/elo.js";
+import { outcomeOf, type Battle, type BootstrapInterval } from "../elo/elo.js";
 import { computeBT, bootstrapBTCI } from "../elo/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
@@ -88,7 +88,7 @@ export function votesRouter(config: Config): Router {
         return;
       }
 
-      const outcome: Outcome = body.winner === "A" ? 1 : body.winner === "B" ? 0 : 0.5;
+      const outcome = outcomeOf(body.winner);
 
       // Quality flagging: votes with decision time < 3s flagged for potential
       // botting. Flagged votes recorded but excluded from the ratings (B4).
@@ -178,7 +178,7 @@ export function votesRouter(config: Config): Router {
             body.dimensions.map((d) => ({
               voteId: newId,
               dimension: d.dimension,
-              value: d.value,
+              winner: d.winner,
               note: d.note?.trim() ? d.note.trim() : null,
             })),
           );
@@ -309,7 +309,7 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
     .map((v) => ({
       a: v.reviewA.reviewSystem.slug,
       b: v.reviewB.reviewSystem.slug,
-      outcome: v.winner === "A" ? 1 : v.winner === "B" ? 0 : 0.5,
+      outcome: outcomeOf(v.winner),
     }));
 }
 
@@ -389,7 +389,9 @@ export async function snapshotLeaderboard(
       .map((dv) => ({
         a: dv.vote.reviewA.reviewSystem.slug,
         b: dv.vote.reviewB.reviewSystem.slug,
-        outcome: dv.value < 0 ? 1 : dv.value > 0 ? 0 : 0.5,
+        // Same converter as the overall board above — that is the point of
+        // storing both verdicts in one encoding.
+        outcome: outcomeOf(dv.winner),
       }));
   }
 
@@ -435,5 +437,5 @@ export async function snapshotLeaderboard(
   // a number for them.
   const rows = toRows(btCI, "BT", btAnchor);
 
-  if (rows.length > 0) await executor.insert(eloSnapshots).values(rows);
+  if (rows.length > 0) await executor.insert(ratings).values(rows);
 }

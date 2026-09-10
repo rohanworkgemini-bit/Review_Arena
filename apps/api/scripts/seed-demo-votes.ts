@@ -29,7 +29,7 @@ import { inArray, like } from "drizzle-orm";
 import { db, closeDbPool } from "../src/db/client.js";
 import {
   dimensionVotes,
-  eloSnapshots,
+  ratings,
   papers,
   reviews,
   reviewSystems,
@@ -102,16 +102,16 @@ async function clear(): Promise<void> {
   });
   const voteIds = voteRows.map((v) => v.id);
 
-  // Order matters: votes.paper_id and elo_snapshots.trigger_vote_id are
+  // Order matters: votes.paper_id and ratings.trigger_vote_id are
   // plain references, not cascades, so the rows pointing at what we are
   // deleting have to be dealt with first. Reviews DO cascade to
   // metric_scores and judge_verdicts, so those come free.
   await db.transaction(async (tx) => {
     if (voteIds.length) {
       await tx
-        .update(eloSnapshots)
+        .update(ratings)
         .set({ triggerVoteId: null })
-        .where(inArray(eloSnapshots.triggerVoteId, voteIds));
+        .where(inArray(ratings.triggerVoteId, voteIds));
       await tx.delete(dimensionVotes).where(inArray(dimensionVotes.voteId, voteIds));
       await tx.delete(votes).where(inArray(votes.id, voteIds));
     }
@@ -121,9 +121,9 @@ async function clear(): Promise<void> {
 
   console.log(`Cleared ${demo.length} demo paper(s) and ${voteIds.length} vote(s).`);
 
-  // The board caches from elo_snapshots, which still hold ratings fitted
-  // over the synthetic votes. Refit on what is left so the leaderboard
-  // reflects reality again rather than a field that no longer exists.
+  // The board caches from `ratings`, whose rows were fitted over the
+  // synthetic votes. Refit on what is left so the leaderboard reflects
+  // reality again rather than a field that no longer exists.
   const remaining = await db.query.votes.findFirst({ columns: { id: true } });
   const baselineSlug = process.env.RATING_BASELINE_SLUG ?? "claude-sonnet-5";
   if (remaining) {
@@ -133,7 +133,7 @@ async function clear(): Promise<void> {
   } else {
     // No votes left at all: stale snapshots would keep a phantom board on
     // screen with nothing behind it.
-    await db.delete(eloSnapshots);
+    await db.delete(ratings);
     console.log("No votes remain — dropped the snapshots too.");
   }
 }
@@ -243,14 +243,10 @@ async function seed(): Promise<void> {
     dimRows.push(
       ...VOTE_DIMENSIONS.map((dimension) => {
         const agree = rand() < 0.7;
-        const value = agree
-          ? winner === "A"
-            ? -1
-            : winner === "B"
-              ? 1
-              : 0
-          : ([-1, 0, 1] as const)[Math.floor(rand() * 3)]!;
-        return { id: createId(), voteId, dimension, value };
+        const dimWinner = agree
+          ? winner
+          : (["A", "TIE", "B"] as const)[Math.floor(rand() * 3)]!;
+        return { id: createId(), voteId, dimension, winner: dimWinner };
       }),
     );
   }
@@ -259,9 +255,9 @@ async function seed(): Promise<void> {
   await insertMany(dimensionVotes, dimRows);
   const written = voteRows.length;
 
-  // The board renders from elo_snapshots, which the API writes as each vote
+  // The board renders from `ratings`, which the API writes as each vote
   // lands. Writing votes straight to the database bypasses that, so the
-  // snapshots have to be refreshed here or the leaderboard shows the old
+  // rows have to be refreshed here or the leaderboard shows the old
   // ratings under the new vote count.
   const baselineSlug = process.env.RATING_BASELINE_SLUG ?? "claude-sonnet-5";
   const lastVote = await db.query.votes.findFirst({

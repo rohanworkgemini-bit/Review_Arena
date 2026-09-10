@@ -1,4 +1,4 @@
-import { VOTE_DIMENSIONS, type VoteDimension } from "@reviewarena/shared-types";
+import { VOTE_DIMENSIONS, type VoteDimension, type Winner } from "@reviewarena/shared-types";
 import type { Highlight } from "./highlight";
 
 // A comparison asks for eight dimension picks, eight optional notes and an
@@ -17,8 +17,8 @@ export interface VoteDraft {
   schema: number;
   /** Overall free-text rationale. */
   note: string;
-  /** -1 = A better, 0 = tie, +1 = B better. */
-  values: Partial<Record<VoteDimension, -1 | 0 | 1>>;
+  /** Per-dimension verdict, same encoding as the overall one. */
+  values: Partial<Record<VoteDimension, Winner>>;
   /** Per-dimension free text. */
   notes: Partial<Record<VoteDimension, string>>;
   /** Tinted spans, per panel. Restorable because the offsets address the

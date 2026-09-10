@@ -32,6 +32,7 @@ import {
   type PairResponse,
   type StructuredReview,
   type SubmitVoteResponse,
+  type Winner,
 } from "@reviewarena/shared-types";
 
 // DEV-ONLY visual fallback. Lets us hit /compare?paperId=... with no
@@ -87,7 +88,7 @@ const PLACEHOLDER_PAIR: PairResponse = {
 interface CastVote {
   voteId: string;
   winner: "A" | "B" | "TIE";
-  dimensionValues: Partial<Record<VoteDimension, number>>;
+  dimensionValues: Partial<Record<VoteDimension, Winner>>;
   dimensionNotes: Partial<Record<VoteDimension, string>>;
   overallNote: string;
   /** URL-encoded reveal header. /reveal renders a placeholder (dev) or an
@@ -138,7 +139,7 @@ export function ComparisonPage() {
 
   // Seeded from the stored vote when revisiting, so the read-only view
   // shows exactly what was submitted rather than an empty survey.
-  const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, number>>>(
+  const [dimensionValues, setDimensionValues] = useState<Partial<Record<VoteDimension, Winner>>>(
     () => castVote?.dimensionValues ?? draft?.values ?? {},
   );
   // Optional free-text rationale per dimension, keyed the same way.
@@ -189,7 +190,7 @@ export function ComparisonPage() {
     if (!dKey || readOnly) return;
     saveDraft(dKey, {
       note: overallNote,
-      values: dimensionValues as Partial<Record<VoteDimension, -1 | 0 | 1>>,
+      values: dimensionValues,
       notes: dimensionNotes,
       marksA,
       marksB,
@@ -295,9 +296,9 @@ export function ComparisonPage() {
         winner,
         note: overallNote.trim() || undefined,
         decisionMs: Date.now() - startedAt,
-        dimensions: Object.entries(dimensionValues).map(([dimension, value]) => ({
+        dimensions: Object.entries(dimensionValues).map(([dimension, winner]) => ({
           dimension: dimension as VoteDimension,
-          value: value as -1 | 0 | 1,
+          winner: winner as Winner,
           note: dimensionNotes[dimension as VoteDimension]?.trim() || undefined,
         })),
       }),
@@ -641,7 +642,7 @@ export function ComparisonPage() {
             <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2">
               {VOTE_DIMENSIONS.map((d) => {
                 const v = dimensionValues[d];
-                const pick = (next: -1 | 0 | 1) => {
+                const pick = (next: Winner) => {
                   if (readOnly) return;
                   setDimensionValues((prev) => {
                     const copy = { ...prev };

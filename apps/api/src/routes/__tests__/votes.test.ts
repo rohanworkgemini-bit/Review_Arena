@@ -5,14 +5,14 @@ import { signPairToken } from "../pair.js";
 
 describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
   const validDimensions = [
-    { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const },
-    { dimension: "CRITIQUE_CLARITY" as const, value: -1 as const },
-    { dimension: "COMPARATIVE_ANALYSIS" as const, value: 1 as const },
-    { dimension: "EVIDENCE_BASED_CRITIQUE" as const, value: -1 as const },
-    { dimension: "CONSTRUCTIVE_TONE" as const, value: 1 as const },
-    { dimension: "RESULTS_INTERPRETATION" as const, value: -1 as const },
-    { dimension: "COMPLETENESS_COVERAGE" as const, value: 1 as const },
-    { dimension: "FALSE_CLAIMS" as const, value: -1 as const },
+    { dimension: "CONTRIBUTION_ACCURACY" as const, winner: "B" as const },
+    { dimension: "CRITIQUE_CLARITY" as const, winner: "A" as const },
+    { dimension: "COMPARATIVE_ANALYSIS" as const, winner: "B" as const },
+    { dimension: "EVIDENCE_BASED_CRITIQUE" as const, winner: "A" as const },
+    { dimension: "CONSTRUCTIVE_TONE" as const, winner: "B" as const },
+    { dimension: "RESULTS_INTERPRETATION" as const, winner: "A" as const },
+    { dimension: "COMPLETENESS_COVERAGE" as const, winner: "B" as const },
+    { dimension: "FALSE_CLAIMS" as const, winner: "A" as const },
   ];
 
   const secret = "test-secret-key-for-hmac";
@@ -101,12 +101,12 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
     expect(result.success).toBe(true);
   });
 
-  it("should reject invalid dimension scores (not in [-1, 0, 1])", () => {
+  it("should reject a dimension verdict outside A / B / TIE", () => {
     const badScore = {
       pairToken,
       winner: "A" as const,
       dimensions: [
-        { dimension: "CONTRIBUTION_ACCURACY", value: 2 }, // invalid
+        { dimension: "CONTRIBUTION_ACCURACY", winner: "MAYBE" }, // invalid
         ...validDimensions.slice(1),
       ],
     };
@@ -115,12 +115,12 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
     expect(result.success).toBe(false);
   });
 
-  it("should accept a per-dimension tie (value 0) and an optional note", () => {
+  it("should accept a per-dimension tie and an optional note", () => {
     const withTieAndNote = {
       pairToken,
       winner: "TIE" as const,
       dimensions: [
-        { dimension: "CONTRIBUTION_ACCURACY" as const, value: 0 as const, note: "both equally thorough" },
+        { dimension: "CONTRIBUTION_ACCURACY" as const, winner: "TIE" as const, note: "both equally thorough" },
         ...validDimensions.slice(1),
       ],
     };
@@ -128,7 +128,7 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
     const result = SubmitVoteRequestSchema.safeParse(withTieAndNote);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.dimensions[0]!.value).toBe(0);
+      expect(result.data.dimensions[0]!.winner).toBe("TIE");
       expect(result.data.dimensions[0]!.note).toBe("both equally thorough");
     }
   });
@@ -138,7 +138,7 @@ describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
       pairToken,
       winner: "A" as const,
       dimensions: [
-        { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const, note: "x".repeat(1001) },
+        { dimension: "CONTRIBUTION_ACCURACY" as const, winner: "B" as const, note: "x".repeat(1001) },
         ...validDimensions.slice(1),
       ],
     };

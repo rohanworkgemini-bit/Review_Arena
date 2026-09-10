@@ -1,3 +1,4 @@
+import type { Winner } from "@reviewarena/shared-types";
 import { cn } from "@/lib/cn";
 
 /**
@@ -5,7 +6,8 @@ import { cn } from "@/lib/cn";
  * segmented control (A better / Tie / B better) in the reference's
  * button grammar, plus an optional free-text note explaining the pick.
  * Clicking the already-selected side deselects (dimension → unrated).
- * value: -1 = A, 0 = tie, 1 = B, undefined = unrated.
+ * value: "A" | "TIE" | "B", undefined = unrated — the same encoding the
+ * overall verdict uses.
  */
 export function DimensionRow({
   label,
@@ -18,9 +20,9 @@ export function DimensionRow({
 }: {
   label: string;
   question: string;
-  value: number | undefined;
+  value: Winner | undefined;
   note: string;
-  onPick: (v: -1 | 0 | 1) => void;
+  onPick: (v: Winner) => void;
   onChangeNote: (text: string) => void;
   /** Vote already cast — show the pick, refuse to change it. */
   readOnly?: boolean;
@@ -36,9 +38,9 @@ export function DimensionRow({
         role="radiogroup"
         aria-label={`${label} preference`}
       >
-        <SegButton active={value === -1} onClick={() => onPick(-1)} divider label="A better" readOnly={readOnly} />
-        <SegButton active={value === 0} onClick={() => onPick(0)} divider label="Tie" readOnly={readOnly} />
-        <SegButton active={value === 1} onClick={() => onPick(1)} label="B better" readOnly={readOnly} />
+        <SegButton active={value === "A"} onClick={() => onPick("A")} divider label="A better" readOnly={readOnly} />
+        <SegButton active={value === "TIE"} onClick={() => onPick("TIE")} divider label="Tie" readOnly={readOnly} />
+        <SegButton active={value === "B"} onClick={() => onPick("B")} label="B better" readOnly={readOnly} />
       </div>
       <input
         type="text"

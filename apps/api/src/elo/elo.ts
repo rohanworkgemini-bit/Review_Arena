@@ -43,6 +43,24 @@ export interface Battle {
   outcome: Outcome;
 }
 
+/** A recorded verdict, as stored on `votes.winner` and `dimension_votes.winner`. */
+export type Winner = "A" | "B" | "TIE";
+
+/**
+ * The single mapping from a recorded verdict to a Bradley-Terry outcome.
+ *
+ * Every board goes through here — the overall one and all eight
+ * per-dimension ones — so the nine comparison logs cannot disagree about
+ * what a verdict means. That was a live hazard while the dimensions used a
+ * signed integer: the snapshot path branched on the sign and the thesis
+ * analysis branched on equality, which agreed on the three intended values
+ * and diverged on anything else, and nothing at the database level ruled
+ * anything else out.
+ */
+export function outcomeOf(winner: Winner): Outcome {
+  return winner === "A" ? 1 : winner === "B" ? 0 : 0.5;
+}
+
 /**
  * Replay a full history of battles and return the current Elo for each
  * system. Equivalent to FastChat's compute_elo.

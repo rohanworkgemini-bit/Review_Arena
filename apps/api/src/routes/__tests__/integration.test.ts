@@ -195,14 +195,14 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
         winner: "A" as const,
         decisionMs: 5000,
         dimensions: [
-          { dimension: "CONTRIBUTION_ACCURACY" as const, value: 1 as const },
-          { dimension: "CRITIQUE_CLARITY" as const, value: -1 as const },
-          { dimension: "COMPARATIVE_ANALYSIS" as const, value: 1 as const },
-          { dimension: "EVIDENCE_BASED_CRITIQUE" as const, value: -1 as const },
-          { dimension: "CONSTRUCTIVE_TONE" as const, value: 1 as const },
-          { dimension: "RESULTS_INTERPRETATION" as const, value: -1 as const },
-          { dimension: "COMPLETENESS_COVERAGE" as const, value: 1 as const },
-          { dimension: "FALSE_CLAIMS" as const, value: -1 as const },
+          { dimension: "CONTRIBUTION_ACCURACY" as const, winner: "B" as const },
+          { dimension: "CRITIQUE_CLARITY" as const, winner: "A" as const },
+          { dimension: "COMPARATIVE_ANALYSIS" as const, winner: "B" as const },
+          { dimension: "EVIDENCE_BASED_CRITIQUE" as const, winner: "A" as const },
+          { dimension: "CONSTRUCTIVE_TONE" as const, winner: "B" as const },
+          { dimension: "RESULTS_INTERPRETATION" as const, winner: "A" as const },
+          { dimension: "COMPLETENESS_COVERAGE" as const, winner: "B" as const },
+          { dimension: "FALSE_CLAIMS" as const, winner: "A" as const },
         ],
       };
 
@@ -243,19 +243,19 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
 
     it("should record all 8 dimension votes", () => {
       const dimensionVotes = [
-        { dimension: "CONTRIBUTION_ACCURACY", value: 1 },
-        { dimension: "CRITIQUE_CLARITY", value: -1 },
-        { dimension: "COMPARATIVE_ANALYSIS", value: 1 },
-        { dimension: "EVIDENCE_BASED_CRITIQUE", value: -1 },
-        { dimension: "CONSTRUCTIVE_TONE", value: 1 },
-        { dimension: "RESULTS_INTERPRETATION", value: -1 },
-        { dimension: "COMPLETENESS_COVERAGE", value: 1 },
-        { dimension: "FALSE_CLAIMS", value: -1 },
+        { dimension: "CONTRIBUTION_ACCURACY", winner: "B" },
+        { dimension: "CRITIQUE_CLARITY", winner: "A" },
+        { dimension: "COMPARATIVE_ANALYSIS", winner: "B" },
+        { dimension: "EVIDENCE_BASED_CRITIQUE", winner: "A" },
+        { dimension: "CONSTRUCTIVE_TONE", winner: "B" },
+        { dimension: "RESULTS_INTERPRETATION", winner: "A" },
+        { dimension: "COMPLETENESS_COVERAGE", winner: "B" },
+        { dimension: "FALSE_CLAIMS", winner: "A" },
       ];
 
       expect(dimensionVotes).toHaveLength(8);
       dimensionVotes.forEach((dv) => {
-        expect([-1, 1]).toContain(dv.value);
+        expect(["A", "B"]).toContain(dv.winner);
       });
     });
 
@@ -264,8 +264,8 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
       // 1. Load all COMPLETED votes (B1 fairness filter)
       // 2. Fit Bradley-Terry over the full history (FastChat port, MM fixed point)
       // 3. Bootstrap CI (100 resamples, 2.5/97.5 percentile)
-      // 4. Insert BT rows into elo_snapshots (the table name is historical;
-      //    online Elo is no longer computed at runtime)
+      // 4. Insert BT rows into `ratings` (online Elo is no longer computed
+      //    at runtime; `method` still distinguishes the two)
 
       const snapshot = {
         reviewSystemId: createId(),

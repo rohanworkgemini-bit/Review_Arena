@@ -8,7 +8,7 @@
 //
 // Deletes, in one transaction: dimension_votes + votes on the system's
 // reviews, the reviews themselves (cascading metric_scores, judge_verdicts
-// and study_comparisons), the system's elo_snapshots, then the
+// and study_comparisons), the system's ratings, then the
 // review_systems row. Snapshots and study_comparisons that merely point at
 // a deleted vote are un-linked, not deleted.
 //
@@ -59,12 +59,12 @@ async function main() {
           OR v.review_b_id IN (SELECT id FROM reviews WHERE review_system_id = $1)`,
       [system.id],
     ),
-    eloSnapshots: await count(pool, `SELECT COUNT(*)::text AS count FROM elo_snapshots WHERE review_system_id = $1`, [system.id]),
+    ratings: await count(pool, `SELECT COUNT(*)::text AS count FROM ratings WHERE review_system_id = $1`, [system.id]),
   };
   console.log(`Retiring ${slug} (${system.name}, ${system.id}):`);
   console.log(`  reviews        ${before.reviews}`);
   console.log(`  votes          ${before.votes}  (with their dimension_votes)`);
-  console.log(`  elo_snapshots  ${before.eloSnapshots}`);
+  console.log(`  ratings        ${before.ratings}`);
   console.log(`  + cascaded metric_scores / judge_verdicts / study_comparisons rows`);
 
   if (flag !== "--yes") {
@@ -87,13 +87,13 @@ async function main() {
     const voteIds = voteRows.map((v) => v.id);
 
     // FKs without ON DELETE CASCADE: un-link, then delete.
-    await pool.query(`UPDATE elo_snapshots SET trigger_vote_id = NULL WHERE trigger_vote_id = ANY($1)`, [voteIds]);
+    await pool.query(`UPDATE ratings SET trigger_vote_id = NULL WHERE trigger_vote_id = ANY($1)`, [voteIds]);
     await pool.query(`UPDATE study_comparisons SET vote_id = NULL WHERE vote_id = ANY($1)`, [voteIds]);
     await pool.query(`DELETE FROM dimension_votes WHERE vote_id = ANY($1)`, [voteIds]);
     await pool.query(`DELETE FROM votes WHERE id = ANY($1)`, [voteIds]);
     // Cascades metric_scores, judge_verdicts, study_comparisons.
     await pool.query(`DELETE FROM reviews WHERE id = ANY($1)`, [reviewIds]);
-    await pool.query(`DELETE FROM elo_snapshots WHERE review_system_id = $1`, [system.id]);
+    await pool.query(`DELETE FROM ratings WHERE review_system_id = $1`, [system.id]);
     await pool.query(`DELETE FROM review_systems WHERE id = $1`, [system.id]);
     await pool.query("COMMIT");
   } catch (e) {

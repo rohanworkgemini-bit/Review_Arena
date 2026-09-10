@@ -32,6 +32,7 @@ import {
   VOTE_DIMENSIONS,
   type Conference,
   type VoteDimension,
+  type Winner,
 } from "@reviewarena/shared-types";
 import {
   ApiError,
@@ -568,9 +569,10 @@ function ComparisonScreen({
   const startedAt = useRef(Date.now());
   const [note, setNote] = useState("");
   // Per-dimension picks, identical to the arena's ComparisonPage:
-  // -1 = A better, 0 = tie, +1 = B better. All eight are REQUIRED.
+  // "A" / "B" / "TIE", the same encoding as the overall verdict.
+  // All eight are REQUIRED.
   const [dimensionValues, setDimensionValues] = useState<
-    Partial<Record<VoteDimension, -1 | 0 | 1>>
+    Partial<Record<VoteDimension, Winner>>
   >({});
   const [dimensionNotes, setDimensionNotes] = useState<Partial<Record<VoteDimension, string>>>({});
   const refinedCount = Object.keys(dimensionValues).length;
@@ -656,7 +658,7 @@ function ComparisonScreen({
         decisionMs: Date.now() - startedAt.current,
         dimensions: VOTE_DIMENSIONS.map((d) => ({
           dimension: d,
-          value: dimensionValues[d] as -1 | 0 | 1,
+          winner: dimensionValues[d] as Winner,
           note: dimensionNotes[d]?.trim() || undefined,
         })),
       }),

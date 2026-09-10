@@ -2,13 +2,13 @@ import { Router } from "express";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { VoteDimensionSchema } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { eloSnapshots, papers, reviewSystems, votes } from "../db/schema.js";
+import { ratings, papers, reviewSystems, votes } from "../db/schema.js";
 import { LeaderboardResponseSchema } from "./schemas.js";
 import type { Config } from "../config.js";
 
 // The only board served. Online Elo rows are no longer written (see
 // votes.ts snapshotLeaderboard); rows from before that change still sit in
-// elo_snapshots under method=ELO and are simply never read here. The thesis
+// `ratings` under method=ELO and are simply never read here. The thesis
 // analysis recomputes Elo offline from the vote log to compare against BT.
 const METHOD = "BT" as const;
 
@@ -57,25 +57,25 @@ export function leaderboardRouter(config: Config): Router {
       }
 
       const dimCondition = dimension
-        ? eq(eloSnapshots.dimension, dimension)
-        : isNull(eloSnapshots.dimension);
+        ? eq(ratings.dimension, dimension)
+        : isNull(ratings.dimension);
 
       // Latest snapshot per system via DISTINCT ON.
       const latest = await db
-        .selectDistinctOn([eloSnapshots.reviewSystemId], {
-          reviewSystemId: eloSnapshots.reviewSystemId,
-          rating: eloSnapshots.rating,
-          ratingCiLow: eloSnapshots.ratingCiLow,
-          ratingCiHigh: eloSnapshots.ratingCiHigh,
-          voteCount: eloSnapshots.voteCount,
-          anchor: eloSnapshots.anchor,
+        .selectDistinctOn([ratings.reviewSystemId], {
+          reviewSystemId: ratings.reviewSystemId,
+          rating: ratings.rating,
+          ratingCiLow: ratings.ratingCiLow,
+          ratingCiHigh: ratings.ratingCiHigh,
+          voteCount: ratings.voteCount,
+          anchor: ratings.anchor,
           slug: reviewSystems.slug,
           name: reviewSystems.name,
         })
-        .from(eloSnapshots)
-        .innerJoin(reviewSystems, eq(reviewSystems.id, eloSnapshots.reviewSystemId))
-        .where(and(dimCondition, eq(eloSnapshots.method, method)))
-        .orderBy(eloSnapshots.reviewSystemId, desc(eloSnapshots.computedAt));
+        .from(ratings)
+        .innerJoin(reviewSystems, eq(reviewSystems.id, ratings.reviewSystemId))
+        .where(and(dimCondition, eq(ratings.method, method)))
+        .orderBy(ratings.reviewSystemId, desc(ratings.computedAt));
 
       const entries = [...latest]
         .sort((a, b) => b.rating - a.rating)

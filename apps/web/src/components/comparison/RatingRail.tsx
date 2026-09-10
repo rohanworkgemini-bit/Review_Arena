@@ -4,6 +4,7 @@ import {
   DIMENSION_LABELS,
   VOTE_DIMENSIONS,
   type VoteDimension,
+  type Winner,
 } from "@reviewarena/shared-types";
 import { cn } from "@/lib/cn";
 
@@ -44,8 +45,8 @@ export function RatingRail({
 }: {
   active: VoteDimension;
   onActiveChange: (d: VoteDimension) => void;
-  values: Partial<Record<VoteDimension, number>>;
-  onPick: (d: VoteDimension, v: -1 | 0 | 1) => void;
+  values: Partial<Record<VoteDimension, Winner>>;
+  onPick: (d: VoteDimension, v: Winner) => void;
   /** Scroll the reviews to the section this dimension is mostly answered
    *  from. Absent when the pair has no matching section. */
   onJump?: (d: VoteDimension) => void;
@@ -123,13 +124,13 @@ export function RatingRail({
         )}
 
         <div className="flex shrink-0 border border-ink">
-          <Choice on={current === -1} onClick={() => onPick(active, -1)}>
+          <Choice on={current === "A"} onClick={() => onPick(active, "A")}>
             A better
           </Choice>
-          <Choice on={current === 0} onClick={() => onPick(active, 0)} middle>
+          <Choice on={current === "TIE"} onClick={() => onPick(active, "TIE")} middle>
             Tie
           </Choice>
-          <Choice on={current === 1} onClick={() => onPick(active, 1)}>
+          <Choice on={current === "B"} onClick={() => onPick(active, "B")}>
             B better
           </Choice>
         </div>

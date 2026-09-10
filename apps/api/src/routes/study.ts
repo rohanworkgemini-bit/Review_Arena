@@ -75,16 +75,16 @@ const upload = multer({
 
 /**
  * Per-dimension picks for a study vote. Mirrors SubmitVoteRequestSchema's
- * `dimensions` field exactly — all eight, no duplicates, value -1 (A) /
- * 0 (tie) / 1 (B). Enforced server-side for the same reason the arena
- * does it: a non-UI client must not be able to write sparse rows that
- * would skew the per-dimension boards.
+ * `dimensions` field exactly — all eight, no duplicates, winner "A" / "B" /
+ * "TIE" in the same encoding as the overall verdict. Enforced server-side
+ * for the same reason the arena does it: a non-UI client must not be able
+ * to write sparse rows that would skew the per-dimension boards.
  */
 const StudyDimensionsSchema = z
   .array(
     z.object({
       dimension: VoteDimensionSchema,
-      value: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+      winner: z.enum(["A", "B", "TIE"]),
       note: z.string().max(1000).optional(),
     }),
   )
@@ -561,7 +561,7 @@ export function studyRouter(
           dimensions.map((d) => ({
             voteId: v!.id,
             dimension: d.dimension,
-            value: d.value,
+            winner: d.winner,
             note: d.note?.trim() ? d.note.trim() : null,
           })),
         );

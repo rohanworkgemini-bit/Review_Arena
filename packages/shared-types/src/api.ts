@@ -6,6 +6,15 @@ import { StructuredReviewSchema } from "./structured-review.js";
 
 export const CuidSchema = z.string().min(20).max(40);
 
+// The one verdict encoding, used for the overall vote AND for each of the
+// eight per-dimension picks (unified 2026-09-10; the dimensions previously
+// carried a signed integer -1 / 0 / +1). Storing both in one encoding means
+// one conversion to a Bradley-Terry outcome serves all nine boards, so the
+// overall log and the per-dimension logs cannot disagree about what a
+// verdict means.
+export const WinnerSchema = z.enum(["A", "B", "TIE"]);
+export type Winner = z.infer<typeof WinnerSchema>;
+
 // ─── Conference (review-form scale) ─────────────────────────────────────────
 // The uploader picks which venue's review form / rating scale the generated
 // reviews follow. Both systems in a battle always share the same conference.
@@ -83,15 +92,16 @@ export const SubmitVoteRequestSchema = z.object({
   // All 8 dimensions are now required (one pick per dimension, no
   // duplicates). The UI gates the submit button on this; the server
   // enforces it too so a non-UI client can't bypass it and pollute
-  // per-dimension leaderboards with sparse data. value is -1 (A wins),
-  // 1 (B wins), or 0 (tie on this dimension). Each dimension may carry
-  // an optional free-text `note` explaining the rating (qualitative
-  // signal for thesis analysis).
+  // per-dimension leaderboards with sparse data. `winner` uses the SAME
+  // "A" / "B" / "TIE" encoding as the overall verdict above (2026-09-10;
+  // previously a signed integer -1 / 0 / +1), so one conversion serves all
+  // nine boards. Each dimension may carry an optional free-text `note`
+  // explaining the rating (qualitative signal for thesis analysis).
   dimensions: z
     .array(
       z.object({
         dimension: VoteDimensionSchema,
-        value: z.union([z.literal(-1), z.literal(0), z.literal(1)]),
+        winner: z.enum(["A", "B", "TIE"]),
         note: z.string().max(1000).optional(),
       }),
     )
