@@ -18,16 +18,19 @@ TU Darmstadt.**
 3. The two reviews stream live into side-by-side panels (server-sent
    events, token-by-token).
 4. You vote which review is more useful, or call it a tie. Optionally,
-   refine across eight dimensions: Comprehensiveness, Clarity, Fairness,
-   Actionability, Constructiveness, Objectivity, Relevance,
-   Technical Terms.
+   refine across eight dimensions: Core Contribution Accuracy, Results
+   Interpretation, Comparative Analysis, Evidence-Based Critique, Critique
+   Clarity, Completeness Coverage, Constructive Tone, and False or
+   Contradictory Claims. All eight are mandatory, and all are
+   polarity-aligned so the picked side is always the better one.
 5. Votes update an overall and per-dimension ranking with bootstrapped
    95% CIs (verbatim FastChat port). The rating is **Bradley-Terry**:
    maximum likelihood over the whole comparison log, order-independent,
    and what LMArena publishes. Online Elo is *not* computed at runtime —
-   `src/elo/elo.ts` is kept only so the thesis analysis
-   (`src/thesis-analysis.ts`) can replay the vote log offline and compare
-   Elo's order-dependent ranking against BT's.
+   `src/elo/elo.ts` is kept so the offline analysis can replay the vote log
+   and compare Elo's order-dependent ranking against BT's, and because it
+   holds `outcomeOf`, the single A/B/TIE → outcome converter every board
+   goes through. The analysis itself lives outside this repo.
 6. The reveal screen shows which system produced A and B, the
    Bradley-Terry rating of each before/after the vote on the same
    1000-point scale, and a radar of LLM-judge dimension scores.
@@ -42,8 +45,8 @@ Six systems — the controlled study's lineup, one mid-tier model per
 provider, so no vendor fields two entries. The same six models form the
 **LLM judge panel**: every study pair is judged by all six (each also
 judges pairs it wrote a side of; those verdicts are flagged and the
-analysis reports the panel with and without them). Arena papers are not
-judged.
+analysis reports the panel with and without them). Arena pairs are judged
+by the same panel; which members sit on it is an admin setting.
 
 | Slug                 | Backing model id      | Hosting                       | Streams?  |
 |----------------------|-----------------------|-------------------------------|-----------|
@@ -62,7 +65,7 @@ Each system is enabled in the DB only if its provider key is present, so
 a missing key means that system is skipped by pair selection rather than
 failing mid-battle. Retired systems (earlier baselines and the
 out-of-scope open-weight specialists) stay in the DB with `enabled=false`
-so their historical reviews, votes and Elo snapshots remain queryable.
+so their historical reviews, votes and ratings remain queryable.
 
 ## Architecture
 
@@ -123,12 +126,7 @@ reviewarena/
 # PDF parsing: review-gen/app/parsing/chandra.py → Datalab's hosted Chandra API
 ├── packages/
 │   └── shared-types/              # Zod schemas + TS types
-├── scripts/
-│   └── thesis_eval.py             # consumes /admin/export.json → CSVs + plots
-├── docs/
-│   ├── architecture.md
-│   ├── walkthrough.md
-│   └── SECRETS.md                 # rotation playbook
+├── deploy/                        # Caddyfile, backup.sh, one-off migration SQL
 ├── docker-compose.yml             # Postgres only
 ├── mprocs.yaml                    # local dev runner
 ├── pnpm-workspace.yaml
@@ -219,8 +217,6 @@ For the review systems (and the judge panel) you also need
 `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `ZAI_API_KEY`,
 `OPENAI_API_KEY`, `MISTRAL_API_KEY`, and `CHANDRA_API_KEY` for PDF
 parsing.
-
-Rotation playbook: [docs/SECRETS.md](docs/SECRETS.md).
 
 ## Looking at the database
 
@@ -374,7 +370,7 @@ as `anchor`.
 - [x] **Checkpoint 7** — LLM-as-judge scoring (sole automatic metric;
        BLEU/ROUGE later removed), BERTopic / word-frequency analytics
 - [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Cloud Run / Vercel
-       deploys, [thesis evaluation script](scripts/thesis_eval.py)
+       deploys, admin JSON/CSV export
 
 ## Testing
 
@@ -407,16 +403,16 @@ pnpm --filter @reviewarena/web typecheck
 - **K = 4 (FastChat default).** Full-history replay; smaller K stops
   the most recent vote from dominating the rating.
 
-## Thesis analysis workflow
+## Getting the data out
+
+This repo is the running system; the analysis of what it collects lives
+outside it. Everything the analysis needs comes through the admin export:
 
 ```bash
-export ADMIN_TOKEN=…
-python scripts/thesis_eval.py --token "$ADMIN_TOKEN"
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  https://<host>/api/admin/export.json > export.json
 ```
 
-Output (in `research/analysis/`):
-- `export.json` — raw dump
-- `votes_long.csv` — one row per vote, dimension columns flattened
-- `head_to_head.csv` — pairwise win/loss/tie counts
-- `elo_trajectory.png` — per-system Elo over time, 95% CI shaded
-- `human_vs_judge.csv` — winrate vs LLM-judge mean per system
+The same route serves CSV. `votes` + `dimension_votes` are the primary
+record — every rating in `ratings` is a pure function of them and can be
+refitted from the export alone.
