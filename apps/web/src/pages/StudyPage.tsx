@@ -237,7 +237,14 @@ function StudyFlow({ code, onBadCode }: { code: string; onBadCode: () => void })
     if (paper.status !== "PARSED" || comps.length === 0) {
       return <GeneratingScreen code={code} paper={paper} />;
     }
-    const nextComp = comps.find((c) => !c.voted && c.ready);
+    // Strictly in pair order: 1, then 2, then 3. `comps` arrives sorted by
+    // pairIndex, and a pair that is merely still generating BLOCKS the ones
+    // behind it rather than being stepped over — otherwise whichever pair
+    // finished first is the one served, and a participant meets pair 2
+    // before pair 1 for no reason they can see. A failed pair is different:
+    // it can never become ready, so waiting on it would wedge the paper.
+    const pending = comps.filter((c) => !c.voted && !c.failed);
+    const nextComp = pending[0]?.ready ? pending[0] : undefined;
     if (nextComp) {
       return (
         <ComparisonScreen
