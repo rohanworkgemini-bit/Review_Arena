@@ -160,8 +160,8 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         "Methodology — follow in order:\n"
         "1. For each dimension, write 1-2 sentences of reasoning grounded in "
         "specific parts of the review and paper. This goes in "
-        "`reasoning_per_dimension`. (Chain-of-thought before scoring, "
-        "per Liu et al. 2023 G-Eval, improves score calibration.)\n"
+        "`reasoning_per_dimension`. (Chain-of-thought before scoring "
+        "improves score calibration.)\n"
         "2. Then assign each dimension a 1-10 score consistent with your "
         "reasoning. 1=very poor, 5=adequate, 8=strong, 10=exemplary. For "
         "EVERY dimension a higher score means the review is BETTER on that "
@@ -173,11 +173,24 @@ def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
         "substance should LOWER the COMPLETENESS_COVERAGE and "
         "CRITIQUE_CLARITY scores."
     )
-    user_prompt = (
-        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n"
-        f"=== REVIEW ===\n{review_text[:REVIEW_CHAR_CAP]}\n"
+    paper_part, review_part = _build_user_parts(paper_text, review_text)
+    return system_prompt, paper_part + review_part
+
+
+def _build_user_parts(paper_text: str, review_text: str) -> tuple[str, str]:
+    """The user prompt in two pieces, split at the paper/review boundary.
+
+    The paper half is byte-identical across every judge call on one paper —
+    all six panel members, both passes, all six reviews — so it is the
+    natural prompt-cache breakpoint. Concatenating the halves reproduces
+    _build_prompts' user_prompt exactly, so a provider with no explicit
+    cache controls can keep sending the joined string and nothing about
+    its input changes.
+    """
+    return (
+        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n",
+        f"=== REVIEW ===\n{review_text[:REVIEW_CHAR_CAP]}\n",
     )
-    return system_prompt, user_prompt
 
 
 # ─── Provider routing ──────────────────────────────────────────────────────
@@ -353,18 +366,41 @@ def _anthropic_judge_pass(
     user_prompt: str,
     model: str,
     schema: dict,
+    user_parts: tuple[str, str] | None = None,
 ) -> dict:
     """One Claude judge call. Structured output via output_config.format
     guarantees a schema-valid JSON text block; no temperature (Sonnet 5
     rejects it), no assistant prefill (removed on the 4.6+ family), and
     adaptive thinking left at its default. Streamed and collected because
     the SDK refuses non-streaming requests that may exceed 10 minutes
-    under adaptive thinking (see adapters/claude.py)."""
+    under adaptive thinking (see adapters/claude.py).
+
+    Prompt caching: with `user_parts` the paper half becomes its own
+    content block carrying the breakpoint, which caches everything ahead
+    of it — system prompt included, since system renders before messages.
+    One paper is judged ~12 times by this model (6 reviews x JUDGE_PASSES)
+    plus retries, all on the same ~100k-token prefix, so the 1-hour TTL is
+    the one that pays: the panel fans out in seconds but the three
+    comparisons of a paper are judged as the participant votes, minutes
+    apart, which is past the 5-minute window."""
+    if user_parts is None:
+        content: Any = user_prompt
+    else:
+        paper_part, review_part = user_parts
+        content = [
+            {
+                "type": "text",
+                "text": paper_part,
+                "cache_control": {"type": "ephemeral", "ttl": "1h"},
+            },
+            # After the breakpoint: the only half that differs per call.
+            {"type": "text", "text": review_part},
+        ]
     with client.messages.stream(
         model=model,
         max_tokens=16_000,
         system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
+        messages=[{"role": "user", "content": content}],
         output_config={
             "format": {"type": "json_schema", "schema": schema},
             # The judge is a form-filling task; medium effort keeps the
@@ -373,6 +409,17 @@ def _anthropic_judge_pass(
         },
     ) as stream:
         message = stream.get_final_message()
+    # The only ground truth that caching is working. A prefix change
+    # upstream fails silently — the call still succeeds, it just costs
+    # full price — so log it rather than assume.
+    usage = getattr(message, "usage", None)
+    if usage is not None:
+        logger.debug(
+            "anthropic judge cache: read=%s write=%s uncached=%s",
+            getattr(usage, "cache_read_input_tokens", None),
+            getattr(usage, "cache_creation_input_tokens", None),
+            getattr(usage, "input_tokens", None),
+        )
     if message.stop_reason == "refusal":
         # Deliberately worded so the transient-error classifier does not
         # retry it: a policy refusal repeats identically on every attempt.
@@ -389,10 +436,15 @@ def _one_judge_pass(
     system_prompt: str,
     user_prompt: str,
     model: str,
+    user_parts: tuple[str, str] | None = None,
 ) -> dict:
     """Single judge call with retry on transient errors. Dispatches on the
     provider kind. Returns the parsed JSON dict. Raises RuntimeError if all
-    retries fail. `client` is the provider SDK client (None for Gemini)."""
+    retries fail. `client` is the provider SDK client (None for Gemini).
+
+    `user_parts` is the same prompt split at the paper/review boundary, for
+    the one provider whose caching is opt-in. Everyone else gets the joined
+    string and relies on automatic prefix caching."""
     last_err: Exception | None = None
     for attempt in range(JUDGE_RETRY_MAX):
         try:
@@ -409,6 +461,7 @@ def _one_judge_pass(
                     user_prompt=user_prompt,
                     model=model,
                     schema=schema,
+                    user_parts=user_parts,
                 )
             return _openai_judge_pass(
                 client,
@@ -499,9 +552,12 @@ def judge_review(
     client = _client_for(model, provider)
 
     system_prompt, user_prompt = _build_prompts(paper_text, review_text)
+    user_parts = _build_user_parts(paper_text, review_text)
 
     # Multi-pass averaging. If all passes fail we surface the error;
     # if some succeed we average over successes (still informative).
+    # The passes run in sequence, so pass 2 reads the prefix pass 1 wrote —
+    # a cache entry is only readable once the first response has started.
     pass_data: list[dict] = []
     for pass_idx in range(JUDGE_PASSES):
         try:
@@ -512,6 +568,7 @@ def judge_review(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 model=model,
+                user_parts=user_parts,
             ))
         except RuntimeError as e:
             logger.warning("judge pass %d/%d failed: %s", pass_idx + 1, JUDGE_PASSES, e)
