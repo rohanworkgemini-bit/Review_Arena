@@ -157,8 +157,8 @@ export function DocsTab() {
               ],
               [
                 <strong>Study</strong>,
-                "20 invited participants with a code",
-                "Fixed rotation, decided in advance",
+                "Invited participants with a code",
+                "Rotation, drawn round-robin per paper",
                 "Yes — all six models judge every pair",
               ],
             ]}
@@ -301,14 +301,15 @@ export function DocsTab() {
         <CardHeader>
           <CardTitle>The study design</CardTitle>
           <CardDescription>
-            Everything is decided before the first participant arrives.
+            The pairing rule is fixed before the first participant arrives;
+            which rotation a given paper gets follows from it.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Table
             head={["", "Count"]}
             rows={[
-              [<strong>Participants</strong>, "20"],
+              [<strong>Participants</strong>, "20 (an open pool — mint more anytime)"],
               [<strong>Papers each</strong>, "2 (their own choice)"],
               [<strong>Comparisons per paper</strong>, "3"],
               [<strong>Comparisons per participant</strong>, "6"],
@@ -319,10 +320,13 @@ export function DocsTab() {
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
             The pairing is a rotation: five rounds, each splitting the six
             systems into three pairs that share no system. Every participant
-            gets two rounds, and across all twenty the fifteen possible pairs
-            come up exactly eight times each. Nothing is left to chance, so no
-            pair can end up under-sampled — which is what a 120-comparison
-            budget cannot afford.
+            gets two rounds — never the same one twice — and each paper takes
+            whichever round has been used least so far, so the five stay
+            within one use of each other at every point in the study. At
+            twenty participants that lands on the fifteen possible pairs
+            exactly eight times each. No pair can end up under-sampled, which
+            is what a 120-comparison budget cannot afford, and nobody has to
+            be assigned a numbered slot in advance for it to hold.
           </p>
           <p className="text-[13.5px] leading-relaxed text-muted-foreground">
             The arena draws its pairs uniformly at random for a related
@@ -378,11 +382,14 @@ pnpm --filter @reviewarena/api db:seed`}</Pre>
             <Step n="2." title="Generate the participant codes">
               <Pre>pnpm --filter @reviewarena/api exec tsx scripts/seed-participants.ts</Pre>
               <p>
-                Prints all twenty codes and which rotation each participant
-                gets. Idempotent — re-running keeps existing codes. Save the
-                table somewhere outside the repo; there is no recovery path if
-                you lose it, and the codes are what link a participant to their
-                data.
+                Mints twenty codes and prints them. Rotations are not listed
+                because they are drawn per paper at upload, not fixed to a
+                person. Minting is additive, not idempotent: a re-run needs{" "}
+                <K>--count N</K> to say how many <em>more</em> you want, and{" "}
+                <K>--list</K> reprints the table without creating anything.
+                Save it somewhere outside the repo; there is no recovery path
+                if you lose it, and the codes are what link a participant to
+                their data.
               </p>
             </Step>
             <Step n="3." title="Verify the whole pipeline with one real paper">

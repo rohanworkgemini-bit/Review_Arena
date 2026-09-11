@@ -4,9 +4,9 @@ import type { Highlight } from "./highlight";
 // A comparison asks for eight dimension picks, eight optional notes and an
 // overall verdict, all after reading two long reviews. Losing that to a
 // refresh, a closed tab or a flat battery means re-reading both reviews
-// from the top — and in the controlled study a participant's slot cannot be
-// re-run, so the realistic outcome is a rushed second pass rather than an
-// honest one.
+// from the top — and in the controlled study a comparison cannot be re-run,
+// so the realistic outcome is a rushed second pass rather than an honest
+// one.
 //
 // Drafts live in localStorage, per comparison, and never leave the browser.
 // They are not research data: they are a scratchpad that happens to survive

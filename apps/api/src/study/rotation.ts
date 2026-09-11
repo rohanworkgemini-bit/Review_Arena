@@ -1,12 +1,22 @@
 /**
- * The controlled study's deterministic pairing design.
+ * The controlled study's pairing design.
  *
- * 20 participants × 2 papers × 3 disjoint pairs = 120 comparison events;
- * 15 unique pairs among 6 systems × 8 direct comparisons each = 120. The
- * five-round rotation is a 1-factorization of K6: within a rotation the
- * three pairs are disjoint (every system appears exactly once per paper),
- * and across R1–R5 every unique pair appears exactly once. 40 papers ÷ 5
- * rotations = each rotation used 8 times = each pair measured 8 times.
+ * 2 papers per participant × 3 disjoint pairs = 6 comparison events each;
+ * at 20 participants that is 120, and 15 unique pairs among 6 systems × 8
+ * direct comparisons each = 120. The five-round rotation is a
+ * 1-factorization of K6: within a rotation the three pairs are disjoint
+ * (every system appears exactly once per paper), and across R1–R5 every
+ * unique pair appears exactly once. 40 papers ÷ 5 rotations = each
+ * rotation used 8 times = each pair measured 8 times.
+ *
+ * Which rotation a paper gets is NOT pre-assigned to a participant slot.
+ * It is drawn at upload time by nextRotationId() — round-robin over the
+ * whole study, always the least-used rotation so far. Participants are
+ * therefore an open pool of anonymous codes rather than a fixed roster of
+ * numbered slots, and the balance above still falls out exactly whenever
+ * the paper count is a multiple of five. Past that it degrades gracefully:
+ * with, say, 22 participants two rotations are used 9 times and three 8,
+ * so pair coverage stays within one of even instead of drifting.
  *
  * The letter → slug mapping is FIXED and preregistered (alphabetical by
  * slug; re-lettered once, pre-study, in 2026-09 when deepseek-v4-flash
@@ -40,21 +50,41 @@ export const ROTATIONS: ReadonlyArray<ReadonlyArray<readonly [string, string]>> 
 
 export const PAPERS_PER_PARTICIPANT = 2;
 export const PAIRS_PER_PAPER = 3;
-export const NUM_PARTICIPANTS = 20;
+
+/** Rotation ids, 1-based: [1, 2, 3, 4, 5]. */
+export const ROTATION_IDS: readonly number[] = ROTATIONS.map((_, i) => i + 1);
 
 /**
- * Rotation ids (1-based) for one participant's papers. P01 → [R1, R2],
- * P02 → [R2, R3], … P05 → [R5, R1], then the cycle repeats each block of
- * five. Every rotation serves as paper-1 for 4 participants and paper-2
- * for 4 others → used exactly 8 times.
+ * The rotation for the next study paper: whichever has been used least so
+ * far, lowest id breaking ties. On a clean study that is plain round-robin
+ * — R1, R2, R3, R4, R5, R1, … — so the five stay within one use of each
+ * other at every point, not just at the end. A paper whose parse failed is
+ * not counted by the caller, so a failed upload does not burn a slot.
+ *
+ * `alreadyUsed` is the rotations this participant's other papers hold.
+ * Those are skipped so nobody judges the same three system pairs twice —
+ * the old per-slot schedule guaranteed that too. If every rotation is
+ * excluded (more papers per participant than rotations, which the current
+ * design never reaches) the constraint is dropped rather than throwing.
  */
-export function rotationsForParticipant(participantIndex: number): number[] {
-  if (participantIndex < 1 || participantIndex > NUM_PARTICIPANTS) {
-    throw new Error(`participant index out of range: ${participantIndex}`);
+export function nextRotationId(
+  usageByRotation: ReadonlyMap<number, number>,
+  alreadyUsed: readonly number[] = [],
+): number {
+  const excluded = new Set(alreadyUsed);
+  const candidates = ROTATION_IDS.filter((id) => !excluded.has(id));
+  const pool = candidates.length > 0 ? candidates : ROTATION_IDS;
+  // pool is ascending, so a strict < keeps the lowest id on a tie.
+  let best = pool[0]!;
+  let bestCount = usageByRotation.get(best) ?? 0;
+  for (const id of pool.slice(1)) {
+    const count = usageByRotation.get(id) ?? 0;
+    if (count < bestCount) {
+      best = id;
+      bestCount = count;
+    }
   }
-  const first = ((participantIndex - 1) % 5) + 1;
-  const second = (first % 5) + 1;
-  return [first, second];
+  return best;
 }
 
 /** The three (slugA, slugB) pairs for a rotation id (1-based). */

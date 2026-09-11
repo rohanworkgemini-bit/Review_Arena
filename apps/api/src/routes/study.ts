@@ -2,9 +2,12 @@
  * Controlled-study routes (/study/*).
  *
  * The arena's uniform sampler is replaced by the preregistered design in
- * src/study/rotation.ts: 20 participants × 2 papers × 3 disjoint pairs,
- * every one of the 15 system pairs measured exactly 8 times. Participants
- * authenticate with a pre-assigned secret code (capability token, no PII).
+ * src/study/rotation.ts: 2 papers × 3 disjoint pairs per participant, with
+ * each paper's rotation drawn round-robin over the whole study so the 15
+ * system pairs stay evenly measured (exactly 8 times each at 20
+ * participants). Participants are an open pool of anonymous codes — no
+ * numbered slots, no schedule fixed to an identity — and authenticate with
+ * a secret code (capability token, no PII).
  *
  * Flow per paper: upload → ALL six systems generate server-side → the
  * rotation's three comparisons unlock as their reviews complete → three
@@ -32,7 +35,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import {
   dimensionVotes,
@@ -64,8 +67,8 @@ import {
   PAIRS_PER_PAPER,
   PAPERS_PER_PARTICIPANT,
   STUDY_SLUGS,
+  nextRotationId,
   pairsForRotation,
-  rotationsForParticipant,
 } from "../study/rotation.js";
 
 const upload = multer({
@@ -127,6 +130,24 @@ export function studyRouter(
       if (!byIndex.has(p.paperIndex!)) byIndex.set(p.paperIndex!, p);
     }
     return byIndex;
+  }
+
+  /**
+   * How many study papers each rotation is currently carrying. Parse
+   * failures are excluded so a dead upload does not consume a rotation —
+   * the participant's retry gets the same one back.
+   */
+  async function rotationUsage(): Promise<Map<number, number>> {
+    const rows = await db.execute(sql`
+      select rotation_id, count(*)::int as n
+      from papers
+      where rotation_id is not null and status <> 'PARSE_FAILED'
+      group by rotation_id`);
+    const usage = new Map<number, number>();
+    for (const r of rows.rows as unknown as { rotation_id: number; n: number }[]) {
+      usage.set(Number(r.rotation_id), Number(r.n));
+    }
+    return usage;
   }
 
   // ── GET /study/state ─────────────────────────────────────────────────
@@ -244,8 +265,16 @@ export function studyRouter(
       paperIndex = i + 1;
     }
 
-    const participantIndex = Number(participantId.replace(/^P/i, ""));
-    const rotationId = rotationsForParticipant(participantIndex)[paperIndex - 1]!;
+    // The rotation is drawn here rather than read off a pre-assigned
+    // participant slot: least-used rotation across the whole study, minus
+    // whatever this participant's other paper already holds. See
+    // nextRotationId() for why that still lands on even pair coverage.
+    const rotationId = nextRotationId(
+      await rotationUsage(),
+      [...byIndex.values()]
+        .filter((p) => p.status !== "PARSE_FAILED" && p.rotationId != null)
+        .map((p) => p.rotationId!),
+    );
 
     const [paper] = await db
       .insert(papers)

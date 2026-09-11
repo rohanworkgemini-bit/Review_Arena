@@ -104,9 +104,11 @@ export const metricReferenceTypeEnum = pgEnum("metric_reference_type", [
 
 // ─── Study participants ───────────────────────────────────────────────────
 
-// The 20 pre-assigned participants of the controlled study. `id` is the
-// public label (P01..P20) fixing the rotation schedule; `code` is the
-// secret they type to enter /study (capability token — no PII anywhere).
+// The controlled study's participants — an open pool, minted as needed by
+// scripts/seed-participants.ts. `id` is an opaque public label carrying no
+// schedule (rotations are drawn per paper at upload; early rows predate
+// this and are still labelled P01..P20); `code` is the secret they type to
+// enter /study (capability token — no PII anywhere).
 export const participants = pgTable("participants", {
   id: text("id").primaryKey(),
   code: text("code").notNull().unique(),
@@ -134,10 +136,10 @@ export const papers = pgTable(
     status: paperStatusEnum("status").notNull().default("UPLOADED"),
     errorMessage: text("error_message"),
     // Study mode: set on papers uploaded through /study. participantId
-    // links to the pre-assigned participant, paperIndex is 1 or 2 within
-    // their schedule, rotationId (1-5) fixes which three system pairs
-    // this paper's comparisons use (see src/study/rotation.ts). All null
-    // for arena uploads.
+    // links to the participant whose code was used, paperIndex is 1 or 2
+    // within their session, rotationId (1-5) fixes which three system pairs
+    // this paper's comparisons use — drawn at upload by nextRotationId()
+    // (see src/study/rotation.ts). All null for arena uploads.
     participantId: text("participant_id").references(() => participants.id),
     paperIndex: integer("paper_index"),
     rotationId: integer("rotation_id"),

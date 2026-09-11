@@ -21,7 +21,7 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 
 import { sql } from "drizzle-orm";
 import { db, closeDbPool } from "../src/db/client.js";
-import { NUM_PARTICIPANTS, STUDY_SLUGS } from "../src/study/rotation.js";
+import { STUDY_SLUGS } from "../src/study/rotation.js";
 import { isJudgeEnabled } from "../src/settings.js";
 
 const LIVE = process.argv.includes("--live");
@@ -196,23 +196,24 @@ async function main(): Promise<void> {
       }
     });
 
-    // 4. Participants seeded.
+    // 4. Participant codes minted. The pool is open — there is no target
+    //    count to hit — so this only catches an empty table, and nudges if
+    //    there are fewer codes than a session is likely to need.
     await check("participants", async () => {
       const rows = await db.query.participants.findMany();
-      if (rows.length === NUM_PARTICIPANTS)
-        ok("participants", `${rows.length} codes ready`);
-      else if (rows.length === 0)
+      if (rows.length === 0)
         fail(
           "participants",
-          "none seeded",
+          "none minted",
           "Run: pnpm --filter @reviewarena/api exec tsx scripts/seed-participants.ts",
         );
-      else
+      else if (rows.length < 5)
         warn(
           "participants",
-          `${rows.length} of ${NUM_PARTICIPANTS} seeded`,
-          "Re-run seed-participants.ts — it is idempotent and keeps existing codes.",
+          `only ${rows.length} code(s) minted`,
+          "Mint more before the session: seed-participants.ts --count N.",
         );
+      else ok("participants", `${rows.length} codes ready`);
     });
 
     // 5. Work stuck in a non-terminal state. The sweeper should clear these

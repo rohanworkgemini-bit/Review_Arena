@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  NUM_PARTICIPANTS,
   PAPERS_PER_PARTICIPANT,
   ROTATIONS,
+  ROTATION_IDS,
   STUDY_SLUGS,
   STUDY_SYSTEMS,
+  nextRotationId,
   pairsForRotation,
-  rotationsForParticipant,
 } from "../rotation.js";
 
 // These tests prove the design's balance claims programmatically, so any
@@ -14,6 +14,27 @@ import {
 // the study's comparison counts.
 
 const key = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/**
+ * Replays the study the way the upload route does: participants arrive one
+ * at a time, each uploads PAPERS_PER_PARTICIPANT papers, and every paper
+ * draws from the running usage counts. Returns the rotations each
+ * participant ended up with.
+ */
+function simulateStudy(participantCount: number): number[][] {
+  const usage = new Map<number, number>();
+  const schedule: number[][] = [];
+  for (let p = 0; p < participantCount; p++) {
+    const mine: number[] = [];
+    for (let i = 0; i < PAPERS_PER_PARTICIPANT; i++) {
+      const id = nextRotationId(usage, mine);
+      usage.set(id, (usage.get(id) ?? 0) + 1);
+      mine.push(id);
+    }
+    schedule.push(mine);
+  }
+  return schedule;
+}
 
 describe("study rotation design", () => {
   it("maps six distinct letters to six distinct slugs", () => {
@@ -49,12 +70,35 @@ describe("study rotation design", () => {
     for (const count of seen.values()) expect(count).toBe(1);
   });
 
-  it("participant schedule uses every rotation exactly 8 times over 40 papers", () => {
+  it("round-robins R1-R5 on a clean study", () => {
     const usage = new Map<number, number>();
-    for (let p = 1; p <= NUM_PARTICIPANTS; p++) {
-      const rotations = rotationsForParticipant(p);
-      expect(rotations).toHaveLength(PAPERS_PER_PARTICIPANT);
-      for (const r of rotations) usage.set(r, (usage.get(r) ?? 0) + 1);
+    const drawn: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const id = nextRotationId(usage);
+      usage.set(id, (usage.get(id) ?? 0) + 1);
+      drawn.push(id);
+    }
+    expect(drawn).toEqual([1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2]);
+  });
+
+  it("always picks the least-used rotation, lowest id breaking ties", () => {
+    expect(nextRotationId(new Map([[1, 3], [2, 1], [3, 1], [4, 2], [5, 3]]))).toBe(2);
+    expect(nextRotationId(new Map([[1, 0], [2, 0], [3, 0], [4, 0], [5, 0]]))).toBe(1);
+    // The participant's own rotation is skipped even when it is least used.
+    expect(nextRotationId(new Map([[1, 0], [2, 1], [3, 1], [4, 1], [5, 1]]), [1])).toBe(2);
+  });
+
+  it("falls back to the full pool if every rotation is excluded", () => {
+    expect(ROTATION_IDS).toEqual([1, 2, 3, 4, 5]);
+    const usage = new Map([[1, 2], [2, 2], [3, 0], [4, 2], [5, 2]]);
+    expect(nextRotationId(usage, [...ROTATION_IDS])).toBe(3);
+  });
+
+  it("uses every rotation exactly 8 times over a 20-participant study", () => {
+    const usage = new Map<number, number>();
+    for (const mine of simulateStudy(20)) {
+      expect(mine).toHaveLength(PAPERS_PER_PARTICIPANT);
+      for (const r of mine) usage.set(r, (usage.get(r) ?? 0) + 1);
     }
     expect([...usage.keys()].sort()).toEqual([1, 2, 3, 4, 5]);
     for (const count of usage.values()) expect(count).toBe(8);
@@ -62,8 +106,8 @@ describe("study rotation design", () => {
 
   it("the full study yields exactly 8 comparisons for each of the 15 slug pairs", () => {
     const counts = new Map<string, number>();
-    for (let p = 1; p <= NUM_PARTICIPANTS; p++) {
-      for (const rotationId of rotationsForParticipant(p)) {
+    for (const mine of simulateStudy(20)) {
+      for (const rotationId of mine) {
         for (const [slugA, slugB] of pairsForRotation(rotationId)) {
           counts.set(key(slugA, slugB), (counts.get(key(slugA, slugB)) ?? 0) + 1);
         }
@@ -76,9 +120,20 @@ describe("study rotation design", () => {
   });
 
   it("a participant's two papers never repeat a rotation", () => {
-    for (let p = 1; p <= NUM_PARTICIPANTS; p++) {
-      const [r1, r2] = rotationsForParticipant(p);
-      expect(r1).not.toBe(r2);
+    for (const [r1, r2] of simulateStudy(50)) expect(r1).not.toBe(r2);
+  });
+
+  it("degrades gracefully past 20: rotation use stays within one of even", () => {
+    for (const participantCount of [1, 7, 13, 22, 31, 100]) {
+      const usage = new Map<number, number>();
+      for (const mine of simulateStudy(participantCount)) {
+        for (const r of mine) usage.set(r, (usage.get(r) ?? 0) + 1);
+      }
+      const counts = ROTATION_IDS.map((id) => usage.get(id) ?? 0);
+      expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+      expect(counts.reduce((a, b) => a + b, 0)).toBe(
+        participantCount * PAPERS_PER_PARTICIPANT,
+      );
     }
   });
 });

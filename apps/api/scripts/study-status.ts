@@ -1,12 +1,16 @@
 // Study progress and integrity. Run it after every session, and before
 // you start analysing anything.
 //
-// The design only works if it stays balanced: twenty participants, two
-// papers each, three comparisons per paper, and every one of the fifteen
-// system pairs judged exactly eight times. A participant who leaves after
-// four comparisons puts a hole in that, and nobody else can fill it — the
-// pairs they were assigned are theirs. The sooner you know, the more
-// likely you can still ask them back.
+// The design only works if it stays balanced: two papers per participant,
+// three comparisons per paper, and every one of the fifteen system pairs
+// judged the same number of times. A participant who leaves after four
+// comparisons puts a hole in that — their paper's rotation is half
+// measured, and the round-robin draw will not re-issue it until every
+// other rotation has caught up. The sooner you know, the more likely you
+// can still ask them back.
+//
+// Targets scale with however many codes are minted, since the participant
+// pool is open: at 20 that is the familiar 120 comparisons and 8 per pair.
 //
 // Run: pnpm --filter @reviewarena/api study:status
 
@@ -18,17 +22,15 @@ loadEnv({ path: resolve(fileURLToPath(import.meta.url), "../../../../.env") });
 import { sql } from "drizzle-orm";
 import { db, closeDbPool } from "../src/db/client.js";
 import {
-  NUM_PARTICIPANTS,
   PAIRS_PER_PAPER,
   PAPERS_PER_PARTICIPANT,
+  ROTATION_IDS,
   STUDY_SLUGS,
 } from "../src/study/rotation.js";
 
 const COMPARISONS_PER_PARTICIPANT = PAPERS_PER_PARTICIPANT * PAIRS_PER_PAPER;
-const TOTAL_TARGET = NUM_PARTICIPANTS * COMPARISONS_PER_PARTICIPANT;
 const PANEL_SIZE = STUDY_SLUGS.length;
-// 15 unordered pairs over 6 systems, each seen 8 times across the study.
-const PAIR_TARGET = TOTAL_TARGET / ((PANEL_SIZE * (PANEL_SIZE - 1)) / 2);
+const DISTINCT_PAIRS = (PANEL_SIZE * (PANEL_SIZE - 1)) / 2;
 
 interface ParticipantRow {
   id: string;
@@ -56,9 +58,17 @@ async function main(): Promise<void> {
   const complete = rows.filter((r) => r.voted >= COMPARISONS_PER_PARTICIPANT);
   const partial = started.filter((r) => r.voted < COMPARISONS_PER_PARTICIPANT);
 
+  // Targets follow the minted pool rather than a hard-coded roster size.
+  const TOTAL_TARGET = rows.length * COMPARISONS_PER_PARTICIPANT;
+  const PAIR_TARGET = TOTAL_TARGET / DISTINCT_PAIRS;
+  const PAIR_BAR = Math.max(1, Math.round(PAIR_TARGET));
+  const pairTargetLabel = Number.isInteger(PAIR_TARGET)
+    ? String(PAIR_TARGET)
+    : PAIR_TARGET.toFixed(1);
+
   console.log("\n═══ Participants ═══\n");
   console.log(
-    `${"id".padEnd(6)}${"papers".padStart(8)}${"pairs".padStart(8)}` +
+    `${"id".padEnd(13)}${"papers".padStart(8)}${"pairs".padStart(8)}` +
       `${"voted".padStart(8)}   status`,
   );
   for (const r of rows) {
@@ -68,13 +78,13 @@ async function main(): Promise<void> {
       ? "complete"
       : `INCOMPLETE — ${COMPARISONS_PER_PARTICIPANT - r.voted} comparison(s) missing`;
     console.log(
-      `${r.id.padEnd(6)}${String(r.papers).padStart(8)}` +
+      `${r.id.padEnd(13)}${String(r.papers).padStart(8)}` +
         `${String(r.comparisons).padStart(8)}${String(r.voted).padStart(8)}   ${status}`,
     );
   }
   console.log(
     `\n${complete.length} complete · ${partial.length} partial · ` +
-      `${NUM_PARTICIPANTS - started.length} not started`,
+      `${rows.length - started.length} not started`,
   );
 
   // ─── Overall progress ────────────────────────────────────────────────────
@@ -107,17 +117,16 @@ async function main(): Promise<void> {
     group by 1, 2
     order by 3 desc, 1, 2`);
 
-  console.log(`═══ Pair balance (target ${PAIR_TARGET} each) ═══\n`);
+  console.log(`═══ Pair balance (target ${pairTargetLabel} each) ═══\n`);
   if (pairs.rows.length === 0) {
     console.log("  no comparisons yet\n");
   } else {
     for (const r of pairs.rows as unknown as { lo: string; hi: string; voted: number }[]) {
-      const bar = "█".repeat(Math.min(r.voted, PAIR_TARGET)).padEnd(PAIR_TARGET, "·");
+      const bar = "█".repeat(Math.min(r.voted, PAIR_BAR)).padEnd(PAIR_BAR, "·");
       console.log(`  ${r.lo.padEnd(19)} ${r.hi.padEnd(19)} ${bar} ${r.voted}`);
     }
     const seen = pairs.rows.length;
-    const expectedPairs = (PANEL_SIZE * (PANEL_SIZE - 1)) / 2;
-    console.log(`\n  ${seen} of ${expectedPairs} distinct pairs seen`);
+    console.log(`\n  ${seen} of ${DISTINCT_PAIRS} distinct pairs seen`);
     const over = (pairs.rows as unknown as { voted: number }[]).filter(
       (r) => r.voted > PAIR_TARGET,
     ).length;
@@ -126,6 +135,34 @@ async function main(): Promise<void> {
         `  ${over} pair(s) above target — expected only if a session was re-run.`,
       );
   }
+
+  // ─── Rotation balance ────────────────────────────────────────────────────
+  // The round-robin draw keeps these within one of each other. A spread
+  // wider than that means papers were created outside beginStudyPaper, or
+  // parse failures are being counted somewhere they should not be.
+  const rotations = await db.execute(sql`
+    select rotation_id, count(*)::int as papers
+    from papers
+    where rotation_id is not null and status <> 'PARSE_FAILED'
+    group by rotation_id`);
+  const byRotation = new Map(
+    (rotations.rows as unknown as { rotation_id: number; papers: number }[]).map((r) => [
+      Number(r.rotation_id),
+      Number(r.papers),
+    ]),
+  );
+  const counts = ROTATION_IDS.map((id) => byRotation.get(id) ?? 0);
+  console.log(`\n═══ Rotation balance ═══\n`);
+  console.log(
+    `  ${ROTATION_IDS.map((id, i) => `R${id}:${counts[i]}`).join("  ")}` +
+      `   (${counts.reduce((a, b) => a + b, 0)} papers)`,
+  );
+  const spread = Math.max(...counts) - Math.min(...counts);
+  if (spread > 1)
+    console.log(
+      `\n  Spread of ${spread} — the draw allows at most 1. Check for papers\n` +
+        `  inserted outside the study upload route.`,
+    );
 
   // ─── Judge coverage ──────────────────────────────────────────────────────
   // Every voted comparison should carry PANEL_SIZE verdicts. Anything short
