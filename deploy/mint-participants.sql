@@ -15,12 +15,17 @@
 -- but it is also why this is not idempotent. Check the total afterwards.
 --
 -- Shapes, kept in sync with seed-participants.ts:
---   id   'p_' + 8 chars of abcdefghijkmnpqrstuvwxyz23456789
---        (no l/1/o/0 -- ids get read aloud and typed into queries)
+--   id   'P' + zero-padded sequence, continuing from the highest existing
+--        P-number: P01..P20 already there means the next batch is P21..P40
 --   code '<tree word>-<4 digits>'
 --
--- Participant ids carry NO schedule. Rotations are drawn per paper at upload
--- by nextRotationId(), so any code can go to any person in any order.
+-- The sequence is a LABEL ONLY. Until 2026-09 the P-number doubled as a
+-- schedule -- P01 meant rotations R1 then R2 -- which is what capped the
+-- study at twenty slots. Rotations are now drawn per paper at upload by
+-- nextRotationId(), so the number encodes nothing and any code can go to
+-- any person in any order. It is sequential purely because it is easier to
+-- read aloud, tick off a handout list, and paste into a status query than
+-- a random string.
 
 \if :{?count}
 \else
@@ -36,18 +41,25 @@ SET LOCAL mint.count = :count;
 DO $$
 DECLARE
   want      int := current_setting('mint.count')::int;
-  alphabet  text := 'abcdefghijkmnpqrstuvwxyz23456789';
   words     text[] := ARRAY[
     'maple','cedar','birch','aspen','alder','hazel','rowan','olive',
     'pine','oak','elm','fir','ash','yew','beech','larch',
     'linden','spruce','walnut','willow'
   ];
+  next_n    int;
   made      int := 0;
   attempts  int := 0;
   new_id    text;
   new_code  text;
-  i         int;
 BEGIN
+  -- Continue the sequence rather than restarting it. Only ids of the form
+  -- P<digits> count: anything else in the table (the p_xxxxxxxx shape the
+  -- tsx script mints) is ignored rather than parsed.
+  SELECT coalesce(max(substring(id from '^P([0-9]+)$')::int), 0) + 1
+    INTO next_n
+    FROM participants
+   WHERE id ~ '^P[0-9]+$';
+
   WHILE made < want LOOP
     attempts := attempts + 1;
     IF attempts > want * 100 THEN
@@ -56,25 +68,25 @@ BEGIN
         'is probably crowded; widen WORDS or the digit range', attempts, made, want;
     END IF;
 
-    new_id := 'p_';
-    FOR i IN 1..8 LOOP
-      new_id := new_id || substr(alphabet, 1 + floor(random() * length(alphabet))::int, 1);
-    END LOOP;
+    new_id := 'P' || lpad(next_n::text, 2, '0');
 
     -- 1000..9999, matching randomInt(1000, 10000) in the script.
     new_code := words[1 + floor(random() * array_length(words, 1))::int]
                 || '-' || (1000 + floor(random() * 9000))::int::text;
 
-    -- A collision on either column just costs another spin of the loop.
+    -- Only the code can collide; the id is sequential and checked above.
+    -- A collision just costs another spin of the loop, same id next time.
     INSERT INTO participants (id, code) VALUES (new_id, new_code)
     ON CONFLICT DO NOTHING;
 
     IF FOUND THEN
       made := made + 1;
+      next_n := next_n + 1;
     END IF;
   END LOOP;
 
-  RAISE NOTICE 'minted % participant(s) in % attempt(s)', made, attempts;
+  RAISE NOTICE 'minted % participant(s) (through %) in % attempt(s)',
+    made, new_id, attempts;
 END $$;
 
 COMMIT;
