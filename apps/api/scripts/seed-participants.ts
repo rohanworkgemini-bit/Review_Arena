@@ -31,13 +31,23 @@ const WORDS = [
   "linden", "spruce", "walnut", "willow",
 ];
 
-// No l/1/o/0 — ids get read aloud and typed into study-status queries.
-const ID_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
+// Ids are P01, P02, ... — a LABEL ONLY, continuing from the highest that
+// already exists. Until 2026-09 the number doubled as a schedule (P01 meant
+// rotations R1 then R2), which is what capped the study at twenty slots;
+// nextRotationId() draws per paper at upload now, so it encodes nothing.
+// Sequential purely because it is read aloud, ticked off a handout sheet and
+// pasted into status queries. Kept in sync with deploy/mint-participants.sql.
+function nextIdNumber(existingIds: Iterable<string>): number {
+  let max = 0;
+  for (const id of existingIds) {
+    const m = /^P(\d+)$/.exec(id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
 
-function newId(): string {
-  let s = "";
-  for (let i = 0; i < 8; i++) s += ID_ALPHABET[randomInt(ID_ALPHABET.length)];
-  return `p_${s}`;
+function idFor(n: number): string {
+  return `P${String(n).padStart(2, "0")}`;
 }
 
 function newCode(): string {
@@ -73,9 +83,12 @@ async function main() {
       process.exit(1);
     }
     minted = count ?? DEFAULT_COUNT;
+    let n = nextIdNumber(usedIds);
     for (let i = 0; i < minted; i++) {
+      // Skip any number already taken — a table holding other id shapes,
+      // or a gap left by a deleted row, must not produce a collision.
       let id: string;
-      do { id = newId(); } while (usedIds.has(id));
+      do { id = idFor(n++); } while (usedIds.has(id));
       let code: string;
       do { code = newCode(); } while (usedCodes.has(code));
       usedIds.add(id);
