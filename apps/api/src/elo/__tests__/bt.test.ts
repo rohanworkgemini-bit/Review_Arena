@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   computeBT,
   bootstrapBTCI,
-  bootstrapBTByCluster,
   preprocessForBT,
   largestStronglyConnected,
   multinomialCounts,
@@ -10,7 +9,6 @@ import {
   mulberry32,
   DEFAULT_BT,
 } from "../bt.js";
-import type { ClusteredBattle } from "../bt.js";
 import type { Battle } from "../elo.js";
 
 const battle = (a: string, b: string, outcome: 0 | 0.5 | 1): Battle => ({ a, b, outcome });
@@ -249,76 +247,6 @@ describe("bootstrapBTCI", () => {
     const ci = bootstrapBTCI(battles, 100, { baselineSlug: "mid" });
     const iv = ci.get("mid")!;
     expect(iv.ciHigh - iv.ciLow).toBeCloseTo(0, 9);
-  });
-});
-
-describe("bootstrapBTByCluster", () => {
-  /**
-   * The controlled study's shape: 20 participants who each judge the same
-   * matchup 9 times, but who disagree with each other. Half of them always
-   * prefer a, half always prefer b — so the comparisons are split 90/90 and
-   * the systems are genuinely level, but the evidence is really 20 opinions,
-   * not 180.
-   */
-  const polarised: ClusteredBattle[] = [];
-  for (let p = 0; p < 20; p++) {
-    const prefersA = p % 2 === 0;
-    for (let k = 0; k < 9; k++) {
-      polarised.push({ a: "a", b: "b", outcome: prefersA ? 1 : 0, cluster: `P${p}` });
-    }
-  }
-
-  it("returns an empty map for no battles", () => {
-    expect(bootstrapBTByCluster([]).size).toBe(0);
-  });
-
-  it("brackets every point estimate", () => {
-    for (const iv of bootstrapBTByCluster(polarised, 500).values()) {
-      expect(iv.ciLow).toBeLessThanOrEqual(iv.rating);
-      expect(iv.rating).toBeLessThanOrEqual(iv.ciHigh);
-    }
-  });
-
-  it("counts comparisons, not clusters, in voteCount", () => {
-    const ci = bootstrapBTByCluster(polarised, 100);
-    expect(ci.get("a")!.voteCount).toBe(180);
-  });
-
-  it("is reproducible for a fixed seed", () => {
-    const x = bootstrapBTByCluster(polarised, 200, {}, mulberry32(9));
-    const y = bootstrapBTByCluster(polarised, 200, {}, mulberry32(9));
-    expect([...y.values()]).toEqual([...x.values()]);
-  });
-
-  it("reports a wider interval than the comparison-level bootstrap when judgments cluster", () => {
-    // The headline reason this function exists. Resampling comparisons sees
-    // 180 independent coin flips landing 90/90 and concludes the systems are
-    // level with high confidence; resampling participants sees 20 opinions
-    // split 10/10, which is a far less certain thing to have observed.
-    const clustered = bootstrapBTByCluster(polarised, 2000);
-    const perVote = bootstrapBTCI(polarised, 2000);
-    const width = (m: Map<string, { ciLow: number; ciHigh: number }>) =>
-      m.get("a")!.ciHigh - m.get("a")!.ciLow;
-    expect(width(clustered)).toBeGreaterThan(width(perVote));
-  });
-
-  it("collapses toward the comparison-level bootstrap when every comparison is its own cluster", () => {
-    // With one comparison per cluster the two schemes are the same
-    // resampling problem, so the intervals should land close together.
-    const battles: ClusteredBattle[] = [
-      ...record("strong", "weak", 40, 20),
-      ...record("weak", "mid", 30, 30),
-      ...record("strong", "mid", 35, 25),
-    ].map((b, i) => ({ ...b, cluster: `c${i}` }));
-    const clustered = bootstrapBTByCluster(battles, 1000);
-    const perVote = bootstrapBTCI(battles, 1000);
-    for (const slug of clustered.keys()) {
-      const a = clustered.get(slug)!;
-      const b = perVote.get(slug)!;
-      const widthA = a.ciHigh - a.ciLow;
-      const widthB = b.ciHigh - b.ciLow;
-      expect(Math.abs(widthA - widthB) / widthB).toBeLessThan(0.25);
-    }
   });
 });
 

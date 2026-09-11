@@ -300,13 +300,17 @@ export const votes = pgTable(
     reviewAId: text("review_a_id").notNull().references(() => reviews.id),
     reviewBId: text("review_b_id").notNull().references(() => reviews.id),
     winner: voteWinnerEnum("winner").notNull(),
-    // ARENA votes carry the 8-dimension form and feed the live leaderboard;
-    // STUDY votes are single-axis, tied to a participant, analysed offline
-    // (mean-centred BT + participant-level cluster bootstrap) and NEVER
-    // included in live snapshots — a mid-study public board would leak
-    // standings back to participants and bias later votes.
+    // Which collection regime produced this vote. Both carry the same
+    // instrument — overall verdict plus all eight dimensions — and both feed
+    // the same boards: the rating path filters on review status, judge status
+    // and the quality flag, never on mode. The tag exists so the offline
+    // analysis can separate the two deliberately where a research question
+    // calls for it, not to exclude either from the ratings.
     mode: voteModeEnum("mode").notNull().default("ARENA"),
-    // Set on STUDY votes only — the clustering unit for the bootstrap.
+    // Set on STUDY votes only. Ties a participant's two papers and six
+    // comparisons together as one record; also what an offline analysis
+    // would group on if it wanted to account for within-participant
+    // correlation.
     participantId: text("participant_id").references(() => participants.id),
     // Optional free-text rationale for the overall verdict (mirrors the
     // per-dimension note; qualitative signal for thesis analysis).
