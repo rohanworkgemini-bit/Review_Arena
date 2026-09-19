@@ -3,10 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ReviewPanel } from "@/components/comparison/ReviewPanel";
 import type { StructuredReview } from "@reviewarena/shared-types";
 
-// The property under test: the panel renders EVERYTHING the model sent,
+// The property under test: the panel renders everything the model sent,
 // in order — every section of the venue form, every score line, every
-// bullet. The only permitted alteration is stripping asterisk emphasis
-// markers. If a future edit reintroduces a filtered view, this fails.
+// bullet. Permitted alterations are exactly two, and no more: asterisk
+// emphasis markers are stripped, and the overall rating and confidence
+// sections are withheld (see isVerdictHeading — they hand the rater the
+// models' own verdict before they have read either review). If a future
+// edit reintroduces a filtered view beyond those, this fails.
 
 const structured: StructuredReview = {
   summary: "fallback summary",
@@ -83,8 +86,6 @@ describe("ReviewPanel", () => {
       "Questions",
       "Limitations",
       "Flag For Ethics Review",
-      "Rating",
-      "Confidence",
     ]) {
       expect(text).toContain(heading);
     }
@@ -103,10 +104,20 @@ describe("ReviewPanel", () => {
       "How does it scale?",
       "Societal impact is not discussed.",
       "No ethics review needed.",
+    ]) {
+      expect(text).toContain(content);
+    }
+
+    // …and the two verdict sections do not, heading or prose. The
+    // sub-scores above (Quality 3, Clarity 4, Originality 2) are still
+    // there — it is the overall verdict that is withheld, not every number.
+    for (const withheld of [
+      "Rating",
+      "Confidence",
       "Borderline accept.",
       "Confident but not certain.",
     ]) {
-      expect(text).toContain(content);
+      expect(text).not.toContain(withheld);
     }
 
     // Sanitized: no emphasis markers reach the screen…
@@ -115,9 +126,9 @@ describe("ReviewPanel", () => {
     // styled headings, not text).
     expect(text).not.toMatch(/^#{1,4}\s/m);
 
-    // Order is preserved: Rating comes after Questions, as the model
-    // wrote it.
-    expect(text.indexOf("Questions")).toBeLessThan(text.indexOf("Rating"));
+    // Order is preserved: the form's order, as the model wrote it.
+    expect(text.indexOf("Quality")).toBeLessThan(text.indexOf("Questions"));
+    expect(text.indexOf("Questions")).toBeLessThan(text.indexOf("Limitations"));
 
     // Lists render as real list items. Matched loosely on the opening tag:
     // <li> also carries the data-hl-block attribute the highlighter anchors

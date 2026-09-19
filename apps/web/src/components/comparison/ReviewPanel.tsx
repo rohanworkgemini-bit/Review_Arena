@@ -2,6 +2,7 @@ import { Fragment, useRef, type ReactNode } from "react";
 import { Section } from "@/components/comparison/Section";
 import {
   ScoreLine,
+  isVerdictHeading,
   scaleFor,
   splitLeadingScore,
 } from "@/components/comparison/ScoreLine";
@@ -316,8 +317,19 @@ export function parseReviewSections(
   flushPara();
 
   // Drop a leading preamble that turned out to be empty — most reviews open
-  // straight into a heading.
-  return sections.filter((sec) => sec.heading !== null || sec.nodes.length > 0);
+  // straight into a heading — and the two verdict sections, which are
+  // withheld from the rater (see isVerdictHeading).
+  //
+  // Dropped here rather than at either call site so every surface that
+  // renders a review agrees: the aligned pair, the streaming panel, and the
+  // single-column fallback all come through this one walk. Block indices
+  // are handed out during the walk above and so are unaffected by this
+  // filter — offsets already stored against the surviving blocks stay
+  // valid, and a highlight that was anchored inside a verdict section
+  // simply no longer has anywhere to draw.
+  return sections.filter((sec) =>
+    sec.heading === null ? sec.nodes.length > 0 : !isVerdictHeading(sec.heading),
+  );
 }
 
 /** Section heading, in the panel's own register. */
@@ -350,12 +362,11 @@ function StructuredFallback({ review }: { review: StructuredReview }) {
           {review.questions.map((s, i) => <li key={i}>{s}</li>)}
         </ul>
       </Section>
-      {review.overallRating !== undefined && (
-        <div className="border-t border-dashed border-rule2 pt-3 font-mono text-xs text-graphite">
-          Overall {review.overallRating}/10
-          {review.confidence !== undefined && `  ·  confidence ${review.confidence}/5`}
-        </div>
-      )}
+      {/* The overall rating and confidence are deliberately not rendered
+          here either — same reason as the markdown path (isVerdictHeading).
+          The fields stay on StructuredReview because the API still returns
+          them and the reveal screen is free to show them once the vote is
+          in; it is showing them BEFORE the vote that biases the comparison. */}
     </>
   );
 }

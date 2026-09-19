@@ -67,11 +67,20 @@ A concise summary from A.
 ## Strengths
 - A strength A noticed
 
+## Soundness
+3 The method holds up.
+
 ## Rating
-6 Marginally above the bar.`;
+6 Marginally above the bar.
+
+## Confidence
+5 Certain of this.`;
 
   const RAW_B = `## Summary
 B's summary.
+
+## Soundness
+2 Shakier than it looks.
 
 ## Rating
 4 Below the bar.
@@ -87,17 +96,31 @@ B alone discussed limitations.`;
     for (const t of [
       "A concise summary from A.",
       "A strength A noticed",
-      "Marginally above the bar.",
+      "The method holds up.",
       "B&#x27;s summary.",
-      "Below the bar.",
+      "Shakier than it looks.",
       "B alone discussed limitations.",
     ])
       expect(html).toContain(t);
   });
 
+  // Withheld on both sides, not just A's — a verdict visible in one column
+  // would be worse than one visible in both, since it breaks the
+  // presentation symmetry the comparison depends on.
+  it("withholds the rating and confidence sections from both panels", () => {
+    for (const t of [
+      "Rating",
+      "Confidence",
+      "Marginally above the bar.",
+      "Below the bar.",
+      "Certain of this.",
+    ])
+      expect(html).not.toContain(t);
+  });
+
   it("states each shared heading once", () => {
     expect(html.match(/Summary/g) ?? []).toHaveLength(1);
-    expect(html.match(/Rating/g) ?? []).toHaveLength(1);
+    expect(html.match(/Soundness/g) ?? []).toHaveLength(1);
   });
 
   it("says so when one review skipped a section", () => {
@@ -108,8 +131,10 @@ B alone discussed limitations.`;
     expect(html.match(/display:contents/g) ?? []).toHaveLength(2);
   });
 
+  // The sub-scores are still lifted onto their scale; only the overall
+  // verdict went away. Soundness is on 1-4 at all three venues.
   it("still draws the score on its scale", () => {
-    expect(html).toContain("/10");
+    expect(html).toContain("/4");
   });
 });
 

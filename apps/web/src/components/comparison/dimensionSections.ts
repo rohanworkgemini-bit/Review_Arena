@@ -16,7 +16,11 @@ import { VOTE_DIMENSIONS, type VoteDimension } from "@reviewarena/shared-types";
  */
 const CANDIDATES: Record<VoteDimension, string[]> = {
   CONTRIBUTION_ACCURACY: ["summary", "contribution", "significance"],
-  RESULTS_INTERPRETATION: ["soundness", "results", "quality", "rating"],
+  // No "rating" fallback: that section is withheld from the rater now
+  // (isVerdictHeading), so naming it here would only ever be a dead
+  // candidate. The dimension falls through to non-jumpable when a review
+  // has none of the three named sections, which is the honest outcome.
+  RESULTS_INTERPRETATION: ["soundness", "results", "quality"],
   COMPARATIVE_ANALYSIS: ["related work", "comparative", "originality", "weaknesses"],
   EVIDENCE_BASED_CRITIQUE: ["weaknesses", "strengths"],
   CRITIQUE_CLARITY: ["questions", "key questions for authors", "weaknesses"],

@@ -31,6 +31,23 @@ const SUBSCORE_RX =
   /^(?:soundness|presentation|contribution|significance|originality|quality|clarity)$/i;
 
 /**
+ * Whether a heading is the form's overall rating or its confidence field —
+ * the two places a review states its verdict outright.
+ *
+ * These are not rendered in the comparison (decision 2026-09-19). A rater
+ * who reads "0/10 LOWEST" beside "4/10" has been handed the answer before
+ * reading a word of either review, and the vote that follows measures
+ * agreement with the models' own scores rather than the quality of their
+ * prose. The sub-scores — soundness, presentation, contribution — stay:
+ * they caption the reasoning a rater is asked to weigh instead of
+ * pronouncing on the paper.
+ */
+export function isVerdictHeading(heading: string): boolean {
+  const h = heading.trim();
+  return CONFIDENCE_RX.test(h) || OVERALL_RX.test(h) || OVERALL_REC_RX.test(h);
+}
+
+/**
  * The scale a section's leading number is on, or null when the heading is
  * not a numeric field. Falls back to the widest overall scale when the
  * venue is unknown, so a bar is never drawn shorter than the truth.
