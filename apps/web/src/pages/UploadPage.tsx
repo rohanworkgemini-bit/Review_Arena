@@ -1,11 +1,11 @@
 import { useCallback, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
-import { UploadCloud, FileText, Loader2 } from "lucide-react";
+import { UploadCloud, FileText, Loader2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { uploadArxiv, uploadPaper } from "@/lib/api";
+import { getPublicConfig, uploadArxiv, uploadPaper } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { BottomBar } from "@/components/layout/BottomBar";
 import {
@@ -59,6 +59,14 @@ export function UploadPage() {
     multiple: false,
   });
 
+  // Polled rather than read once: a study window can open or close while
+  // somebody has the page open, and the switch is a single boolean.
+  const arenaConfig = useQuery({
+    queryKey: ["public-config"],
+    queryFn: getPublicConfig,
+    refetchInterval: 60_000,
+  });
+
   const mutation = useMutation({
     mutationFn: () =>
       source === "pdf"
@@ -73,8 +81,16 @@ export function UploadPage() {
 
   const submitting = mutation.isPending;
   const arxivLooksValid = ARXIV_HINT_RE.test(arxivUrl.trim());
+  // Closed for a study window? The API refuses the upload either way; this
+  // is so the page says it before a file is chosen instead of after.
+  // Until the answer arrives we assume open — a flash of "closed" on a
+  // working site is the worse error of the two.
+  const arenaOpen = arenaConfig.data?.arenaEnabled ?? true;
   const canSubmit =
-    !submitting && consented && (source === "pdf" ? !!file : arxivLooksValid);
+    arenaOpen &&
+    !submitting &&
+    consented &&
+    (source === "pdf" ? !!file : arxivLooksValid);
 
   return (
     <div className="container max-w-2xl py-10 space-y-6">
@@ -87,6 +103,37 @@ export function UploadPage() {
            Via PDF or arXiv link, Select the Review format, Read and vote for the better Review.
         </p>
       </div>
+
+      {!arenaOpen && (
+        <div
+          role="status"
+          className="border border-red/40 bg-paper2 px-4 py-3"
+        >
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-red" aria-hidden="true" />
+            <div className="space-y-1">
+              <div className="text-sm font-medium">
+                Uploads are paused for a live study
+              </div>
+              <p className="text-sm text-graphite">
+                {arenaConfig.data?.arenaDisabledMessage ??
+                  "The open arena is paused while a live user study is running."}
+              </p>
+              <p className="font-mono text-xs text-graphite">
+                The{" "}
+                <Link to="/leaderboard" className="underline underline-offset-2">
+                  leaderboard
+                </Link>{" "}
+                is still live. Study participants: enter your code at{" "}
+                <Link to="/study" className="underline underline-offset-2">
+                  /study
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Conference format — chosen up front; every generated review for
           this paper follows the selected venue's review form and overallå
@@ -219,7 +266,9 @@ export function UploadPage() {
             </div>
           ) : (
             <div className="flex-1 font-mono text-xs text-graphite">
-              {source === "pdf" && !file
+              {!arenaOpen
+                ? "Uploads are paused for a live study."
+                : source === "pdf" && !file
                 ? "Select a PDF to continue."
                 : source === "arxiv" && !arxivLooksValid
                 ? "Paste an arXiv URL or ID to continue."

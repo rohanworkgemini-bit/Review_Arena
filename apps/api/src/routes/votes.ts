@@ -7,6 +7,7 @@ import {
 import { db } from "../db/client.js";
 import {
   dimensionVotes,
+  participants,
   ratings,
   reviewSystems,
   reviews,
@@ -276,13 +277,20 @@ export function votesRouter(config: Config): Router {
 type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
-  const rows = await executor.query.votes.findMany({
-    orderBy: asc(votes.createdAt),
-    with: {
-      reviewA: { with: { reviewSystem: true } },
-      reviewB: { with: { reviewSystem: true } },
-    },
-  });
+  const [rows, testParticipants] = await Promise.all([
+    executor.query.votes.findMany({
+      orderBy: asc(votes.createdAt),
+      with: {
+        reviewA: { with: { reviewSystem: true } },
+        reviewB: { with: { reviewSystem: true } },
+      },
+    }),
+    // Read every time rather than memoised: the set changes only when codes
+    // are minted, and a stale cache here would silently put a dry run on the
+    // public board. Ten rows.
+    executor.query.participants.findMany({ where: eq(participants.isTest, true) }),
+  ]);
+  const testIds = new Set(testParticipants.map((p) => p.id));
   // FAIRNESS B1 — a comparison where either side did not COMPLETE is an
   // infra failure (cold-start, loop, empty stream), not low review
   // quality. Exclude those from the ratings so the leaderboard ranks
@@ -293,9 +301,14 @@ async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
   // in the offline analysis, not the leaderboard.
   // FAIRNESS B4 — exclude votes flagged for low quality (e.g., decision time
   // < 3s) to detect potential botting or inattentive votes.
+  // Dry runs — a vote cast under a T-code is a real vote through the real
+  // path, deliberately so, but it is us walking the flow rather than a
+  // participant judging reviews. participantId is null on arena votes, so
+  // this only ever touches study rows.
   return rows
     .filter(
       (v) =>
+        !(v.participantId && testIds.has(v.participantId)) &&
         v.reviewA.status === "COMPLETED" &&
         v.reviewB.status === "COMPLETED" &&
         // Judge FAILED = we could not score this review; exclude it so a

@@ -15,6 +15,7 @@ import { sessionMiddleware } from "./plugins/session.js";
 import { papersRouter } from "./routes/papers.js";
 import { reviewsStreamRouter } from "./routes/reviews-stream.js";
 import { pairRouter } from "./routes/pair.js";
+import { publicConfigRouter } from "./routes/public-config.js";
 import { votesRouter } from "./routes/votes.js";
 import { leaderboardRouter } from "./routes/leaderboard.js";
 import { startStuckReviewSweeper } from "./pipeline/sweeper.js";
@@ -220,6 +221,7 @@ app.get("/session", (req, res) => {
   res.json({ sessionId: req.sessionId });
 });
 
+app.use(publicConfigRouter());
 app.use(papersRouter(config, { reviewGen, judge, orchestrator }));
 app.use(reviewsStreamRouter({ reviewGen, judge }));
 app.use(pairRouter(config));

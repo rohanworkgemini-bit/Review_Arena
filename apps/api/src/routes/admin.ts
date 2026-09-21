@@ -8,7 +8,7 @@ import {
   VOTE_DIMENSIONS,
 } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { papers, reviews, reviewSystems, votes } from "../db/schema.js";
+import { papers, participants, reviews, reviewSystems, votes } from "../db/schema.js";
 import { requireAdmin } from "../plugins/admin-auth.js";
 import type { JudgeClient } from "../clients/judge-client.js";
 import { scorePaper } from "../pipeline/score-paper.js";
@@ -18,10 +18,12 @@ import type { ParsedPaper } from "@reviewarena/shared-types";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
 import {
+  ARENA_ENABLED,
   JUDGE_ENABLED,
   JUDGE_MODELS,
   clearSetting,
   getJudgeModels,
+  isArenaEnabled,
   isJudgeEnabled,
   setSetting,
 } from "../settings.js";
@@ -68,6 +70,8 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
     // [] means no arena judging. Study papers always use the full
     // preregistered panel regardless (settings.ts getJudgeModels).
     judgeModels: z.array(z.string().min(1)).nullable().optional(),
+    // Whether the open arena accepts new papers. Off for the study window.
+    arenaEnabled: z.boolean().optional(),
   });
   const { judge, orchestrator: orch, reviewGen } = deps;
 
@@ -227,6 +231,11 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
     judgeModels: await getJudgeModels(),
     arenaJudgeSlugs: await arenaPanelSlugs(),
     panelSlugs: [...STUDY_SLUGS],
+    // The open arena's upload switch, and the same environment-override
+    // story the judge has.
+    arenaEnabled: await isArenaEnabled(),
+    arenaLockedOff:
+      String(process.env.ARENA_ENABLED ?? "").toLowerCase() === "false",
   });
 
   router.get("/admin/settings", guard, async (_req, res, next) => {
@@ -253,6 +262,12 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         if (body.judgeModels === null) await clearSetting(JUDGE_MODELS);
         else await setSetting(JUDGE_MODELS, body.judgeModels);
         logger.warn({ judgeModels: body.judgeModels }, "admin_judge_models");
+      }
+      if (body.arenaEnabled !== undefined) {
+        await setSetting(ARENA_ENABLED, body.arenaEnabled);
+        // warn, not info: closing or reopening the public site is the kind
+        // of thing you want to find in the log when reconstructing a window.
+        logger.warn({ arenaEnabled: body.arenaEnabled }, "admin_arena_toggle");
       }
       res.json(await readSettings());
     } catch (err) {
@@ -400,9 +415,25 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   // ─── Exports for thesis analysis ───────────────────────────────────
 
+  /**
+   * Study rows produced by a dry-run code (participants.is_test).
+   *
+   * The export is the thesis analysis' input, so it carries the study as it
+   * is meant to be read: real participants only. Test rows stay in the
+   * database — they are the evidence a rehearsal happened and that the write
+   * path worked — but they leave here, the same way they leave the rating
+   * fit. Arena rows have no participant and are never touched.
+   */
+  const testParticipantIds = async (): Promise<Set<string>> => {
+    const rows = await db.query.participants.findMany({
+      where: eq(participants.isTest, true),
+    });
+    return new Set(rows.map((p) => p.id));
+  };
+
   router.get("/admin/export.json", async (_req, res, next) => {
     try {
-      const [systems, paperRows, voteRows, metricRows, verdictRows, snapshotRows] =
+      const [systems, paperRows, voteRows, metricRows, verdictRows, snapshotRows, testIds] =
         await Promise.all([
           db.query.reviewSystems.findMany(),
           db.query.papers.findMany({ with: { reviews: true } }),
@@ -410,12 +441,15 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
           db.query.metricScores.findMany(),
           db.query.judgeVerdicts.findMany(),
           db.query.ratings.findMany(),
+          testParticipantIds(),
         ]);
+      const isTestRow = (participantId: string | null) =>
+        participantId !== null && testIds.has(participantId);
       const payload = {
         exportedAt: new Date().toISOString(),
         systems,
-        papers: paperRows,
-        votes: voteRows,
+        papers: paperRows.filter((p) => !isTestRow(p.participantId)),
+        votes: voteRows.filter((v) => !isTestRow(v.participantId)),
         metrics: metricRows,
         verdicts: verdictRows,
         snapshots: snapshotRows,
@@ -432,14 +466,20 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
   router.get("/admin/export.csv", async (_req, res, next) => {
     try {
       // Long format: one row per vote with dimension ratings flattened.
-      const voteRows = await db.query.votes.findMany({
-        orderBy: asc(votes.createdAt),
-        with: {
-          reviewA: { with: { reviewSystem: true } },
-          reviewB: { with: { reviewSystem: true } },
-          dimensions: true,
-        },
-      });
+      const [allVoteRows, testIds] = await Promise.all([
+        db.query.votes.findMany({
+          orderBy: asc(votes.createdAt),
+          with: {
+            reviewA: { with: { reviewSystem: true } },
+            reviewB: { with: { reviewSystem: true } },
+            dimensions: true,
+          },
+        }),
+        testParticipantIds(),
+      ]);
+      const voteRows = allVoteRows.filter(
+        (v) => !(v.participantId && testIds.has(v.participantId)),
+      );
       const header = [
         "vote_id",
         "created_at",

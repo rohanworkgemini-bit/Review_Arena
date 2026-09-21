@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Response } from "express";
 import multer from "multer";
 import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -23,6 +23,7 @@ import {
   PaperDetailResponseSchema,
 } from "./schemas.js";
 import { ConferenceSchema } from "@reviewarena/shared-types";
+import { ARENA_DISABLED_MESSAGE, isArenaEnabled } from "../settings.js";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -66,8 +67,22 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
   const router = Router();
   const { reviewGen, judge, orchestrator } = deps;
 
+  // The study window closes the arena (settings.ts isArenaEnabled). Checked
+  // before the rate limiter so a refused upload does not also burn one of
+  // the session's ten slots, and before multer has done anything with the
+  // body beyond buffering it.
+  const arenaClosed = async (res: Response): Promise<boolean> => {
+    if (await isArenaEnabled()) return false;
+    res.status(503).json({
+      error: "ArenaDisabled",
+      message: ARENA_DISABLED_MESSAGE,
+    });
+    return true;
+  };
+
   router.post("/papers", upload.single("file"), async (req, res, next) => {
     try {
+      if (await arenaClosed(res)) return;
       if (!recordUpload(req.sessionId)) {
         logger.warn({ sessionId: req.sessionId }, "upload_rate_limit_exceeded");
         res.status(429).json({
@@ -147,6 +162,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
   // Body: { url: string, title?: string, systemSlugs?: string[] }
   router.post("/papers/arxiv", async (req, res, next) => {
     try {
+      if (await arenaClosed(res)) return;
       if (!recordUpload(req.sessionId)) {
         res.status(429).json({
           error: "TooManyRequests",

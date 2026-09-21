@@ -50,6 +50,18 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Runtime switches the public pages need to render themselves. */
+export type PublicConfig = {
+  arenaEnabled: boolean;
+  /** Non-null exactly when arenaEnabled is false. */
+  arenaDisabledMessage: string | null;
+};
+
+export async function getPublicConfig(): Promise<PublicConfig> {
+  const res = await fetch(`${BASE}/config`, { credentials: "include" });
+  return jsonOrThrow<PublicConfig>(res);
+}
+
 export async function uploadPaper(
   file: File,
   title?: string,

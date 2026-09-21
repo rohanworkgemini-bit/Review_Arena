@@ -112,6 +112,14 @@ export const metricReferenceTypeEnum = pgEnum("metric_reference_type", [
 export const participants = pgTable("participants", {
   id: text("id").primaryKey(),
   code: text("code").notNull().unique(),
+  // Dry-run codes (T01, T02, …) handed to the team to walk the flow before
+  // and during the study window. Everything they produce is written exactly
+  // as a real participant's is — same rotations, same judging — and then
+  // excluded at read time: from the Bradley-Terry fit (routes/votes.ts
+  // loadBattles) and from the analysis exports. Excluding at read time
+  // rather than refusing to store means a test session exercises the real
+  // write path, which is the point of having it.
+  isTest: boolean("is_test").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

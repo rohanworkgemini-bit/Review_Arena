@@ -487,6 +487,9 @@ function SettingsTab({
     arenaJudgeSlugs: string[];
     /** The preregistered panel — the choices available. */
     panelSlugs: string[];
+    /** Is the open arena accepting new papers? Off during a study window. */
+    arenaEnabled: boolean;
+    arenaLockedOff: boolean;
   };
   const qc = useQueryClient();
   const settings = useQuery({
@@ -494,7 +497,7 @@ function SettingsTab({
     queryFn: () => adminFetch<AdminSettings>("/admin/settings", token),
   });
   const patchSettings = (
-    body: Partial<Pick<AdminSettings, "judgeEnabled" | "judgeModels">>,
+    body: Partial<Pick<AdminSettings, "judgeEnabled" | "judgeModels" | "arenaEnabled">>,
   ) =>
     adminFetch<AdminSettings>("/admin/settings", token, {
       method: "PATCH",
@@ -511,6 +514,17 @@ function SettingsTab({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-settings"] }),
   });
 
+  const toggleArena = useMutation({
+    mutationFn: (arenaEnabled: boolean) => patchSettings({ arenaEnabled }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-settings"] });
+      // The upload page reads the public endpoint, not this one.
+      qc.invalidateQueries({ queryKey: ["public-config"] });
+    },
+  });
+  const arenaEnabled = settings.data?.arenaEnabled ?? true;
+  const arenaLockedOff = settings.data?.arenaLockedOff ?? false;
+
   const judgeEnabled = settings.data?.judgeEnabled ?? true;
   const lockedOff = settings.data?.judgeLockedOff ?? false;
   const panelSlugs = settings.data?.panelSlugs ?? [];
@@ -525,6 +539,55 @@ function SettingsTab({
 
   return (
     <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Open arena</CardTitle>
+          <CardDescription>
+            Closes the public upload page while a study window is running, so
+            a stranger&rsquo;s 40-page PDF cannot sit in front of a
+            participant&rsquo;s reviews in the provider queue. The leaderboard
+            stays public, a comparison already in flight can still be finished
+            and voted on, and <code className="font-mono text-xs">/study</code>{" "}
+            is unaffected.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant={arenaEnabled ? "destructive" : "default"}
+              disabled={settings.isLoading || toggleArena.isPending || arenaLockedOff}
+              onClick={() => toggleArena.mutate(!arenaEnabled)}
+            >
+              {toggleArena.isPending
+                ? "Saving…"
+                : arenaEnabled
+                  ? "Close the arena"
+                  : "Reopen the arena"}
+            </Button>
+            <Badge variant={arenaEnabled ? "default" : "outline"}>
+              {settings.isLoading
+                ? "checking…"
+                : arenaEnabled
+                  ? "open"
+                  : "closed for the study"}
+            </Badge>
+          </div>
+          {arenaLockedOff && (
+            <p className="text-sm text-muted-foreground">
+              Forced off by <code className="font-mono text-xs">ARENA_ENABLED=false</code>{" "}
+              in the environment. Remove it there before this switch will do
+              anything.
+            </p>
+          )}
+          {!arenaEnabled && !arenaLockedOff && (
+            <p className="text-sm text-muted-foreground">
+              Uploads return 503 and the upload page shows the study banner.
+              Remember to reopen it when the study window closes.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Judge panel</CardTitle>

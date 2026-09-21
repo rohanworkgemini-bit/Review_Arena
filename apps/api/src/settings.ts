@@ -13,6 +13,7 @@ import { appSettings } from "./db/schema.js";
 
 export const JUDGE_ENABLED = "judge_enabled";
 export const JUDGE_MODELS = "judge_models";
+export const ARENA_ENABLED = "arena_enabled";
 
 // The judge panel is read on every review completion, so an uncached read
 // would put a query on the hot path for a value that changes a handful of
@@ -94,6 +95,34 @@ export async function getJudgeModels(): Promise<string[] | null> {
   if (!Array.isArray(raw)) return null;
   return raw.filter((s): s is string => typeof s === "string" && s.length > 0);
 }
+
+/**
+ * Is the open arena accepting new papers?
+ *
+ * Off during a study window. The arena and the study share one provider
+ * budget and one set of rate limits, so a stranger uploading a 40-page PDF
+ * while a participant is waiting on their reviews costs the participant
+ * time and can cost the session a pair. Turning it off closes the only
+ * public entry point — /papers and /papers/arxiv — and the upload page says
+ * so rather than failing at submit.
+ *
+ * Deliberately narrow. The leaderboard stays public, a comparison already
+ * in flight can still be finished and voted on, and /study is untouched:
+ * the switch removes the way to start new arena work, not the ability to
+ * finish what is already running.
+ *
+ * ARENA_ENABLED=false in the environment forces it off regardless of the
+ * stored setting, the same operator kill switch the judge has.
+ */
+export async function isArenaEnabled(): Promise<boolean> {
+  if (String(process.env.ARENA_ENABLED ?? "").toLowerCase() === "false") return false;
+  return getSetting<boolean>(ARENA_ENABLED, true);
+}
+
+/** Shown on the upload page and returned with the 503 when the arena is off. */
+export const ARENA_DISABLED_MESSAGE =
+  "The open arena is paused while a live user study is running. " +
+  "The leaderboard stays available, and uploads reopen once the study window closes.";
 
 /**
  * Remove a setting so the code-level default applies again.

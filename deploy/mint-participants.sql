@@ -10,13 +10,24 @@
 --     psql -U reviewarena -d reviewarena -v count=20 \
 --     < deploy/mint-participants.sql
 --
+-- `-v kind=test` mints DRY-RUN codes instead — T01, T02, … with is_test
+-- set — for walking the flow ourselves during the study window. They run
+-- the identical path and are filtered back out at read time, from the
+-- Bradley-Terry fit and from the admin exports. The two sequences are
+-- counted separately, so minting ten test codes does not push the next real
+-- participant to P31:
+--
+--   … psql -U reviewarena -d reviewarena -v count=10 -v kind=test \
+--     < deploy/mint-participants.sql
+--
 -- ADDITIVE, like the script: it always creates `count` NEW rows and never
 -- touches existing ones. Re-running mints another batch — that is the point,
 -- but it is also why this is not idempotent. Check the total afterwards.
 --
 -- Shapes, kept in sync with seed-participants.ts:
---   id   'P' + zero-padded sequence, continuing from the highest existing
---        P-number: P01..P20 already there means the next batch is P21..P40
+--   id   'P' (or 'T' for dry runs) + zero-padded sequence, continuing from
+--        the highest existing number of that prefix: P01..P20 already there
+--        means the next real batch is P21..P40
 --   code '<tree word>-<4 digits>'
 --
 -- The sequence is a LABEL ONLY. Until 2026-09 the P-number doubled as a
@@ -32,15 +43,24 @@
   \set count 20
 \endif
 
+\if :{?kind}
+\else
+  \set kind real
+\endif
+
 BEGIN;
 
 -- psql does not interpolate :variables inside a dollar-quoted body, so the
 -- count is handed to the DO block through a custom GUC instead.
 SET LOCAL mint.count = :count;
+SET LOCAL mint.kind = :'kind';
 
 DO $$
 DECLARE
   want      int := current_setting('mint.count')::int;
+  kind      text := current_setting('mint.kind');
+  is_test_  boolean;
+  prefix    text;
   words     text[] := ARRAY[
     'maple','cedar','birch','aspen','alder','hazel','rowan','olive',
     'pine','oak','elm','fir','ash','yew','beech','larch',
@@ -52,13 +72,26 @@ DECLARE
   new_id    text;
   new_code  text;
 BEGIN
-  -- Continue the sequence rather than restarting it. Only ids of the form
-  -- P<digits> count: anything else in the table (the p_xxxxxxxx shape the
-  -- tsx script mints) is ignored rather than parsed.
-  SELECT coalesce(max(substring(id from '^P([0-9]+)$')::int), 0) + 1
+  -- Anything but the two spellings below is a typo worth stopping for: a
+  -- silent fallback to 'real' would put dry-run codes on the handout sheet.
+  IF kind = 'test' THEN
+    is_test_ := true;
+    prefix   := 'T';
+  ELSIF kind = 'real' THEN
+    is_test_ := false;
+    prefix   := 'P';
+  ELSE
+    RAISE EXCEPTION 'kind must be ''real'' or ''test'', got: %', kind;
+  END IF;
+
+  -- Continue the sequence rather than restarting it, per prefix. Only ids of
+  -- the form P<digits> / T<digits> count: anything else in the table (the
+  -- p_xxxxxxxx shape the tsx script used to mint) is ignored rather than
+  -- parsed.
+  SELECT coalesce(max(substring(id from '^' || prefix || '([0-9]+)$')::int), 0) + 1
     INTO next_n
     FROM participants
-   WHERE id ~ '^P[0-9]+$';
+   WHERE id ~ ('^' || prefix || '[0-9]+$');
 
   WHILE made < want LOOP
     attempts := attempts + 1;
@@ -68,7 +101,7 @@ BEGIN
         'is probably crowded; widen WORDS or the digit range', attempts, made, want;
     END IF;
 
-    new_id := 'P' || lpad(next_n::text, 2, '0');
+    new_id := prefix || lpad(next_n::text, 2, '0');
 
     -- 1000..9999, matching randomInt(1000, 10000) in the script.
     new_code := words[1 + floor(random() * array_length(words, 1))::int]
@@ -76,7 +109,7 @@ BEGIN
 
     -- Only the code can collide; the id is sequential and checked above.
     -- A collision just costs another spin of the loop, same id next time.
-    INSERT INTO participants (id, code) VALUES (new_id, new_code)
+    INSERT INTO participants (id, code, is_test) VALUES (new_id, new_code, is_test_)
     ON CONFLICT DO NOTHING;
 
     IF FOUND THEN
@@ -85,20 +118,21 @@ BEGIN
     END IF;
   END LOOP;
 
-  RAISE NOTICE 'minted % participant(s) (through %) in % attempt(s)',
-    made, new_id, attempts;
+  RAISE NOTICE 'minted % % participant(s) (through %) in % attempt(s)',
+    made, kind, new_id, attempts;
 END $$;
 
 COMMIT;
 
 \echo ''
-\echo 'All participants (hand out any row with 0 papers and 0 votes):'
+\echo 'All participants (hand out any REAL row with 0 papers and 0 votes):'
 SELECT p.id,
        p.code,
+       CASE WHEN p.is_test THEN 'test' ELSE 'real' END AS kind,
        count(DISTINCT pa.id) AS papers,
        count(DISTINCT v.id)  AS votes
 FROM participants p
 LEFT JOIN papers pa ON pa.participant_id = p.id
 LEFT JOIN votes  v  ON v.participant_id  = p.id
-GROUP BY p.id, p.code
-ORDER BY papers, votes, p.id;
+GROUP BY p.id, p.code, p.is_test
+ORDER BY p.is_test, papers, votes, p.id;
