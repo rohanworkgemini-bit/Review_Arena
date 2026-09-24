@@ -475,9 +475,18 @@ function UploadScreen({
             />
             <span id="study-consent-hint" className="text-[13px] leading-relaxed text-graphite">
               I understand that this paper will be processed by{" "}
-              <span className="text-ink">commercial AI model APIs</span> and
-              parsed via the Datalab Chandra API, as described in the study's
-              data-processing notice.
+              <span className="text-ink">commercial AI model APIs</span>{" "}
+              (OpenAI, Google Gemini, Anthropic, DeepSeek, Mistral, Z.ai) and
+              parsed via the Datalab Chandra API —{" "}
+              <Link
+                to="/consent"
+                target="_blank"
+                rel="noreferrer"
+                className="text-red underline underline-offset-4 hover:text-redink"
+              >
+                full data-processing notice
+              </Link>
+              .
             </span>
           </label>
         </div>

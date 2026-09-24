@@ -237,7 +237,7 @@ export function UploadPage() {
               I understand that this paper will be processed by{" "}
               <span className="text-ink">commercial AI model APIs</span>{" "}
               (OpenAI, Google Gemini, Anthropic, DeepSeek, Mistral, Z.ai), parsed via the
-              Datalab Marker API, and handled on infrastructure hosted by
+              Datalab Chandra API, and handled on infrastructure hosted by
               Vercel and Google Cloud —{" "}
               <Link
                 to="/consent"
