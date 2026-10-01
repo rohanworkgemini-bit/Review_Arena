@@ -4,17 +4,6 @@
  * One eligible unordered pair is drawn with equal probability, then a coin
  * flip assigns sides for blinding. Ratings are never consulted.
  *
- * Why uniform and not LMArena's adaptive draw. Chatbot Arena samples
- * non-uniformly to concentrate votes on close-rated pairs, because with
- * 50+ models there are >1,200 matchups and most must be skipped. Six
- * systems make 15 matchups and the study spends 120 comparisons on them —
- * eight per pair — so there is nothing to skip and no efficiency to buy.
- * Their adaptive rule also makes the sampling probability a function of
- * the current estimate, which they correct for by inverse-probability
- * weighting the likelihood; our Bradley-Terry fit applies no such
- * correction, so a fixed sampling distribution is what keeps the plain
- * likelihood the correct one. See docs/METHOD_VERIFICATION.md §4.
- *
  * Adaptive/active sampling is future work, not a switch: it belongs with a
  * larger system pool, and it would need the inverse-probability correction
  * in the estimator to go with it.

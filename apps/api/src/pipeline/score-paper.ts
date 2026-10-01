@@ -25,8 +25,7 @@ import { getJudgeModels, isJudgeEnabled } from "../settings.js";
 // Every study pair is judged by a PANEL — each of the six study systems in
 // turn reads the paper + BOTH reviews in one request and returns the same
 // construct human raters give: an A/B/TIE preference per dimension plus
-// per-review 1-10 scores. Two order-swapped passes per judge control
-// position bias (Zheng et al. 2023). A system also judges pairs it wrote a
+// per-review 1-10 scores. A system also judges pairs it wrote a
 // side of; those rows are flagged self_judging so the analysis can report
 // the panel with and without self-judgements.
 //

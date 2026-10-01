@@ -1,9 +1,7 @@
 /**
  * Bradley-Terry (maximum-likelihood) ratings + bootstrapped 95% CI.
  *
- * Ported (TypeScript) from LMSYS FastChat, file
- *   fastchat/serve/monitor/rating_systems.py
- *   (Apache 2.0, https://github.com/lm-sys/FastChat)
+
  *
  * Mirrors preprocess_for_bt / bt_loss_and_grad / fit_bt / scale_and_offset /
  * compute_bt / compute_bootstrap_bt. BT is what the public LMArena board
