@@ -77,3 +77,4 @@ backups/
 # Deliberately never committed: purged from history 2026-09-07 and kept
 # local only. Back them up outside the repo.
 docs/
+.claude/settings.json
