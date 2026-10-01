@@ -17,7 +17,13 @@ services:
       POSTGRES_PASSWORD: reviewarena
       POSTGRES_DB: reviewarena
     ports:
-      - "5432:5432"
+      # Loopback only. "5432:5432" binds every interface, which on the UKP
+      # VM means the public one — and this container's password is the
+      # literal below, in a file in the repo. The prod stack deliberately
+      # publishes no host port at all; a dev container next to it listening
+      # on the internet gives that away for free. Host tooling (drizzle-kit,
+      # the tsx scripts, db-browser) reaches it on localhost either way.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
