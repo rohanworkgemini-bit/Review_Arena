@@ -132,7 +132,7 @@ export function incrementalEloUpdate(
  * FastChat behavior via np.full).
  */
 export interface BootstrapInterval {
-  rating: number;       // median across rounds
+  rating: number;       // median across rounds (leaderboardBT: full-data fit)
   ciLow: number;        // 2.5th percentile
   ciHigh: number;       // 97.5th percentile
   voteCount: number;    // battles involving this system in the original set

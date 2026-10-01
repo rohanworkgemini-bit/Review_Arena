@@ -16,7 +16,7 @@ import {
 } from "../db/schema.js";
 import { verifyPairToken } from "./pair.js";
 import { outcomeOf, type Battle, type BootstrapInterval } from "../elo/elo.js";
-import { computeBT, bootstrapBTCI } from "../elo/bt.js";
+import { computeBT, leaderboardBT } from "../elo/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
 import { invalidateLeaderboardCache } from "./leaderboard.js";
@@ -344,13 +344,7 @@ export function scheduleSnapshotRecompute(voteId: string, baselineSlug: string):
       pendingSnapshotTrigger = null;
       const started = Date.now();
       try {
-        await db.transaction(async (tx) => {
-          await tx.execute(sql`SELECT pg_advisory_xact_lock(${ELO_WRITER_LOCK})`);
-          await snapshotLeaderboard(tx, trigger.voteId, null, trigger.baselineSlug);
-          for (const d of voteDimensionEnum.enumValues) {
-            await snapshotLeaderboard(tx, trigger.voteId, d, trigger.baselineSlug);
-          }
-        });
+        await recomputeAllLeaderboards(trigger.voteId, trigger.baselineSlug);
         invalidateLeaderboardCache();
         logger.info(
           { voteId: trigger.voteId, elapsedMs: Date.now() - started },
@@ -364,6 +358,19 @@ export function scheduleSnapshotRecompute(voteId: string, baselineSlug: string):
     }
     snapshotWorkerRunning = false;
   })();
+}
+
+/** All nine boards in one transaction, under the writer lock. Exported for
+ *  scripts/recompute-leaderboard.ts, which refreshes the snapshots after a
+ *  change to the rating method without waiting for a new vote. */
+export async function recomputeAllLeaderboards(triggerVoteId: string, baselineSlug: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${ELO_WRITER_LOCK})`);
+    await snapshotLeaderboard(tx, triggerVoteId, null, baselineSlug);
+    for (const d of voteDimensionEnum.enumValues) {
+      await snapshotLeaderboard(tx, triggerVoteId, d, baselineSlug);
+    }
+  });
 }
 
 /** Exported for scripts/seed-demo-votes.ts, which writes votes straight to
@@ -414,10 +421,10 @@ export async function snapshotLeaderboard(
   // analysis recomputes Elo offline from the vote log to compare against BT,
   // and rows written under method=ELO before this change stay in the table
   // unread.
-  const btCI = bootstrapBTCI(battles, BOOTSTRAP_ROUNDS, { baselineSlug });
-  // BT is anchored on the baseline only where the baseline actually appears
-  // on this board; sparse per-dimension boards fall back to mean-centring.
-  const btAnchor = btCI.has(baselineSlug) ? "BASELINE" : "MEAN";
+  // As in FastChat: the rating is the full-data fit, the interval comes from
+  // the bootstrap. BT is anchored on the baseline only where the baseline
+  // actually appears on this board; sparse boards fall back to mean-centring.
+  const { rows: btCI, anchor: btAnchor } = leaderboardBT(battles, BOOTSTRAP_ROUNDS, { baselineSlug });
 
   const allSystems = await executor.query.reviewSystems.findMany();
   const slugToId = new Map(allSystems.map((s) => [s.slug, s.id]));

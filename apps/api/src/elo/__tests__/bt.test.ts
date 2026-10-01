@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   computeBT,
   bootstrapBTCI,
+  leaderboardBT,
   preprocessForBT,
   largestStronglyConnected,
   multinomialCounts,
@@ -247,6 +248,40 @@ describe("bootstrapBTCI", () => {
     const ci = bootstrapBTCI(battles, 100, { baselineSlug: "mid" });
     const iv = ci.get("mid")!;
     expect(iv.ciHigh - iv.ciLow).toBeCloseTo(0, 9);
+  });
+});
+
+describe("leaderboardBT", () => {
+  const battles = [
+    ...record("strong", "mid", 30, 10),
+    ...record("mid", "weak", 28, 12),
+    ...record("strong", "weak", 34, 6),
+  ];
+
+  it("reports the full-data fit as the rating, like FastChat", () => {
+    const { rows } = leaderboardBT(battles, 50);
+    const point = computeBT(battles).ratings;
+    for (const [slug, iv] of rows) expect(iv.rating).toBeCloseTo(point.get(slug)!, 9);
+  });
+
+  it("takes the interval from the bootstrap quantiles", () => {
+    const { rows } = leaderboardBT(battles, 50, {}, mulberry32(4));
+    const ci = bootstrapBTCI(battles, 50, {}, mulberry32(4));
+    for (const [slug, iv] of rows) {
+      expect(iv.ciLow).toBe(ci.get(slug)!.ciLow);
+      expect(iv.ciHigh).toBe(ci.get(slug)!.ciHigh);
+      expect(iv.voteCount).toBe(80);
+    }
+  });
+
+  it("reports the anchor of the full fit", () => {
+    expect(leaderboardBT(battles, 10, { baselineSlug: "mid" }).anchor).toBe("BASELINE");
+    expect(leaderboardBT(battles, 10, { baselineSlug: "absent" }).anchor).toBe("MEAN");
+    expect(leaderboardBT(battles, 10, { baselineSlug: "mid" }).rows.get("mid")!.rating).toBeCloseTo(1000, 9);
+  });
+
+  it("returns an empty board for no battles", () => {
+    expect(leaderboardBT([]).rows.size).toBe(0);
   });
 });
 

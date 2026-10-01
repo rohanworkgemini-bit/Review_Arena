@@ -28,6 +28,10 @@
  *      and return everything else as `unranked`. No prior or ridge is added,
  *      so on connected data this is FastChat's estimator exactly.
  *
+ * The leaderboard row (leaderboardBT) follows FastChat's
+ * report_elo_analysis_results: the rating is the single fit on all battles
+ * (compute_bt) and only the interval comes from the bootstrap quantiles.
+ *
  * Scale: theta is in log-BASE units, so rating = theta * 400 + 1000 gives the
  * usual "400 points = 10x the odds" reading, identical to Elo's scale.
  */
@@ -386,6 +390,38 @@ export function bootstrapBTCI(
   }
 
   return intervalsFrom(samples, voteCount);
+}
+
+/**
+ * FastChat's leaderboard_table_df for BT: rating = computeBT on the full
+ * battle log, interval = 2.5/97.5 percentiles of bootstrapBTCI. Only systems
+ * the full fit can place are returned; the rating is not guaranteed to lie
+ * inside its interval, exactly as in FastChat.
+ */
+export function leaderboardBT(
+  battles: readonly Battle[],
+  rounds: number = 100,
+  opts: BTOptions = {},
+  rng: () => number = mulberry32(0),
+): { rows: Map<string, BootstrapInterval>; anchor: BTAnchor } {
+  const fit = computeBT(battles, opts);
+  const ci = bootstrapBTCI(battles, rounds, opts, rng);
+  const voteCount = new Map<string, number>();
+  for (const { a, b } of battles) {
+    voteCount.set(a, (voteCount.get(a) ?? 0) + 1);
+    voteCount.set(b, (voteCount.get(b) ?? 0) + 1);
+  }
+  const rows = new Map<string, BootstrapInterval>();
+  for (const [slug, rating] of fit.ratings) {
+    const iv = ci.get(slug);
+    rows.set(slug, {
+      rating,
+      ciLow: iv?.ciLow ?? rating,
+      ciHigh: iv?.ciHigh ?? rating,
+      voteCount: voteCount.get(slug) ?? 0,
+    });
+  }
+  return { rows, anchor: fit.anchor };
 }
 
 /** Median + 2.5/97.5 percentile bounds per system, over whatever replicates
