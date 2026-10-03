@@ -52,7 +52,7 @@ class ClaudeAdapter(Adapter):
     def __init__(self, config: dict | None = None) -> None:
         super().__init__(config)
         self._system_prompt = build_system_prompt(
-            self.config.get('conference', DEFAULT_CONFERENCE)
+            self.config.get('conference', DEFAULT_CONFERENCE),
         )
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:

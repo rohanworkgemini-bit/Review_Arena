@@ -87,7 +87,7 @@ class GenerateRequest(BaseModel):
     # Venue whose review form / rating scale the review should follow
     # (see conference_scales.py). Chosen by the uploader; identical for
     # both systems in a battle.
-    conference: str = "iclr"
+    conference: str = "general"
 
 
 class GenerationMetricsOut(BaseModel):

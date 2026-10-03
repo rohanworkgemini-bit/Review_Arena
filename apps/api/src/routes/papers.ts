@@ -121,7 +121,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
       // against the shared enum; malformed values fall back to iclr
       // rather than 400 — the scale choice must never lose an upload.
       const confParse = ConferenceSchema.safeParse(req.body.conference);
-      const conference = confParse.success ? confParse.data : "iclr";
+      const conference = confParse.success ? confParse.data : "general";
       const pdfBuffer = req.file.buffer;
       const filename = req.file.originalname || "paper.pdf";
       const hash = createHash("sha256").update(pdfBuffer).digest("hex");
@@ -191,7 +191,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
       }
       const userTitle = typeof req.body.title === "string" ? req.body.title : null;
       const confParse = ConferenceSchema.safeParse(req.body.conference);
-      const conference = confParse.success ? confParse.data : "iclr";
+      const conference = confParse.success ? confParse.data : "general";
 
       // No dedup — every arxiv upload creates a fresh paper row + review
       // pair, matching the PDF route. Use a session-scoped hash so the

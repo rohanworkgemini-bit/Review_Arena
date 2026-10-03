@@ -36,7 +36,7 @@ export function UploadPage() {
   // enforces this server-side; see /consent for the full notice.
   const [consented, setConsented] = useState(false);
   // Which venue's review form / rating scale the generated reviews follow.
-  const [conference, setConference] = useState<Conference>("iclr");
+  const [conference, setConference] = useState<Conference>("general");
 
   const onDrop = useCallback((accepted: File[], rejected: FileRejection[]) => {
     setError(null);

@@ -20,14 +20,15 @@ export type Winner = z.infer<typeof WinnerSchema>;
 // reviews follow. Both systems in a battle always share the same conference.
 // Scales live in services/review-gen/app/conference_scales.py.
 
-// Exactly the three venue editions the thesis studies, each with its
-// real 2026 review form (ARR was dropped 2026-09: the study is scoped to
-// the three ML venues whose forms the prompts reproduce verbatim).
-export const CONFERENCES = ["iclr", "icml", "neurips"] as const;
+// "general" (default since Oct 2026) is a venue-neutral form that names no
+// venue and otherwise works like the venue forms; the three venue editions follow their real 2026 review forms (the
+// thesis study used these, mostly ICLR).
+export const CONFERENCES = ["general", "iclr", "icml", "neurips"] as const;
 export const ConferenceSchema = z.enum(CONFERENCES);
 export type Conference = z.infer<typeof ConferenceSchema>;
 
 export const CONFERENCE_NAMES: Record<Conference, string> = {
+  general: "General",
   iclr: "ICLR 2026",
   icml: "ICML 2026",
   neurips: "NeurIPS 2026",

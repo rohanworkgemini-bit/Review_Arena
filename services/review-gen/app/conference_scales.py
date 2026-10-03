@@ -25,6 +25,11 @@ venue pages (September 2026):
     Significance/Originality each 1-4, Questions, Limitations, Rating
     1-6, Confidence 1-5.
 
+A fourth form, General (the default), is venue-neutral: the NeurIPS
+structure with no venue named anywhere, its Rating on a generic 1-6
+accept/reject scale. It works exactly like the venue forms; only the
+prompt text differs.
+
 Reviewer-process fields that only make sense for humans (LLM-usage
 disclosure, code-of-conduct acknowledgement, post-rebuttal justification)
 are deliberately absent: the models are the reviewers here, and those
@@ -43,9 +48,19 @@ from __future__ import annotations
 from textwrap import dedent
 from typing import Dict
 
-DEFAULT_CONFERENCE = "iclr"
+DEFAULT_CONFERENCE = "general"
 
 CONFERENCE_SCALES: Dict[str, Dict] = {
+    # Venue-neutral form (default). Its Rating section shows these labels
+    # without naming a scale (see _overall_block).
+    "general": {
+        "name": "General",
+        "scores": [1, 2, 3, 4, 5, 6],
+        "labels": {
+            6: "Strong Accept", 5: "Accept", 4: "Borderline Accept",
+            3: "Borderline Reject", 2: "Reject", 1: "Strong Reject",
+        },
+    },
     "iclr": {
         "name": "ICLR 2026",
         "scores": [0, 2, 4, 6, 8, 10],
@@ -98,9 +113,11 @@ def _overall_block(conference: str, heading: str) -> str:
         f"   {_fmt_score(score)} = {label}"
         for score, label in sorted(scale["labels"].items(), reverse=True)
     )
+    # The General form must not name any venue, its own included.
+    on_scale = "" if conference == "general" else f" on the {scale['name']} scale"
     return (
         f"## {heading}\n"
-        f"(Overall recommendation on the {scale['name']} scale. Answer with a\n"
+        f"(Overall recommendation{on_scale}. Answer with a\n"
         f"SINGLE NUMBER on its own line from this exact set: {{{allowed}}},\n"
         f"then one brief sentence justifying it. Meaning of each score:\n"
         f"{labels})"
@@ -117,8 +134,9 @@ _CONFIDENCE_BLOCK = dedent("""\
        2 = You are willing to defend your assessment, but it is quite likely
            you did not understand central parts of the submission
        1 = Your assessment is an educated guess)""")
-
-_PREAMBLE = dedent("""\
+# Preamble for the venue forms. This is the thesis user-study prompt
+# (Sept 2026), kept verbatim so the study stays reproducible.
+_VENUE_PREAMBLE = dedent("""\
     You are an experienced peer reviewer for {venue}. Read the paper below
     and write a full review using the official {venue} review form,
     reproduced for you here. Use markdown headers EXACTLY as shown, in the
@@ -126,6 +144,17 @@ _PREAMBLE = dedent("""\
     NUMBER on its own line, then one brief sentence explaining the score.
     Plain markdown only — no preamble before the first header, no JSON,
     no closing commentary.""")
+
+# The same preamble for the General form, with every venue mention removed.
+_GENERAL_PREAMBLE = dedent("""\
+    You are an experienced peer reviewer. Read the paper below
+    and write a full review using the review form,
+    reproduced for you here. Use markdown headers EXACTLY as shown, in the
+    EXACT order shown. For each numeric section, begin with a SINGLE
+    NUMBER on its own line, then one brief sentence explaining the score.
+    Plain markdown only — no preamble before the first header, no JSON,
+    no closing commentary.""")
+
 
 
 def _dim(name: str, guidance: str) -> str:
@@ -138,7 +167,7 @@ def _dim(name: str, guidance: str) -> str:
 
 def _iclr_form() -> str:
     return "\n\n".join([
-        _PREAMBLE.format(venue="ICLR 2026"),
+        _VENUE_PREAMBLE.format(venue="ICLR 2026"),
         "## Summary\n"
         "(Briefly summarize the paper and its contributions in your own\n"
         "words — a summary the authors would generally agree with. 2-4\n"
@@ -160,7 +189,7 @@ def _iclr_form() -> str:
 
 def _icml_form() -> str:
     return "\n\n".join([
-        _PREAMBLE.format(venue="ICML 2026"),
+        _VENUE_PREAMBLE.format(venue="ICML 2026"),
         "## Summary\n"
         "(Briefly summarize the paper and its contributions in your own\n"
         "words after reading — not a paste of the abstract. 2-4 sentences.)",
@@ -184,7 +213,7 @@ def _icml_form() -> str:
 
 def _neurips_form() -> str:
     return "\n\n".join([
-        _PREAMBLE.format(venue="NeurIPS 2026"),
+        _VENUE_PREAMBLE.format(venue="NeurIPS 2026"),
         "## Summary\n"
         "(Briefly summarize the paper and its contributions in your own\n"
         "understanding after reading — not a paste of the abstract; the\n"
@@ -210,14 +239,47 @@ def _neurips_form() -> str:
     ])
 
 
+
+
+def _general_form() -> str:
+    """Venue-neutral form: the NeurIPS structure with no venue named."""
+    return "\n\n".join([
+        _GENERAL_PREAMBLE,
+        "## Summary\n"
+        "(Briefly summarize the paper and its contributions in your own\n"
+        "understanding after reading — not a paste of the abstract; the\n"
+        "authors should generally agree with it. 2-4 sentences.)",
+        "## Strengths And Weaknesses\n"
+        "(Your assessment across four core dimensions — quality, clarity,\n"
+        "significance, originality — using the two subsections below.)\n\n"
+        "### Strengths\n(Concise bullet list, 3-5 items.)\n\n"
+        "### Weaknesses\n(Concise bullet list, 3-6 items.)",
+        _dim("Quality", "Is the submission technically sound? Are claims well\nsupported by theoretical analysis or experimental results?"),
+        _dim("Clarity", "Is the submission clearly written, well organized, and\ndoes it adequately inform the reader?"),
+        _dim("Significance", "Potential for impact on an important use case and for\nthe broader research community."),
+        _dim("Originality", "Novel tasks, framings, metrics, or methods — or a\nwell-motivated novel combination of existing techniques."),
+        "## Questions\n"
+        "(3-5 actionable questions and suggestions for the authors — points\n"
+        "where a response could change your opinion.)",
+        "## Limitations\n"
+        "(Have the authors adequately addressed the limitations and potential\n"
+        "negative societal impact of their work? 1-3 sentences.)",
+        _overall_block("general", "Rating"),
+        _CONFIDENCE_BLOCK,
+    ])
+
+
 _FORM_BUILDERS = {
+    "general": _general_form,
     "iclr": _iclr_form,
     "icml": _icml_form,
     "neurips": _neurips_form,
 }
 
 
+
 def build_system_prompt(conference: str = DEFAULT_CONFERENCE) -> str:
-    """Full venue-specific review-form system prompt for the adapters."""
+    """Full review-form system prompt for the adapters: the venue's form,
+    or the venue-neutral General form. Unknown venues fall back to General."""
     builder = _FORM_BUILDERS.get(conference, _FORM_BUILDERS[DEFAULT_CONFERENCE])
     return builder().strip()

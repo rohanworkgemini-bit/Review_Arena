@@ -17,8 +17,10 @@ import type { Conference } from "@reviewarena/shared-types";
 //   ICLR 2026   overall on {0,2,4,6,8,10}
 //   ICML 2026   overall recommendation 1-6
 //   NeurIPS 26  rating 1-6
-//   all three   confidence 1-5, sub-dimensions 1-4
+//   General     rating 1-6 (study/expert styles; domain asks for none)
+//   all four    confidence 1-5, sub-dimensions 1-4
 const OVERALL_MAX: Record<Conference, number> = {
+  general: 6,
   iclr: 10,
   icml: 6,
   neurips: 6,
