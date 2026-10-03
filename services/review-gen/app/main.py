@@ -5,8 +5,7 @@ Endpoints:
   POST /parse-arxiv     — arXiv ID/URL → ParsedPaper via arxiv2md
   POST /generate        — produce a structured review
   POST /stream-generate — streaming variant: yields tokens then 'done'
-  POST /judge           — LLM-as-judge scoring (overall + per-dimension),
-                          the single automatic quality metric
+  POST /judge-pair      — one judge's pairwise verdict on two reviews
   GET  /health
 """
 from __future__ import annotations
@@ -46,7 +45,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.judge import judge_pair, judge_review
+from app.judge import judge_pair
 from app.parsing import (
     Arxiv2MdError,
     ChandraError,
@@ -138,7 +137,7 @@ def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
 STREAM_IDLE_TIMEOUT_S = float(os.environ.get("STREAM_IDLE_TIMEOUT_S", "120"))
 
 # Reject absurd request bodies before reading them: the canonical paper text
-# rides inside /generate | /stream-generate | /judge JSON, so legitimate
+# rides inside /generate | /stream-generate | /judge-pair JSON, so legitimate
 # requests are large-ish, but nothing sane exceeds this — and uvicorn itself
 # imposes no limit at all.
 MAX_BODY_BYTES = int(os.environ.get("MAX_BODY_BYTES", str(30 * 1024 * 1024)))
@@ -425,23 +424,7 @@ async def stream_generate(req: GenerateRequest, request: Request):
     )
 
 
-# ─── /judge ────────────────────────────────────────────────────────────────
-
-
-class JudgeRequest(BaseModel):
-    review_text: str
-    paper_text: str
-    # Required: the judge is a panel and every call names its member.
-    model: str
-
-
-@app.post("/judge", dependencies=[Depends(verify_api_key)])
-def judge(req: JudgeRequest) -> dict:
-    result = judge_review(req.review_text, req.paper_text, model=req.model)
-    return {
-        "overall_score": result.overall_score,
-        "dimension_scores": result.dimension_scores,
-    }
+# ─── /judge-pair ───────────────────────────────────────────────────────────
 
 
 class JudgePairRequest(BaseModel):

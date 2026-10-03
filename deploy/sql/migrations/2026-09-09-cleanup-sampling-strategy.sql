@@ -4,7 +4,7 @@
 --     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-09-cleanup-sampling-strategy.sql
 --
 -- The platform briefly carried two arena samplers — uniform and the
--- FastChat-derived adaptive draw — behind an admin setting. Only uniform
+-- adaptive draw — behind an admin setting. Only uniform
 -- survives (see apps/api/src/pair/select-pair.ts for why; adaptive sampling
 -- is future work, and would need an inverse-probability correction in the
 -- estimator to go with it).

@@ -29,8 +29,9 @@ import { getJudgeModels, isJudgeEnabled } from "../settings.js";
 // side of; those rows are flagged self_judging so the analysis can report
 // the panel with and without self-judgements.
 //
-// Arena papers are not judged at all: the judge signal only feeds the
-// thesis' human-vs-judge analysis, which is run on the controlled study.
+// Arena papers are judged only by the panel chosen in the judge_models
+// setting (default: all six; empty: none) — see scoreArenaPair. The study
+// panel is always the full six, whatever that setting says.
 //
 // Entry points:
 //   scorePairIfReady() — fired whenever a review completes. Claims each

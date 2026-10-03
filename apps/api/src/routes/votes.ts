@@ -30,8 +30,7 @@ import { invalidateLeaderboardCache } from "./leaderboard.js";
 // Any constant int8 works; 0xE10E10 = "eloelo" mnemonic, no clash.
 const ELO_WRITER_LOCK = 0xe10e10;
 
-// Resamples per Bradley-Terry snapshot. FastChat uses 100 for the public
-// board. (Online Elo is no longer computed here — see snapshotLeaderboard.)
+// Resamples per Bradley-Terry snapshot. (Online Elo is no longer computed here — see snapshotLeaderboard.)
 const BOOTSTRAP_ROUNDS = 100;
 
 /** Detect Postgres unique-violation errors thrown through node-postgres /
@@ -426,7 +425,7 @@ export async function snapshotLeaderboard(
   // analysis recomputes Elo offline from the vote log to compare against BT,
   // and rows written under method=ELO before this change stay in the table
   // unread.
-  // As in FastChat: the rating is the full-data fit, the interval comes from
+  // The rating is the full-data fit, the interval comes from
   // the bootstrap. BT is anchored on the baseline only where the baseline
   // actually appears on this board; sparse boards fall back to mean-centring.
   const { rows: btCI, anchor: btAnchor } = leaderboardBT(battles, BOOTSTRAP_ROUNDS, { baselineSlug });

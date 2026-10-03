@@ -260,7 +260,7 @@ describe("leaderboardBT", () => {
     ...record("strong", "weak", 34, 6),
   ];
 
-  it("reports the full-data fit as the rating, like FastChat", () => {
+  it("reports the full-data fit as the rating", () => {
     const { rows } = leaderboardBT(battles, 50);
     const point = computeBT(battles).ratings;
     for (const [slug, iv] of rows) expect(iv.rating).toBeCloseTo(point.get(slug)!, 9);

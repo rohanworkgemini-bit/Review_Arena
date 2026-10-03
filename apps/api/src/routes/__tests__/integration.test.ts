@@ -262,7 +262,7 @@ describe("E2E: Paper Upload → Vote → Reveal Flow", () => {
     it("should compute a Bradley-Terry snapshot after vote", () => {
       // After vote persists, snapshotLeaderboard() runs:
       // 1. Load all COMPLETED votes (B1 fairness filter)
-      // 2. Fit Bradley-Terry over the full history (FastChat port, MM fixed point)
+      // 2. Fit Bradley-Terry over the full history (MM fixed point)
       // 3. Bootstrap CI (100 resamples, 2.5/97.5 percentile)
       // 4. Insert BT rows into `ratings` (online Elo is no longer computed
       //    at runtime; `method` still distinguishes the two)

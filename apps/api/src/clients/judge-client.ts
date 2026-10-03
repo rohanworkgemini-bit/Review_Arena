@@ -32,28 +32,6 @@ export class JudgeClient {
     this.apiKey = apiKey;
   }
 
-  async judge(reviewText: string, paperText: string, model: string): Promise<JudgeResult> {
-    const headers: Record<string, string> = { "content-type": "application/json" };
-    if (this.apiKey) headers["x-api-key"] = this.apiKey;
-    const { statusCode, body } = await request(`${this.baseUrl}/judge`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ review_text: reviewText, paper_text: paperText, model }),
-      // /judge is a BLOCKING endpoint: Python sends response headers only
-      // after both judge passes over the full paper finish, so the headers
-      // deadline must cover the whole judging run, not a socket handshake.
-      // 30s here silently failed every real-sized paper (root-caused
-      // 2026-09-04: tiny probes passed, full papers always aborted at 30s).
-      // Two passes with per-call 180s deadlines + Python-side retries fit
-      // inside 8 min; a wedged service is still bounded by both timeouts.
-      headersTimeout: 8 * 60_000,
-      bodyTimeout: 8 * 60_000,
-    });
-    const text = await body.text();
-    if (statusCode >= 400) throw new Error(`judge ${statusCode}: ${text}`);
-    return JSON.parse(text) as JudgeResult;
-  }
-
   async judgePair(
     reviewA: string,
     reviewB: string,
@@ -71,8 +49,11 @@ export class JudgeClient {
         paper_text: paperText,
         model,
       }),
-      // Blocking endpoint (see judge() above): headers arrive only after
-      // both order-swapped passes finish, so both deadlines cover the run.
+      // Blocking endpoint: Python sends response headers only after both
+      // order-swapped passes over the full paper finish, so the headers
+      // deadline must cover the whole judging run, not a socket handshake
+      // (30s here silently failed every real-sized paper). Two passes with
+      // per-call 180s deadlines + Python-side retries fit inside 8 min.
       headersTimeout: 8 * 60_000,
       bodyTimeout: 8 * 60_000,
     });

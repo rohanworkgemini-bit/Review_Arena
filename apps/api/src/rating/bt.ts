@@ -1,33 +1,23 @@
 /**
  * Bradley-Terry (maximum-likelihood) ratings + bootstrapped 95% CI.
  *
-
- *
- * Mirrors preprocess_for_bt / bt_loss_and_grad / fit_bt / scale_and_offset /
- * compute_bt / compute_bootstrap_bt. BT is what the public LMArena board
- * reports, and the only rating method here: it refits from scratch on every
+ * BT is the only rating method here: it refits from scratch on every
  * snapshot, so unlike online Elo the result does not depend on vote order.
  *
- * Two deliberate deviations, neither of which moves the estimate on data
- * where FastChat's own estimate is well-defined:
- *
- *   1. Optimiser. FastChat minimises the weighted logistic NLL with scipy's
- *      L-BFGS-B plus an analytic gradient. There is no L-BFGS in Node, so we
- *      maximise the same likelihood with the MM (Zermelo 1929 / Hunter 2004)
- *      fixed-point update: monotone, derivative-free, same MLE. Checked
- *      against FastChat's output in __tests__/bt-parity.test.ts.
+ *   1. Optimiser. The weighted logistic likelihood is maximised with the MM
+ *      (Zermelo 1929 / Hunter 2004) fixed-point update: monotone,
+ *      derivative-free, and converging to the MLE.
  *
  *   2. Connectivity guard. The BT likelihood has a finite maximiser iff the
  *      win-graph is strongly connected (Ford 1957) — an unbeaten or winless
- *      system sends its rating to +/- infinity. FastChat papers over that
- *      with maxiter=100, which reports an iteration cap as if it were a
- *      rating. We instead fit over the largest strongly-connected component
- *      and return everything else as `unranked`. No prior or ridge is added,
- *      so on connected data this is FastChat's estimator exactly.
+ *      system sends its rating to +/- infinity. We fit over the largest
+ *      strongly-connected component and return everything else as
+ *      `unranked`, rather than reporting an iteration cap as if it were a
+ *      rating. No prior or ridge is added.
  *
- * The leaderboard row (leaderboardBT) follows FastChat's
- * report_elo_analysis_results: the rating is the single fit on all battles
- * (compute_bt) and only the interval comes from the bootstrap quantiles.
+ * The leaderboard row (leaderboardBT): the rating is the single fit on all
+ * battles (computeBT) and only the interval comes from the bootstrap
+ * quantiles.
  *
  * Scale: theta is in log-BASE units, so rating = theta * 400 + 1000 gives the
  * usual "400 points = 10x the odds" reading, identical to Elo's scale.
@@ -74,8 +64,7 @@ export interface BootstrapInterval {
 
 /**
  * Linear-interpolated percentile, matching numpy's default
- * (np.percentile with interpolation="linear"). Used by FastChat
- * via pandas .quantile(0.025) / .quantile(0.975).
+ * (np.percentile with interpolation="linear").
  */
 export function percentile(sortedAsc: readonly number[], q: number): number {
   if (sortedAsc.length === 0) throw new Error("percentile of empty array");
@@ -111,7 +100,7 @@ export type BTAnchor = "BASELINE" | "MEAN";
 export interface BTOptions {
   c?: BTConstants;
   /**
-   * Slug pinned to INIT_RATING. FastChat pins mixtral-8x7b to 1114; we pin a
+   * Slug pinned to INIT_RATING. We pin a
    * configured baseline to 1000 so snapshots stay comparable as systems are
    * added and retired. Absent from the fitted set (or null) => mean-centre.
    */
@@ -145,7 +134,7 @@ export interface BTDesign {
 }
 
 /**
- * FastChat's preprocess_for_bt: collapse the battle log into unique
+ * Collapse the battle log into unique
  * (matchup, outcome) triples with occurrence counts as weights. The fit only
  * ever sees at most n*(n-1)*3 rows, so cost stops growing with vote count.
  */
@@ -166,7 +155,7 @@ export function preprocessForBT(battles: readonly Battle[]): BTDesign {
   for (const { a, b, outcome } of battles) {
     const ia = id(a);
     const ib = id(b);
-    // outcome is already 1 / 0.5 / 0, matching FastChat's outcome_id / 2.
+    // outcome is already 1 / 0.5 / 0.
     const key = `${ia}|${ib}|${outcome}`;
     const cell = cells.get(key);
     if (cell) cell.weight += 1;
@@ -226,7 +215,7 @@ export function largestStronglyConnected(rows: readonly BTRow[], n: number): num
  *   pi_i <- W_i / sum_{rows containing i} w / (pi_a + pi_b)
  *
  * where W_i is i's total (fractional) win credit — a tie hands half to each
- * side, exactly as FastChat's outcome=0.5 does inside its log-loss. Each
+ * side, as outcome=0.5 does inside the log-loss. Each
  * sweep renormalises to geometric mean 1: the likelihood is scale-invariant
  * in pi, so this pins the free parameter without touching the fit and keeps
  * the iterates away from overflow.
@@ -307,10 +296,9 @@ function componentRows(
 }
 
 /**
- * FastChat's scale_and_offset: natural scale -> Elo-like points, then shift so
- * the baseline sits at INIT_RATING. fitBT returns geometric-mean-1 pi, so the
- * unanchored ratings are already mean-centred on INIT_RATING — which is also
- * where FastChat lands, since its gradients sum to zero from a zero start.
+ * Natural scale -> Elo-like points, then shift so the baseline sits at
+ * INIT_RATING. fitBT returns geometric-mean-1 pi, so the unanchored ratings
+ * are already mean-centred on INIT_RATING.
  */
 function scaleAndOffset(
   pi: Float64Array,
@@ -336,7 +324,7 @@ function scaleAndOffset(
   return { ratings, anchor: "BASELINE" };
 }
 
-/** FastChat's compute_bt, plus the connectivity guard. */
+/** Full-data BT fit, with the connectivity guard. */
 export function computeBT(battles: readonly Battle[], opts: BTOptions = {}): BTResult {
   const c = opts.c ?? DEFAULT_BT;
   const baselineSlug = opts.baselineSlug ?? null;
@@ -388,14 +376,14 @@ export function computeBT(battles: readonly Battle[], opts: BTOptions = {}): BTR
 }
 
 /**
- * FastChat's compute_bootstrap_bt. The battles themselves never change across
+ * Bootstrap BT. The battles themselves never change across
  * rounds — only how often each aggregated row is drawn — so a resample is one
  * multinomial over the row weights rather than a fresh pass over every battle.
  * That is what keeps the bootstrap flat in vote count.
  *
  * Rounds where a system falls outside the resample's connected component
- * contribute no sample for that system (FastChat has no such notion; its
- * L-BFGS just returns wherever maxiter left it). Percentiles are taken over
+ * contribute no sample for that system, rather than whatever value an
+ * unbounded fit stopped at. Percentiles are taken over
  * the samples a system actually has; a system with none stays unranked.
  */
 export function bootstrapBTCI(
@@ -442,10 +430,10 @@ export function bootstrapBTCI(
 }
 
 /**
- * FastChat's leaderboard_table_df for BT: rating = computeBT on the full
+ * Leaderboard rows: rating = computeBT on the full
  * battle log, interval = 2.5/97.5 percentiles of bootstrapBTCI. Only systems
  * the full fit can place are returned; the rating is not guaranteed to lie
- * inside its interval, exactly as in FastChat.
+ * inside its interval.
  */
 export function leaderboardBT(
   battles: readonly Battle[],
@@ -505,7 +493,7 @@ export function btWinProbability(
 
 /**
  * Multinomial(n, probs) counts by the conditional-binomial chain. Equivalent
- * to numpy's rng.multinomial, which is what FastChat uses.
+ * to numpy's rng.multinomial.
  */
 export function multinomialCounts(
   n: number,
@@ -554,7 +542,7 @@ function binomialSample(n: number, p: number, rng: () => number): number {
 }
 
 /** mulberry32 — small seeded PRNG so bootstrap CIs are reproducible run to
- * run (FastChat fixes numpy's seed to 0 for the same reason). */
+ * run. */
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {

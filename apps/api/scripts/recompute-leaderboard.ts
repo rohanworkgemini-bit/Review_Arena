@@ -1,7 +1,7 @@
 // Recompute all nine leaderboard snapshots from the full vote log, once.
 //
 // The board is normally refreshed after every vote. When the rating method
-// itself changes (e.g. the switch to FastChat's full-data BT fit), the stored
+// itself changes (e.g. the switch to the full-data BT fit), the stored
 // snapshots stay on the old method until the next vote — and with the study
 // closed there may be none. This appends a fresh snapshot for every board,
 // attributed to the most recent vote. Earlier snapshots are kept.

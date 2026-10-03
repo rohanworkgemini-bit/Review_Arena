@@ -1,4 +1,4 @@
-"""LLM-as-judge utilities used by the metrics pipeline.
+"""LLM-as-judge: pairwise comparison of two reviews of one paper.
 
 API-based. The judge is a PANEL: the Node side calls /judge-pair once per
 study system, so every model in the lineup judges every study pair
@@ -18,13 +18,10 @@ scorePairIfReady), so a silent fake would pollute the leaderboard with
 nonsense; better to fail and surface a config error.
 
 Methodology references:
-  - Zheng et al. 2023 (MT-Bench, arXiv:2306.05685) — reference-guided
-    single-answer grading is our base paradigm.
+  - Zheng et al. 2023 (MT-Bench, arXiv:2306.05685) — pairwise comparison
+    with an order-swapped second pass as the position-bias control.
   - Liu et al. 2023 (G-Eval, arXiv:2303.16634) — CoT + form-filling
     paradigm; the reasoning_per_dimension field below implements this.
-  - Self-consistency: we run the judge JUDGE_PASSES times and average
-    scores to reduce per-call stochasticity (model isn't perfectly
-    deterministic even at temperature=0).
 """
 from __future__ import annotations
 
@@ -38,13 +35,8 @@ from typing import Any, Literal
 
 logger = logging.getLogger("review-gen.judge")
 
-# Number of judge calls to average per review. 2 catches most outlier
-# scores at ~2x the cost; higher N has diminishing returns. Even at
-# temperature=0 the model can return scores ±0.5 across calls.
-JUDGE_PASSES = 2
-
 # Retry tuning for transient OpenAI errors (rate limits, timeouts,
-# malformed JSON). Matches FastChat's pattern at lower scale: 5 attempts
+# malformed JSON): 5 attempts
 # with exponential backoff = max ~30s wait before giving up.
 JUDGE_RETRY_MAX = 5
 JUDGE_RETRY_BASE_SEC = 1.0
@@ -52,7 +44,7 @@ JUDGE_RETRY_BASE_SEC = 1.0
 
 @dataclass
 class JudgeResult:
-    """Bundle returned by the judge for a single review."""
+    """One review's scores within a pairwise verdict."""
 
     overall_score: float            # 1-10
     dimension_scores: dict[str, float]
@@ -135,64 +127,6 @@ PAPER_CHAR_CAP = 400_000
 REVIEW_CHAR_CAP = 50_000
 
 
-def _build_prompts(paper_text: str, review_text: str) -> tuple[str, str]:
-    """System + user prompt for one judge pass. Pure function so both the
-    single-pass call and the multi-pass loop produce byte-identical
-    inputs to the model (matters for prompt-caching hit rate)."""
-    system_prompt = (
-        "You are a strict meta-reviewer evaluating an automated peer review. "
-        "Given the original paper text and a candidate review, return a JSON "
-        "object with this exact shape:\n"
-        "{\n"
-        '  "reasoning_per_dimension": {DIM: str (1-2 sentences explaining the score) for DIM in ['
-        f'{",".join(repr(d) for d in _DIMENSIONS)}'
-        "]},\n"
-        '  "dimension_scores": {DIM: float in [1,10] for DIM in ['
-        f'{",".join(repr(d) for d in _DIMENSIONS)}'
-        "]},\n"
-        '  "overall_score": float in [1,10]\n'
-        "}\n\n"
-        "Dimension definitions — score each against exactly this rubric:\n"
-        + "".join(
-            f"- {dim}: {_DIMENSION_RUBRIC[dim]}\n" for dim in _DIMENSIONS
-        )
-        + "\n"
-        "Methodology — follow in order:\n"
-        "1. For each dimension, write 1-2 sentences of reasoning grounded in "
-        "specific parts of the review and paper. This goes in "
-        "`reasoning_per_dimension`. (Chain-of-thought before scoring "
-        "improves score calibration.)\n"
-        "2. Then assign each dimension a 1-10 score consistent with your "
-        "reasoning. 1=very poor, 5=adequate, 8=strong, 10=exemplary. For "
-        "EVERY dimension a higher score means the review is BETTER on that "
-        "axis — including FALSE_CLAIMS, where 10 means no false or "
-        "contradictory claims and 1 means many.\n"
-        "3. Set `overall_score` as a holistic 1-10 judgment of the review's "
-        "value to a paper author (NOT a mean of the dimensions).\n"
-        "4. Do NOT reward verbose or padded reviews. Length without "
-        "substance should LOWER the COMPLETENESS_COVERAGE and "
-        "CRITIQUE_CLARITY scores."
-    )
-    paper_part, review_part = _build_user_parts(paper_text, review_text)
-    return system_prompt, paper_part + review_part
-
-
-def _build_user_parts(paper_text: str, review_text: str) -> tuple[str, str]:
-    """The user prompt in two pieces, split at the paper/review boundary.
-
-    The paper half is byte-identical across every judge call on one paper —
-    all six panel members, both passes, all six reviews — so it is the
-    natural prompt-cache breakpoint. Concatenating the halves reproduces
-    _build_prompts' user_prompt exactly, so a provider with no explicit
-    cache controls can keep sending the joined string and nothing about
-    its input changes.
-    """
-    return (
-        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n",
-        f"=== REVIEW ===\n{review_text[:REVIEW_CHAR_CAP]}\n",
-    )
-
-
 # ─── Provider routing ──────────────────────────────────────────────────────
 
 
@@ -248,9 +182,9 @@ def _parse_json_text(raw: str) -> dict:
     return data
 
 
-# JSON schemas for Anthropic structured outputs (output_config.format).
-# They mirror the shapes _build_prompts / _build_pair_prompts ask every
-# provider for, so the Claude judge cannot drift from the others.
+# JSON schema for Anthropic structured outputs (output_config.format).
+# It mirrors the shape _build_pair_prompts asks every provider for, so the
+# Claude judge cannot drift from the others.
 def _dim_object(value_schema: dict) -> dict:
     return {
         "type": "object",
@@ -267,17 +201,6 @@ _SCORES_BLOCK_SCHEMA: dict = {
         "overall_score": {"type": "number"},
     },
     "required": ["dimension_scores", "overall_score"],
-    "additionalProperties": False,
-}
-
-_REVIEW_SCHEMA: dict = {
-    "type": "object",
-    "properties": {
-        "reasoning_per_dimension": _dim_object({"type": "string"}),
-        "dimension_scores": _dim_object({"type": "number"}),
-        "overall_score": {"type": "number"},
-    },
-    "required": ["reasoning_per_dimension", "dimension_scores", "overall_score"],
     "additionalProperties": False,
 }
 
@@ -366,60 +289,26 @@ def _anthropic_judge_pass(
     user_prompt: str,
     model: str,
     schema: dict,
-    user_parts: tuple[str, str] | None = None,
 ) -> dict:
     """One Claude judge call. Structured output via output_config.format
     guarantees a schema-valid JSON text block; no temperature (Sonnet 5
     rejects it), no assistant prefill (removed on the 4.6+ family), and
     adaptive thinking left at its default. Streamed and collected because
     the SDK refuses non-streaming requests that may exceed 10 minutes
-    under adaptive thinking (see adapters/claude.py).
-
-    Prompt caching: with `user_parts` the paper half becomes its own
-    content block carrying the breakpoint, which caches everything ahead
-    of it — system prompt included, since system renders before messages.
-    One paper is judged ~12 times by this model (6 reviews x JUDGE_PASSES)
-    plus retries, all on the same ~100k-token prefix, so the 1-hour TTL is
-    the one that pays: the panel fans out in seconds but the three
-    comparisons of a paper are judged as the participant votes, minutes
-    apart, which is past the 5-minute window."""
-    if user_parts is None:
-        content: Any = user_prompt
-    else:
-        paper_part, review_part = user_parts
-        content = [
-            {
-                "type": "text",
-                "text": paper_part,
-                "cache_control": {"type": "ephemeral", "ttl": "1h"},
-            },
-            # After the breakpoint: the only half that differs per call.
-            {"type": "text", "text": review_part},
-        ]
+    under adaptive thinking (see adapters/claude.py)."""
     with client.messages.stream(
         model=model,
         max_tokens=16_000,
         system=system_prompt,
-        messages=[{"role": "user", "content": content}],
+        messages=[{"role": "user", "content": user_prompt}],
         output_config={
             "format": {"type": "json_schema", "schema": schema},
             # The judge is a form-filling task; medium effort keeps the
-            # 12-calls-per-pair panel affordable without dropping the CoT.
+            # panel affordable without dropping the CoT.
             "effort": "medium",
         },
     ) as stream:
         message = stream.get_final_message()
-    # The only ground truth that caching is working. A prefix change
-    # upstream fails silently — the call still succeeds, it just costs
-    # full price — so log it rather than assume.
-    usage = getattr(message, "usage", None)
-    if usage is not None:
-        logger.debug(
-            "anthropic judge cache: read=%s write=%s uncached=%s",
-            getattr(usage, "cache_read_input_tokens", None),
-            getattr(usage, "cache_creation_input_tokens", None),
-            getattr(usage, "input_tokens", None),
-        )
     if message.stop_reason == "refusal":
         # Deliberately worded so the transient-error classifier does not
         # retry it: a policy refusal repeats identically on every attempt.
@@ -436,15 +325,10 @@ def _one_judge_pass(
     system_prompt: str,
     user_prompt: str,
     model: str,
-    user_parts: tuple[str, str] | None = None,
 ) -> dict:
     """Single judge call with retry on transient errors. Dispatches on the
     provider kind. Returns the parsed JSON dict. Raises RuntimeError if all
-    retries fail. `client` is the provider SDK client (None for Gemini).
-
-    `user_parts` is the same prompt split at the paper/review boundary, for
-    the one provider whose caching is opt-in. Everyone else gets the joined
-    string and relies on automatic prefix caching."""
+    retries fail. `client` is the provider SDK client (None for Gemini)."""
     last_err: Exception | None = None
     for attempt in range(JUDGE_RETRY_MAX):
         try:
@@ -461,7 +345,6 @@ def _one_judge_pass(
                     user_prompt=user_prompt,
                     model=model,
                     schema=schema,
-                    user_parts=user_parts,
                 )
             return _openai_judge_pass(
                 client,
@@ -532,95 +415,6 @@ def _client_for(model: str, provider: _Provider) -> Any:
     return OpenAI(api_key=api_key, base_url=provider.base_url, timeout=180.0, max_retries=3)
 
 
-def judge_review(
-    review_text: str,
-    paper_text: str,
-    *,
-    model: str,
-) -> JudgeResult:
-    """Score a review against the paper (pointwise; kept for the /judge
-    endpoint — the pipeline uses judge_pair).
-
-    Returns overall + per-dimension scores. Raises RuntimeError if the
-    provider's API key is missing — no fake-data fallback.
-
-    Runs the judge JUDGE_PASSES times and averages numeric scores to
-    reduce stochasticity (even at temperature=0 the model is not
-    perfectly deterministic, ~±0.5 variance observed).
-    """
-    provider = _provider_for(model)
-    client = _client_for(model, provider)
-
-    system_prompt, user_prompt = _build_prompts(paper_text, review_text)
-    user_parts = _build_user_parts(paper_text, review_text)
-
-    # Multi-pass averaging. If all passes fail we surface the error;
-    # if some succeed we average over successes (still informative).
-    # The passes run in sequence, so pass 2 reads the prefix pass 1 wrote —
-    # a cache entry is only readable once the first response has started.
-    pass_data: list[dict] = []
-    for pass_idx in range(JUDGE_PASSES):
-        try:
-            pass_data.append(_one_judge_pass(
-                client,
-                provider=provider,
-                schema=_REVIEW_SCHEMA,
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                model=model,
-                user_parts=user_parts,
-            ))
-        except RuntimeError as e:
-            logger.warning("judge pass %d/%d failed: %s", pass_idx + 1, JUDGE_PASSES, e)
-    # A pass only counts if it is COMPLETE and in range. The old behaviour
-    # defaulted every missing value to 5 — so a judge pass that returned
-    # `{}` produced a clean-looking all-5.0 row that silently polluted the
-    # human-vs-judge correlation. Better no score (the review is excluded
-    # by judge_status=FAILED) than a fabricated one.
-    def _valid_pass(d: dict) -> bool:
-        try:
-            overall = float(d["overall_score"])
-        except (KeyError, TypeError, ValueError):
-            return False
-        if not 1.0 <= overall <= 10.0:
-            return False
-        dims = d.get("dimension_scores")
-        if not isinstance(dims, dict):
-            return False
-        for dim in _DIMENSIONS:
-            try:
-                v = float(dims[dim])
-            except (KeyError, TypeError, ValueError):
-                return False
-            if not 1.0 <= v <= 10.0:
-                return False
-        return True
-
-    valid = [d for d in pass_data if _valid_pass(d)]
-    if len(valid) < len(pass_data):
-        logger.warning(
-            "discarded %d/%d judge passes with missing or out-of-range scores",
-            len(pass_data) - len(valid), len(pass_data),
-        )
-    if not valid:
-        raise RuntimeError(
-            f"all {JUDGE_PASSES} judge passes failed or returned invalid scores"
-        )
-
-    def _avg(values: list[float]) -> float:
-        return sum(values) / len(values)
-
-    overall = _avg([float(d["overall_score"]) for d in valid])
-    dimension_scores: dict[str, float] = {}
-    for dim in _DIMENSIONS:
-        dimension_scores[dim] = _avg([float(d["dimension_scores"][dim]) for d in valid])
-
-    return JudgeResult(
-        overall_score=overall,
-        dimension_scores=dimension_scores,
-    )
-
-
 # ─── Pairwise judging (2026-09-04) ─────────────────────────────────────────
 #
 # The judge reads the paper + BOTH reviews in one request and emits the
@@ -630,9 +424,7 @@ def judge_review(
 # position-bias control from Zheng et al. 2023 (MT-Bench): a verdict only
 # stands where both orderings agree; disagreement records a TIE.
 #
-# Cost: 2 × (paper + both reviews) ≈ half the input tokens of the previous
-# pointwise scheme (2 reviews × 2 passes, paper sent 4 times), and the
-# shared paper prefix gets provider-side context caching on the second call.
+# Cost: 2 × (paper + both reviews) per judge per pair.
 
 
 @dataclass
