@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
-import { computeBT, preprocessForBT, DEFAULT_BT } from "../bt.js";
-import type { Battle } from "../elo.js";
+import { computeBT, preprocessForBT, DEFAULT_BT, type Battle } from "../bt.js";
 
 /**
  * Parity with the upstream estimator.

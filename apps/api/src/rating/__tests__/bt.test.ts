@@ -8,9 +8,11 @@ import {
   multinomialCounts,
   btWinProbability,
   mulberry32,
+  outcomeOf,
+  percentile,
   DEFAULT_BT,
+  type Battle,
 } from "../bt.js";
-import type { Battle } from "../elo.js";
 
 const battle = (a: string, b: string, outcome: 0 | 0.5 | 1): Battle => ({ a, b, outcome });
 
@@ -321,3 +323,22 @@ function shuffle<T>(items: readonly T[], rng: () => number): T[] {
   }
   return out;
 }
+
+describe("percentile", () => {
+  it("matches numpy linear interpolation on a known sample", () => {
+    // np.percentile([10,20,30,40], [2.5, 50, 97.5])
+    //   = array([10.75, 25. , 39.25])
+    const data = [10, 20, 30, 40];
+    expect(percentile(data, 0.025)).toBeCloseTo(10.75, 6);
+    expect(percentile(data, 0.5)).toBeCloseTo(25, 6);
+    expect(percentile(data, 0.975)).toBeCloseTo(39.25, 6);
+  });
+});
+
+describe("outcomeOf", () => {
+  it("maps A / B / TIE to 1 / 0 / 0.5", () => {
+    expect(outcomeOf("A")).toBe(1);
+    expect(outcomeOf("B")).toBe(0);
+    expect(outcomeOf("TIE")).toBe(0.5);
+  });
+});

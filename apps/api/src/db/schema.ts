@@ -375,7 +375,7 @@ export const dimensionVotes = pgTable(
     // Preference on this dimension, in the SAME encoding as the overall
     // verdict on `votes.winner`: "A", "B" or "TIE" (2026-09-10; previously
     // an integer -1 / 0 / +1). One convention across all nine boards means
-    // one conversion to a Bradley-Terry outcome (`outcomeOf` in rating/elo.ts)
+    // one conversion to a Bradley-Terry outcome (`outcomeOf` in rating/bt.ts)
     // rather than an encoding per board, and the domain is enforced by the
     // database here exactly as it is for the overall verdict — the integer
     // column carried no CHECK, so its three-value domain held only by

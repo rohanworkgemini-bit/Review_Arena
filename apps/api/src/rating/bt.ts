@@ -5,9 +5,8 @@
  *
  * Mirrors preprocess_for_bt / bt_loss_and_grad / fit_bt / scale_and_offset /
  * compute_bt / compute_bootstrap_bt. BT is what the public LMArena board
- * reports; Elo (elo.ts) is kept beside it because it is order-dependent and
- * updates incrementally, which is what the pair sampler wants and what the
- * reveal screen's per-vote delta used to need. BT refits from scratch.
+ * reports, and the only rating method here: it refits from scratch on every
+ * snapshot, so unlike online Elo the result does not depend on vote order.
  *
  * Two deliberate deviations, neither of which moves the estimate on data
  * where FastChat's own estimate is well-defined:
@@ -35,7 +34,59 @@
  */
 
 import { logger } from "../logger.js";
-import { percentile, type Battle, type BootstrapInterval } from "./elo.js";
+
+export type Outcome = 0 | 0.5 | 1;
+
+export interface Battle {
+  /** stable identifier for system A — typically the slug */
+  a: string;
+  /** stable identifier for system B */
+  b: string;
+  /** 1 = A won, 0 = B won, 0.5 = tie */
+  outcome: Outcome;
+}
+
+/** A recorded verdict, as stored on `votes.winner` and `dimension_votes.winner`. */
+export type Winner = "A" | "B" | "TIE";
+
+/**
+ * The single mapping from a recorded verdict to a Bradley-Terry outcome.
+ *
+ * Every board goes through here — the overall one and all eight
+ * per-dimension ones — so the nine comparison logs cannot disagree about
+ * what a verdict means. That was a live hazard while the dimensions used a
+ * signed integer: the snapshot path branched on the sign and the thesis
+ * analysis branched on equality, which agreed on the three intended values
+ * and diverged on anything else, and nothing at the database level ruled
+ * anything else out.
+ */
+export function outcomeOf(winner: Winner): Outcome {
+  return winner === "A" ? 1 : winner === "B" ? 0 : 0.5;
+}
+
+/** One leaderboard row: point rating plus its 95% bootstrap interval. */
+export interface BootstrapInterval {
+  rating: number;       // leaderboardBT: full-data fit; intervalsFrom: bootstrap median
+  ciLow: number;        // 2.5th percentile
+  ciHigh: number;       // 97.5th percentile
+  voteCount: number;    // battles involving this system in the original set
+}
+
+/**
+ * Linear-interpolated percentile, matching numpy's default
+ * (np.percentile with interpolation="linear"). Used by FastChat
+ * via pandas .quantile(0.025) / .quantile(0.975).
+ */
+export function percentile(sortedAsc: readonly number[], q: number): number {
+  if (sortedAsc.length === 0) throw new Error("percentile of empty array");
+  if (sortedAsc.length === 1) return sortedAsc[0]!;
+  const pos = q * (sortedAsc.length - 1);
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  if (lo === hi) return sortedAsc[lo]!;
+  const frac = pos - lo;
+  return sortedAsc[lo]! * (1 - frac) + sortedAsc[hi]! * frac;
+}
 
 export interface BTConstants {
   BASE: number;
@@ -442,11 +493,7 @@ function intervalsFrom(
   return out;
 }
 
-/**
- * Win probability implied by two BT ratings. Same closed form as Elo's
- * expectedScore — the two systems share a scale — but stated here so callers
- * reading BT ratings don't have to import from elo.ts to interpret them.
- */
+/** Win probability implied by two BT ratings. */
 export function btWinProbability(
   ratingA: number,
   ratingB: number,

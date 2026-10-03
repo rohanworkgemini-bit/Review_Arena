@@ -15,8 +15,13 @@ import {
   votes,
 } from "../db/schema.js";
 import { verifyPairToken } from "./pair.js";
-import { outcomeOf, type Battle, type BootstrapInterval } from "../rating/elo.js";
-import { computeBT, leaderboardBT } from "../rating/bt.js";
+import {
+  computeBT,
+  leaderboardBT,
+  outcomeOf,
+  type Battle,
+  type BootstrapInterval,
+} from "../rating/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
 import { invalidateLeaderboardCache } from "./leaderboard.js";
