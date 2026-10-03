@@ -9,7 +9,7 @@ output. Nothing in the app imports this; it is a hand-run script, and its deps
 
     python3 -m venv /tmp/btvenv
     /tmp/btvenv/bin/pip install numpy scipy pandas tqdm
-    /tmp/btvenv/bin/python apps/api/src/elo/__tests__/fixtures/gen-bt-fixture.py
+    /tmp/btvenv/bin/python apps/api/src/rating/__tests__/fixtures/gen-bt-fixture.py
 
 The battle log is seeded, so re-running reproduces the same fixture byte for
 byte unless FastChat's estimator itself changes.
