@@ -10,14 +10,14 @@
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
 --     psql -U reviewarena -d reviewarena -v confirm=yes \
---     < deploy/reset-study-data.sql
+--     < deploy/sql/ops/reset-study-data.sql
 --
 -- Without -v confirm=yes it prints the current row counts and changes
 -- nothing, which is the intended way to look before leaping.
 --
 -- Participants are dropped too: a fresh study means a fresh pool, and the
 -- codes on an old handout sheet must stop working. Re-mint straight after
--- with deploy/mint-participants.sql, real and test batches separately.
+-- with deploy/sql/ops/mint-participants.sql, real and test batches separately.
 
 \echo ''
 \echo 'Current row counts:'

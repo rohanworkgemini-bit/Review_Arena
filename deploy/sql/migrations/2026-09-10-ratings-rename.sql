@@ -14,7 +14,7 @@
 -- Apply, as with the other deploy SQL (drizzle-kit is not in the prod image):
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/migrate-ratings-rename.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-10-ratings-rename.sql
 --
 -- IDEMPOTENT: re-running against an already-renamed database is a no-op.
 --

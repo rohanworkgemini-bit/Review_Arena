@@ -9,7 +9,7 @@
 -- by hand rather than pointing drizzle-kit at the live database.
 --
 --   docker exec -i reviewarena-postgres psql -U reviewarena -d reviewarena \
---     < deploy/migrate-test-participants.sql
+--     < deploy/sql/migrations/2026-09-21-test-participants.sql
 
 ALTER TABLE participants
   ADD COLUMN IF NOT EXISTS is_test boolean NOT NULL DEFAULT false;

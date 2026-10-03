@@ -8,7 +8,7 @@
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
 --     psql -U reviewarena -d reviewarena -v count=20 \
---     < deploy/mint-participants.sql
+--     < deploy/sql/ops/mint-participants.sql
 --
 -- `-v kind=test` mints DRY-RUN codes instead — T01, T02, … with is_test
 -- set — for walking the flow ourselves during the study window. They run
@@ -18,7 +18,7 @@
 -- participant to P31:
 --
 --   … psql -U reviewarena -d reviewarena -v count=10 -v kind=test \
---     < deploy/mint-participants.sql
+--     < deploy/sql/ops/mint-participants.sql
 --
 -- ADDITIVE, like the script: it always creates `count` NEW rows and never
 -- touches existing ones. Re-running mints another batch — that is the point,

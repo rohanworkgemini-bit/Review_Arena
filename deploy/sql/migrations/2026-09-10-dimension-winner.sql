@@ -17,7 +17,7 @@
 -- Apply, as with the other deploy SQL (drizzle-kit is not in the prod image):
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/migrate-dimension-winner.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-10-dimension-winner.sql
 --
 -- LOSSLESS AND IDEMPOTENT. Every recorded pick maps onto exactly one of the
 -- three labels, the backfill runs before the old column is dropped, and

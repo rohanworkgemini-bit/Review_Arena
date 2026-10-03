@@ -44,7 +44,7 @@ const WORDS = [
 // rotations R1 then R2), which is what capped the study at twenty slots;
 // nextRotationId() draws per paper at upload now, so it encodes nothing.
 // Sequential purely because it is read aloud, ticked off a handout sheet and
-// pasted into status queries. Kept in sync with deploy/mint-participants.sql.
+// pasted into status queries. Kept in sync with deploy/sql/ops/mint-participants.sql.
 // Real participants are P-numbered, dry runs T-numbered, and the two
 // sequences are counted separately so minting ten test codes does not push
 // the next real participant to P31 — the handout sheet reads P01..P20 and

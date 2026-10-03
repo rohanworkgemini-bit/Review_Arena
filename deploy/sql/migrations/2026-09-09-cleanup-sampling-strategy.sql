@@ -1,7 +1,7 @@
 -- Remove everything the adaptive arena sampler left behind.
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/cleanup-sampling-strategy.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-09-cleanup-sampling-strategy.sql
 --
 -- The platform briefly carried two arena samplers — uniform and the
 -- FastChat-derived adaptive draw — behind an admin setting. Only uniform

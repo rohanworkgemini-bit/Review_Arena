@@ -7,7 +7,7 @@
 -- directly:
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/migrate-judge-panel.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-08-judge-panel.sql
 --
 -- Idempotent by construction: every step checks first, so re-running it is
 -- a no-op and applying it to an already-current database is safe.

@@ -5,7 +5,7 @@
 -- same upsert expressed directly against postgres:
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/seed-systems.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/ops/seed-systems.sql
 --
 -- Idempotent: existing rows are updated in place and keep their id, so
 -- reviews, votes and Elo history survive re-running it.

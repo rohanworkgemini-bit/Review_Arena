@@ -1,7 +1,7 @@
 -- Drop the online-Elo leaderboard rows, now that Elo is offline-only.
 --
 --   sudo docker compose -f docker-compose.prod.yml exec -T postgres \
---     psql -U reviewarena -d reviewarena < deploy/cleanup-elo-snapshots.sql
+--     psql -U reviewarena -d reviewarena < deploy/sql/migrations/2026-09-09-cleanup-elo-snapshots.sql
 --
 -- Context. The API no longer computes online Elo: snapshotLeaderboard()
 -- writes method='BT' rows only, and the leaderboard route reads only those
