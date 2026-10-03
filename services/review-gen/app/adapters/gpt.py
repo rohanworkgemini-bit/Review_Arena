@@ -27,7 +27,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.conference_scales import DEFAULT_CONFERENCE, build_system_prompt
+from app.review_forms import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
     PROVIDER_TIMEOUT_S,
@@ -41,7 +41,7 @@ from app.adapters.base import (
 from app.schemas import ParsedPaper
 
 # The review-form system prompt is built per selected conference in
-# __init__ — see app/conference_scales.py (single source for the form
+# __init__ — see app/review_forms.py (single source for the form
 # shared by all commercial adapters; only ## Rating varies by venue).
 
 

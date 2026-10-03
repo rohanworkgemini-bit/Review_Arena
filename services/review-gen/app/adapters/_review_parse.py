@@ -46,7 +46,7 @@ class ScoreScale(str, Enum):
 
 # Canonical field <- heading alias map. Lowercased, punctuation-stripped.
 #
-# The three venue forms (conference_scales.py) use different section names
+# The three venue forms (review_forms.py) use different section names
 # for the same concepts; this map folds them all onto StructuredReview's
 # canonical fields. NeurIPS's Quality/Clarity mirror ICLR's Soundness/
 # Presentation; both venues' Significance plays Contribution's role.

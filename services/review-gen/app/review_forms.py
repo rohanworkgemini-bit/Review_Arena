@@ -1,4 +1,5 @@
-"""Per-venue review forms + rating scales for the review-generation prompts.
+"""Review forms + rating scales for the review-generation prompts: one per
+venue (ICLR, ICML, NeurIPS) plus the venue-neutral General form.
 
 The uploader picks a conference at upload time; the choice flows
 paper → API → GenerateRequest.conference → adapter config → this prompt,

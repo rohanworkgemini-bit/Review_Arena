@@ -185,7 +185,7 @@ export const papers = pgTable(
     // systems in a battle inherit it. Kept as text, not a pgEnum, so
     // adding a venue needs no migration — the allowed set is enforced by
     // ConferenceSchema in packages/shared-types. Scales defined in
-    // services/review-gen/app/conference_scales.py.
+    // services/review-gen/app/review_forms.py.
     conference: text("conference").notNull().default("iclr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -375,7 +375,7 @@ export const dimensionVotes = pgTable(
     // Preference on this dimension, in the SAME encoding as the overall
     // verdict on `votes.winner`: "A", "B" or "TIE" (2026-09-10; previously
     // an integer -1 / 0 / +1). One convention across all nine boards means
-    // one conversion to a Bradley-Terry outcome (`outcomeOf` in elo/elo.ts)
+    // one conversion to a Bradley-Terry outcome (`outcomeOf` in rating/elo.ts)
     // rather than an encoding per board, and the domain is enforced by the
     // database here exactly as it is for the overall verdict — the integer
     // column carried no CHECK, so its three-value domain held only by
