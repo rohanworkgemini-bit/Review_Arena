@@ -123,7 +123,9 @@ export class ReviewGenClient {
           headers: this.authHeaders(),
           body: form,
           bodyTimeout: PARSE_TIMEOUT_MS,
-          headersTimeout: 60_000,
+          // /parse sends no headers until Chandra finishes (up to ~300s),
+          // so the headers wait needs the full parse budget too.
+          headersTimeout: PARSE_TIMEOUT_MS,
         });
         return { statusCode, text: await body.text() };
       },
