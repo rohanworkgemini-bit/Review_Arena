@@ -21,6 +21,7 @@ ReviewArena's core features include:
 ## Contents
 - [Install](#install)
 - [Review Systems](#review-systems)
+- [Prompts](#prompts)
 - [How It Works](#how-it-works)
 - [Running Locally](#running-locally)
 - [Looking at the Database](#looking-at-the-database)
@@ -77,8 +78,41 @@ Every adapter shares the same input budgeting ([_budget.py](services/review-gen/
 2. Register it in the adapter registry ([adapters/\_\_init\_\_.py](services/review-gen/app/adapters/__init__.py)). To let it sit on the judge panel, also add its provider to `_PROVIDERS` in [judge.py](services/review-gen/app/judge.py).
 3. Add its row to [seed.ts](apps/api/scripts/seed.ts) and re-run `db:seed`.
 
-#### Review forms
-The uploader picks the review form both systems follow: **General** (the default, venue-neutral, rated on a 1–6 accept/reject scale), **ICLR 2026**, **ICML 2026** or **NeurIPS 2026**. Each venue form mirrors that venue's real reviewer form. See [review_forms.py](services/review-gen/app/review_forms.py).
+## Prompts
+
+Every prompt sent to a model is a plain Markdown file in [services/review-gen/app/prompts/](services/review-gen/app/prompts/). A file's text is exactly what the model receives, so you can change a prompt without touching Python.
+```
+prompts/
+├── review/
+│   ├── general.md     # default: venue-neutral, rated on a 1–6 accept/reject scale
+│   ├── iclr.md        # ICLR 2026 reviewer form
+│   ├── icml.md        # ICML 2026 reviewer form
+│   └── neurips.md     # NeurIPS 2026 reviewer form
+└── judge/
+    ├── system.md      # judge rubric + JSON output format
+    └── user.md        # the paper and the two reviews: $paper, $review_1, $review_2
+```
+
+The uploader picks the review form, and both systems in a battle follow the same one. Each venue form mirrors that venue's real reviewer form.
+
+> Don't edit the review or judge prompts while a study is collecting data: reviews and verdicts made under different prompts can't be compared.
+
+#### Adding a review form
+1. Create `prompts/review/<key>.md`, for example `acl.md`. Copying [general.md](services/review-gen/app/prompts/review/general.md) is the easiest start. Keep the `## Heading` sections, and start every numeric section (scores, rating, confidence) with **a single number on its own line**, or the scores won't parse.
+2. Add `<key>` to `CONFERENCES` and its display name to `CONFERENCE_NAMES` in [packages/shared-types/src/api.ts](packages/shared-types/src/api.ts). This puts it in the upload dropdown.
+3. Add its maximum overall rating to `OVERALL_MAX` in [ScoreLine.tsx](apps/web/src/components/comparison/ScoreLine.tsx). The typecheck fails until you do.
+4. If the form uses new heading names (e.g. "Reasons to Accept"), map them in `_HEADER_MAP` in [_review_parse.py](services/review-gen/app/adapters/_review_parse.py). Unmapped sections are still shown to voters, but their scores aren't extracted.
+
+No database migration is needed; the venue is stored as plain text.
+
+#### Adding a new kind of prompt
+Put the file under `prompts/`, using `$name` for anything filled in at runtime (`$$` for a literal dollar sign), and load it from Python:
+```python
+from app import prompts
+
+system = prompts.load("summary/system")            # the text as-is
+user = prompts.render("summary/user", paper=text)  # fills in $paper; raises if a value is missing
+```
 
 ## How It Works
 
@@ -127,6 +161,7 @@ reviewarena/
 │           └── server.ts
 ├── services/
 │   ├── review-gen/                # FastAPI: /parse, /parse-arxiv, /generate, /stream-generate, /judge-pair
+│   │   └── app/prompts/           # every model prompt, as Markdown files
 │   └── cloudrun/arxiv2md/         # self-hosted arXiv → markdown
 ├── packages/shared-types/         # Zod schemas + TS types
 ├── deploy/                        # Caddyfile, backup.sh, smoke test, one-off SQL

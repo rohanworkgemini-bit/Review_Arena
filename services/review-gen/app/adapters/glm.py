@@ -22,7 +22,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.review_forms import DEFAULT_CONFERENCE, build_system_prompt
+from app.prompts import DEFAULT_CONFERENCE, build_system_prompt
 from app.adapters._review_parse import ScoreScale, parse_markdown_review
 from app.adapters.base import (
     PROVIDER_TIMEOUT_S,

@@ -18,7 +18,7 @@ export type Winner = z.infer<typeof WinnerSchema>;
 // ─── Conference (review-form scale) ─────────────────────────────────────────
 // The uploader picks which venue's review form / rating scale the generated
 // reviews follow. Both systems in a battle always share the same conference.
-// Scales live in services/review-gen/app/review_forms.py.
+// The forms and their scales live in services/review-gen/app/prompts/review/.
 
 // "general" (default since Oct 2026) is a venue-neutral form that names no
 // venue and otherwise works like the venue forms; the three venue editions follow their real 2026 review forms (the

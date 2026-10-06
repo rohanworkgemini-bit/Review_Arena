@@ -33,6 +33,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from app import prompts
+
 logger = logging.getLogger("review-gen.judge")
 
 # Retry tuning for transient OpenAI errors (rate limits, timeouts,
@@ -66,45 +68,15 @@ _DIMENSIONS = (
     "FALSE_CLAIMS",
 )
 
-# The rubric each dimension is scored against. This is the ONLY copy — the
-# voter-facing wording lives in DIMENSION_DESCRIPTIONS (shared-types), phrased
-# as the pairwise question. Keep the two semantically aligned so the
-# human-vs-judge agreement analysis (RQ1) compares the same construct.
-_DIMENSION_RUBRIC = {
-    "CONTRIBUTION_ACCURACY": (
-        "Whether the review correctly understands the paper's main contributions "
-        "and methodological innovations without misrepresenting them."
-    ),
-    "RESULTS_INTERPRETATION": (
-        "Whether tables, figures, metrics, statistical comparisons, and "
-        "experimental results are interpreted correctly without exaggeration."
-    ),
-    "COMPARATIVE_ANALYSIS": (
-        "Whether the review appropriately discusses the paper's baselines and "
-        "related-work comparisons without making unsupported claims."
-    ),
-    "EVIDENCE_BASED_CRITIQUE": (
-        "Whether criticisms are supported by identifiable evidence from sections, "
-        "equations, algorithms, tables, or figures."
-    ),
-    "CRITIQUE_CLARITY": (
-        "Whether weaknesses and questions are concrete enough for authors to "
-        "understand the issue and how it could be addressed."
-    ),
-    "COMPLETENESS_COVERAGE": (
-        "Whether the review covers the major parts of the paper, including "
-        "methodology, theory, experiments, and related work."
-    ),
-    "CONSTRUCTIVE_TONE": (
-        "Whether the review is professional, balanced, respectful, and focused "
-        "on helping improve the work."
-    ),
-    "FALSE_CLAIMS": (
-        "Whether the review avoids inventing content, claiming an existing "
-        "experiment is missing, or contradicting the paper's methods or "
-        "reported findings. NOTE: higher score = FEWER such problems."
-    ),
-}
+# The judge's rubric and output contract live in prompts/judge/system.md,
+# which must name every dimension above; checked at import so an edit that
+# drops one fails on boot instead of silently mis-parsing verdicts. The
+# voter-facing wording lives in DIMENSION_DESCRIPTIONS (shared-types),
+# phrased as the pairwise question. Keep the two semantically aligned so
+# the human-vs-judge agreement analysis (RQ1) compares the same construct.
+_missing = [d for d in _DIMENSIONS if d not in prompts.load("judge/system")]
+if _missing:
+    raise RuntimeError(f"prompts/judge/system.md does not mention {_missing}")
 
 
 # The judge reads the COMPLETE paper and review (changed 2026-07-28;
@@ -445,42 +417,12 @@ def _build_pair_prompts(
     """System + user prompt for one pairwise pass. The caller controls
     which real review is REVIEW 1 vs REVIEW 2 (order is swapped between
     passes); the model only ever sees positional labels."""
-    system_prompt = (
-        "You are a strict meta-reviewer comparing two automated peer reviews "
-        "of the same paper. Given the paper and the two candidate reviews, "
-        "return a JSON object with this exact shape:\n"
-        "{\n"
-        '  "reasoning_per_dimension": {DIM: str (1-2 sentences comparing the two reviews) for DIM in ['
-        f'{",".join(repr(d) for d in _DIMENSIONS)}'
-        "]},\n"
-        '  "preference_per_dimension": {DIM: "1" | "2" | "TIE" for the same DIMs},\n'
-        '  "overall_preference": "1" | "2" | "TIE",\n'
-        '  "review_1_scores": {"dimension_scores": {DIM: float in [1,10]}, "overall_score": float in [1,10]},\n'
-        '  "review_2_scores": {"dimension_scores": {DIM: float in [1,10]}, "overall_score": float in [1,10]}\n'
-        "}\n\n"
-        "Dimension definitions — judge each against exactly this rubric:\n"
-        + "".join(f"- {dim}: {_DIMENSION_RUBRIC[dim]}\n" for dim in _DIMENSIONS)
-        + "\n"
-        "Methodology — follow in order:\n"
-        "1. For each dimension, write 1-2 sentences of comparative reasoning "
-        "grounded in specific parts of both reviews and the paper.\n"
-        '2. Then pick "1", "2", or "TIE" per dimension, consistent with your '
-        "reasoning. Prefer TIE only when the reviews are genuinely "
-        "indistinguishable on that dimension.\n"
-        "3. Score each review 1-10 per dimension and overall (1=very poor, "
-        "5=adequate, 8=strong, 10=exemplary; overall is holistic, NOT a "
-        "mean). For EVERY dimension a higher score means better — including "
-        "FALSE_CLAIMS, where 10 means no false or contradictory claims.\n"
-        "4. Judge content, not presentation order: the labels 1 and 2 are "
-        "arbitrary and must not influence any preference.\n"
-        "5. Do NOT reward verbosity. Length without substance should LOWER "
-        "COMPLETENESS_COVERAGE and CRITIQUE_CLARITY, and must never win a "
-        "dimension by itself."
-    )
-    user_prompt = (
-        f"=== PAPER ===\n{paper_text[:PAPER_CHAR_CAP]}\n\n"
-        f"=== REVIEW 1 ===\n{first_review[:REVIEW_CHAR_CAP]}\n\n"
-        f"=== REVIEW 2 ===\n{second_review[:REVIEW_CHAR_CAP]}\n"
+    system_prompt = prompts.load("judge/system")
+    user_prompt = prompts.render(
+        "judge/user",
+        paper=paper_text[:PAPER_CHAR_CAP],
+        review_1=first_review[:REVIEW_CHAR_CAP],
+        review_2=second_review[:REVIEW_CHAR_CAP],
     )
     return system_prompt, user_prompt
 

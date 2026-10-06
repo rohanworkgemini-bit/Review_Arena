@@ -11,7 +11,7 @@ import type { Conference } from "@reviewarena/shared-types";
 // and both panels render identically, which is the presentation-symmetry
 // control the comparison depends on.
 
-// Per-venue maxima, from services/review-gen/app/review_forms.py.
+// Per-venue maxima, from the forms in services/review-gen/app/prompts/review/.
 // Getting these wrong would misdraw the bar, so they are read off the same
 // source the prompts are built from:
 //   ICLR 2026   overall on {0,2,4,6,8,10}

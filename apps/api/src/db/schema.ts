@@ -185,7 +185,7 @@ export const papers = pgTable(
     // systems in a battle inherit it. Kept as text, not a pgEnum, so
     // adding a venue needs no migration — the allowed set is enforced by
     // ConferenceSchema in packages/shared-types. Scales defined in
-    // services/review-gen/app/review_forms.py.
+    // services/review-gen/app/prompts/review/.
     conference: text("conference").notNull().default("iclr"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

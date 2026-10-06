@@ -85,7 +85,7 @@ class GenerateRequest(BaseModel):
     paper: ParsedPaper
     config: dict = Field(default_factory=dict)
     # Venue whose review form / rating scale the review should follow
-    # (see review_forms.py). Chosen by the uploader; identical for
+    # (see prompts/review/). Chosen by the uploader; identical for
     # both systems in a battle.
     conference: str = "general"
 
