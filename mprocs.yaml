@@ -7,14 +7,11 @@
 #
 # The database is the local docker-compose Postgres — the `postgres` proc
 # below brings it up and tails its logs (requires Docker / OrbStack
-# running). `db-ui` serves a read-only browser view of every table at
-# http://localhost:4983.
+# running).
 
 procs:
   postgres:
     shell: docker compose up -d postgres && docker compose logs -f postgres
-  db-ui:
-    shell: pnpm --filter @reviewarena/api db:browser
   review-gen:
     # REVIEWARENA_ENV=development = run the billable endpoints in open mode.
     # The service now refuses to boot keyless in any other env (default-closed).

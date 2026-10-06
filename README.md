@@ -1,262 +1,204 @@
 # ReviewArena
+| [Live site](https://reviewarena.ukp.informatik.tu-darmstadt.de) | [UKP Lab](https://www.informatik.tu-darmstadt.de/ukp/) |
 
-A web platform for benchmarking automated peer review systems through human
-pairwise comparison and Bradley-Terry ranking.
+ReviewArena is an open platform for benchmarking automated peer review systems through human pairwise comparison and Bradley-Terry ranking.
 
-**Bachelor thesis project — Ubiquitous Knowledge Processing Lab (UKP),
-TU Darmstadt.**
+Chatbot Arena does this for chatbots; ReviewArena does it for paper reviews. Anyone can upload a paper, read two anonymous AI reviews of it side by side, and vote for the better one. The votes build a public leaderboard of review systems. The rating and pairing code is ported from [FastChat](https://github.com/lm-sys/FastChat), the system behind Chatbot Arena.
 
----
+ReviewArena's core features include:
+- A side-by-side review arena: upload a PDF or arXiv link, watch two anonymous reviews stream in live from two LLMs, and vote for the more useful one.
+- A public leaderboard with an overall board and eight per-dimension Bradley-Terry boards, each with bootstrapped 95% confidence intervals.
+- A pluggable set of review systems: each one is an adapter around a provider API, enabled by setting its key.
+- An LLM judge panel that scores the same pairs, so automatic and human judgments can be compared.
+- Venue-specific review forms (ICLR, ICML, NeurIPS 2026) plus a venue-neutral default.
+- A full data export of every vote, review and rating.
 
-## What it does
+## News
+- [2026/10] 🔥 The venue-neutral **General** review form is now the default, alongside ICLR, ICML and NeurIPS 2026.
+- [2026/10] The leaderboard now reports the full-data Bradley-Terry fit as the rating.
+- [2026/09] The LLM judge panel now scores arena pairs, and admins choose which judges sit on it.
+
+## Contents
+- [Install](#install)
+- [Review Systems](#review-systems)
+- [How It Works](#how-it-works)
+- [Running Locally](#running-locally)
+- [Looking at the Database](#looking-at-the-database)
+- [Deployment](#deployment)
+- [Rating Systems](#rating-systems)
+- [Getting the Data Out](#getting-the-data-out)
+- [Development](#development)
+- [Controlled Study Mode](#controlled-study-mode)
+- [Citation](#citation)
+
+## Install
+
+#### Prerequisites
+- Node 24 and pnpm
+- Python 3 (for the review-gen service)
+- Docker (for the local Postgres)
+
+#### From source
+1. Clone this repository and go to the ReviewArena folder.
+```bash
+git clone <this repo> ReviewArena
+cd ReviewArena
+```
+
+2. Install the JS and Python dependencies.
+```bash
+pnpm install
+python3 -m venv services/review-gen/.venv
+services/review-gen/.venv/bin/pip install -r services/review-gen/requirements.txt
+```
+
+## Review Systems
+
+The current lineup is six **frontier commercial LLMs**, one mid-tier model per provider, so no vendor has two entries. Every system is reached through its provider's API, so nothing in the stack needs a GPU.
+
+The same six models form the **LLM judge panel**, and admins choose which members sit on it. A judge may score a pair it wrote one side of; those verdicts are flagged, so they can be left out.
+
+| Slug                 | Backing model id      | Provider API                 | Key                 |
+|----------------------|-----------------------|------------------------------|---------------------|
+| `claude-sonnet-5`    | `claude-sonnet-5`     | Anthropic (native SDK)       | `ANTHROPIC_API_KEY` |
+| `deepseek-v4-flash`  | `deepseek-v4-flash`   | DeepSeek (OpenAI-compatible) | `DEEPSEEK_API_KEY`  |
+| `gemini-3.8-flash`   | `gemini-3.8-flash`    | Google AI Studio             | `GEMINI_API_KEY`    |
+| `glm-5.2`            | `glm-5.2`             | Z.ai (OpenAI-compatible)     | `ZAI_API_KEY`       |
+| `gpt-5.6-terra`      | `gpt-5.6-terra`       | OpenAI                       | `OPENAI_API_KEY`    |
+| `mistral-medium-3.5` | `mistral-medium-2604` | Mistral (OpenAI-compatible)  | `MISTRAL_API_KEY`   |
+
+All six stream token by token. One slug differs from its backing id on purpose: `mistral-medium-3.5` is an alias, so we pin the dated snapshot. Otherwise a silent provider upgrade could change a system's reviews while its rating is still built on the old ones.
+
+A system is enabled in the DB only if its provider key is present. A missing key means pair selection skips that system rather than failing mid-battle. Disabling a system (`enabled=false`) takes it out of the arena but keeps its past reviews, votes and ratings.
+
+#### Adding a review system
+Every adapter shares the same input budgeting ([_budget.py](services/review-gen/app/adapters/_budget.py)) and output parsing ([_review_parse.py](services/review-gen/app/adapters/_review_parse.py)), so a new system is mostly configuration:
+1. Copy the closest adapter in [services/review-gen/app/adapters/](services/review-gen/app/adapters/). Use [glm.py](services/review-gen/app/adapters/glm.py) or [deepseekv4flash.py](services/review-gen/app/adapters/deepseekv4flash.py) for an OpenAI-compatible endpoint, and [claude.py](services/review-gen/app/adapters/claude.py) or [gemini.py](services/review-gen/app/adapters/gemini.py) for a native SDK.
+2. Register it in the adapter registry ([adapters/\_\_init\_\_.py](services/review-gen/app/adapters/__init__.py)). To let it sit on the judge panel, also add its provider to `_PROVIDERS` in [judge.py](services/review-gen/app/judge.py).
+3. Add its row to [seed.ts](apps/api/scripts/seed.ts) and re-run `db:seed`.
+
+#### Review forms
+The uploader picks the review form both systems follow: **General** (the default, venue-neutral, rated on a 1–6 accept/reject scale), **ICLR 2026**, **ICML 2026** or **NeurIPS 2026**. Each venue form mirrors that venue's real reviewer form. See [review_forms.py](services/review-gen/app/review_forms.py).
+
+## How It Works
 
 1. You upload a research paper (PDF or arXiv URL).
-2. ReviewArena parses it via **Datalab's hosted Chandra API** (PDF →
-   markdown; arXiv URLs go through our self-hosted `arxiv2md` service)
-   and picks two automated reviewers from the enabled pool
-   using LMArena's weighted, Elo-aware pair-selection algorithm.
-3. The two reviews stream live into side-by-side panels (server-sent
-   events, token-by-token).
-4. You vote which review is more useful, or call it a tie. Optionally,
-   refine across eight dimensions: Core Contribution Accuracy, Results
-   Interpretation, Comparative Analysis, Evidence-Based Critique, Critique
-   Clarity, Completeness Coverage, Constructive Tone, and False or
-   Contradictory Claims. All eight are mandatory, and all are
-   polarity-aligned so the picked side is always the better one.
-5. Votes update an overall and per-dimension ranking with bootstrapped
-   95% CIs (verbatim FastChat port). The rating is **Bradley-Terry**:
-   maximum likelihood over the whole comparison log, order-independent,
-   and what LMArena publishes. Online Elo is *not* computed at runtime —
-   `src/elo/elo.ts` is kept so the offline analysis can replay the vote log
-   and compare Elo's order-dependent ranking against BT's, and because it
-   holds `outcomeOf`, the single A/B/TIE → outcome converter every board
-   goes through. The analysis itself lives outside this repo.
-6. The reveal screen shows which system produced A and B, the
-   Bradley-Terry rating of each before/after the vote on the same
-   1000-point scale, and a radar of LLM-judge dimension scores.
+2. ReviewArena parses it. PDFs go to **Datalab's hosted Chandra API** (PDF → markdown); arXiv URLs go to our self-hosted `arxiv2md` service. It then picks two reviewers from the enabled pool.
+3. The two reviews stream live into side-by-side panels over server-sent events, token by token.
+4. You vote for the more useful review, or call it a tie. You can then rate the pair on eight dimensions: Core Contribution Accuracy, Results Interpretation, Comparative Analysis, Evidence-Based Critique, Critique Clarity, Completeness Coverage, Constructive Tone, and False or Contradictory Claims. If you rate them, all eight are mandatory. Every dimension is worded so that the side you pick is always the better one.
+5. Votes update the overall and per-dimension Bradley-Terry leaderboards (see [Rating Systems](#rating-systems)).
+6. The reveal screen shows which system wrote A and which wrote B, their ratings before and after the vote on the same 1000-point scale, and the LLM judges' scores.
 
-## Live review systems
-
-The thesis benchmarks **frontier commercial LLMs only** — every system is
-reached over its provider's API, so there is no GPU hosting anywhere in
-the stack.
-
-Six systems — the controlled study's lineup, one mid-tier model per
-provider, so no vendor fields two entries. The same six models form the
-**LLM judge panel**: every study pair is judged by all six (each also
-judges pairs it wrote a side of; those verdicts are flagged and the
-analysis reports the panel with and without them). Arena pairs are judged
-by the same panel; which members sit on it is an admin setting.
-
-| Slug                 | Backing model id      | Hosting                       | Streams?  |
-|----------------------|-----------------------|-------------------------------|-----------|
-| `claude-sonnet-5`    | `claude-sonnet-5`     | Anthropic API (native SDK)    | yes (SDK) |
-| `deepseek-v4-flash`  | `deepseek-v4-flash`   | DeepSeek API (OpenAI-compat)  | yes (SDK) |
-| `gemini-3.8-flash`   | `gemini-3.8-flash`    | Google AI Studio API          | yes (SDK) |
-| `glm-5.2`            | `glm-5.2`             | Z.ai API (OpenAI-compat)      | yes (SDK) |
-| `gpt-5.6-terra`      | `gpt-5.6-terra`       | OpenAI API                    | yes (SDK) |
-| `mistral-medium-3.5` | `mistral-medium-2604` | Mistral API (OpenAI-compat)   | yes (SDK) |
-
-One slug differs from its backing id on purpose: `mistral-medium-3.5` is
-an alias, so we pin the dated snapshot to stop a silent provider upgrade
-from invalidating the comparison mid-study.
-
-Each system is enabled in the DB only if its provider key is present, so
-a missing key means that system is skipped by pair selection rather than
-failing mid-battle. Retired systems (earlier baselines and the
-out-of-scope open-weight specialists) stay in the DB with `enabled=false`
-so their historical reviews, votes and ratings remain queryable.
-
-## Architecture
-
+#### Architecture
 ```
  ┌──────────────┐       ┌──────────────┐       ┌──────────────────────┐
  │  React/Vite  │──HTTP─│   Express    │──HTTP─│      FastAPI         │
  │  (apps/web)  │       │  (apps/api)  │       │ (services/review-gen)│
  └──────────────┘       └──────┬───────┘       └──────────┬───────────┘
                                │                          │
-                        ┌──────▼───────┐         ┌────────▼──────────┐
-                        │   Postgres   │         │  Adapters         │
-                        │  (Drizzle)   │         │  (gpt5 / gpt5mini │
-                        └──────────────┘         │   gemini3pro /    │
-                                                 │   gemini25flash / │
-                                                 │   claude /        │
-                                                 │   deepseek)       │
-                                                 └────────┬──────────┘
+                        ┌──────▼───────┐       ┌──────────▼───────────┐
+                        │   Postgres   │       │ Provider adapters    │
+                        │  (Drizzle)   │       │ OpenAI · Google ·    │
+                        └──────────────┘       │ Anthropic · Mistral ·│
+                                               │ Z.ai · DeepSeek      │
+                                               └──────────┬───────────┘
                                                           │
-                            ┌───────────────┬─────────────┼──────────────┬───────────────┐
-                            │               │             │              │               │
-              ┌───────▼──────┐ ┌──────▼─────┐ ┌─────▼──────┐ ┌─────▼──────┐ ┌────▼─────┐ ┌────▼─────┐
-              │  OpenAI API  │ │ Google AI  │ │ Anthropic  │ │  Mistral   │ │  Z.ai    │ │ DeepSeek │
-              │              │ │  Studio    │ │    API     │ │    API     │ │  API     │ │   API    │
-              │ gpt-5.6-terra│ │ gemini 3.8 │ │  sonnet-5  │ │ medium-3.5 │ │ glm-5.2  │ │ v4-flash │
-              └──────────────┘ └────────────┘ └────────────┘ └────────────┘ └──────────┘ └──────────┘
-                   (all six also serve as the LLM judge panel — study papers only, 6 judges × 2 passes per pair)
-                                            (+ Datalab Chandra API for PDF → markdown)
+                        six hosted LLM APIs (also the judge panel)
+                        + Datalab Chandra API for PDF → markdown
 ```
 
-Everything heavy is a **third-party API call** — no GPUs, no model
-weights, no inference containers to operate. Local dev only needs
-Postgres (in Docker) plus the provider API keys.
+Everything heavy is a **third-party API call**: no GPUs, no model weights, no inference containers to run. Local development only needs Postgres (in Docker) and the provider API keys.
 
-## Monorepo layout
-
+#### Monorepo layout
 ```
 reviewarena/
 ├── apps/
 │   ├── web/                       # Vite + React + TS + Tailwind + shadcn/ui
-│   │   └── src/{pages,components,lib}
 │   └── api/                       # Express + TS + Drizzle (Postgres)
-│       ├── drizzle.config.ts
-│       ├── drizzle/               # SQL migrations
-│       ├── scripts/               # CLI utilities: seed.ts, drop-all.ts, inspect.ts, …
+│       ├── scripts/               # CLI utilities: seed, inspect, wipe-data, …
 │       └── src/
 │           ├── db/                # schema.ts, client.ts
-│           ├── clients/           # review-gen-client.ts, judge-client.ts
-│           ├── pipeline/          # orchestrator.ts, score-paper.ts
-│           ├── elo/               # FastChat-port Elo + Bradley-Terry + bootstrap CI (+ tests)
-│           ├── pair/              # LMArena pair selector (+ tests)
-│           ├── routes/            # papers, pair, votes, leaderboard, reveal, admin
-│           ├── plugins/           # session cookie, admin bearer auth
+│           ├── clients/           # review-gen and judge clients
+│           ├── pipeline/          # orchestrator, paper scoring
+│           ├── rating/            # FastChat-port Bradley-Terry + bootstrap CI (+ tests)
+│           ├── pair/              # pair selection (+ tests)
+│           ├── study/             # optional controlled-study mode
+│           ├── routes/            # papers, pair, votes, leaderboard, reveal, study, admin
 │           └── server.ts
 ├── services/
-│   ├── review-gen/                # FastAPI; /parse, /generate, /stream-generate, /judge
-│   │   └── app/adapters/{gpt5,gpt5mini,gemini3pro,gemini25flash,claude,deepseek}.py
-│   └── cloudrun/arxiv2md/         # self-hosted arXiv → markdown, on Google Cloud Run
-# PDF parsing: review-gen/app/parsing/chandra.py → Datalab's hosted Chandra API
-├── packages/
-│   └── shared-types/              # Zod schemas + TS types
-├── deploy/                        # Caddyfile, backup.sh, one-off migration SQL
+│   ├── review-gen/                # FastAPI: /parse, /parse-arxiv, /generate, /stream-generate, /judge-pair
+│   └── cloudrun/arxiv2md/         # self-hosted arXiv → markdown
+├── packages/shared-types/         # Zod schemas + TS types
+├── deploy/                        # Caddyfile, backup.sh, smoke test, one-off SQL
 ├── docker-compose.yml             # Postgres only
-├── mprocs.yaml                    # local dev runner
-├── pnpm-workspace.yaml
-└── package.json
+└── mprocs.yaml                    # local dev runner
 ```
 
-## Tech stack — key choices
+#### Tech stack
+| Layer          | Choice                                   | Why |
+|----------------|------------------------------------------|-----|
+| Frontend       | React + Vite + TS, Tailwind, shadcn/ui, TanStack Query | No Redux. |
+| Backend        | **Express 4** (originally Fastify)       | Fastify silently dropped Set-Cookie headers set in `onRequest` hooks. |
+| ORM            | **Drizzle** (originally Prisma)          | Types inferred from the schema file, no codegen step. |
+| Streaming      | Server-sent events, browser → API → Python → provider SDK | One streaming path for every provider. The voter sees tokens instead of a spinner during multi-minute reasoning runs. |
+| Review-gen     | Python FastAPI microservice              | The provider SDKs and Pydantic are Python-native. |
+| PDF parsing    | **Datalab Chandra API** (was GROBID)     | Keeps LaTeX equations and rebuilds markdown tables. GROBID's TEI XML lost both. Hosted, so there is nothing to run. |
+| Tests          | Vitest                                   | Rating math and pair selection have the deepest coverage. |
 
-| Layer            | Choice                                     | Why                                                                                                                       |
-|------------------|--------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| Frontend         | React + Vite + TS, Tailwind, shadcn/ui     | As specified.                                                                                                             |
-| Data fetching    | TanStack Query                             | As specified. No Redux.                                                                                                   |
-| Backend          | **Express 4** (originally Fastify)         | Fastify silently swallowed Set-Cookie headers from `onRequest` hooks; Express + cookie-parser + multer + Zod was simpler. |
-| ORM              | **Drizzle** (originally Prisma)            | TS inference from the schema file, no codegen step.                                                                       |
-| Streaming        | Server-Sent Events (browser → API → Python → provider SDK) | One streaming path for every provider; the voter sees tokens instead of a spinner on multi-minute reasoning runs.          |
-| Review-gen       | Python FastAPI microservice                | Adapter SDKs (OpenAI, Gemini, Anthropic, DeepSeek) + Pydantic schemas all Python-native.                                  |
-| PDF parsing      | **Datalab Chandra API** (was GROBID)       | Chandra preserves LaTeX equations + reconstructs markdown tables; GROBID's TEI XML lost both. Hosted, so nothing to run.  |
-| Review systems   | **Frontier commercial APIs only**          | Open-weight specialists needed self-hosted GPUs — out of scope. Every system is now one HTTP call to its provider.        |
-| Tests            | Vitest                                     | Same runner both sides. Rating math (Elo + BT, incl. parity against FastChat's own solver) and pair selection have the deepest coverage. |
-| Package manager  | pnpm workspaces                            | Strict by default; surfaces missing deps early.                                                                           |
+## Running Locally
 
-## Quickstart
-
+#### 1. Start Postgres
 ```bash
-# 1. JS deps + Python deps
-pnpm install
-python3 -m venv services/review-gen/.venv
-services/review-gen/.venv/bin/pip install -r services/review-gen/requirements.txt
-
-# 2. Local Postgres — the only supported database target
 docker compose up -d postgres
-
-# 3. Environment + schema
-cp .env.example .env
-# DATABASE_URL already points at the container started above. Fill in
-# ADMIN_TOKEN, PAIR_TOKEN_SECRET, WEB_ORIGIN, REVIEW_GEN_API_KEY —
-# generate the local secrets with `openssl rand -hex 32`.
-
-pnpm --filter @reviewarena/api db:push     # apply Drizzle schema
-pnpm --filter @reviewarena/api db:seed     # insert review systems
-
-# 4. Provider keys — nothing to deploy, all six systems are hosted APIs.
-#    Each key enables one system AND its seat on the judge panel.
-#   ANTHROPIC_API_KEY → claude-sonnet-5
-#   DEEPSEEK_API_KEY  → deepseek-v4-flash
-#   GEMINI_API_KEY    → gemini-3.8-flash
-#   ZAI_API_KEY       → glm-5.2
-#   OPENAI_API_KEY    → gpt-5.6-terra
-#   MISTRAL_API_KEY   → mistral-medium-3.5
-#   CHANDRA_API_KEY   → PDF parsing, from https://www.datalab.to
-
-# 5. Run everything
-pnpm dev     # postgres + review-gen :8001 + api :8000 + web :5173 + db UI :4983
 ```
 
-Then open <http://localhost:5173>. The database itself is browsable at
-<http://localhost:4983> (read-only table viewer, see **Looking at the
-database** below).
+#### 2. Configure the environment and apply the schema
+```bash
+cp .env.example .env
+pnpm --filter @reviewarena/api db:push     # apply the Drizzle schema
+pnpm --filter @reviewarena/api db:seed     # insert the review systems
+```
+`DATABASE_URL` already points at the container. Generate the local secrets with `openssl rand -hex 32`.
 
-`db:seed` only enables a system when its provider key is present, so a
-partially-filled `.env` gives you a smaller lineup rather than failed
-reviews — and a smaller judge panel, since the panel is the enabled
-lineup. The judge has no mock fallback: a study pair whose judges all
-fail is marked `FAILED`; one where some fail is `PARTIAL` and re-runs
-only the missing judges on `tsx scripts/rescore-missing.ts`.
-
-### Environment variables
-
-See [.env.example](.env.example). Required at minimum:
-
-- `DATABASE_URL` — Postgres connection (the local Docker instance)
-- `ADMIN_TOKEN` — bearer for `/admin/*` (32+ char random)
-- `PAIR_TOKEN_SECRET` — HMAC key for pair tokens (32+ char random, **separate** from ADMIN_TOKEN)
-- `WEB_ORIGIN` — CORS whitelist, comma-separated
-- `REVIEW_GEN_API_KEY` — shared key the Node API sends to the Python
-  service as `X-API-Key`; required in production so no one else can
-  spend your LLM budget via `/generate`
+Required variables (see [.env.example](.env.example)):
+- `DATABASE_URL`: Postgres connection string (the local Docker instance)
+- `ADMIN_TOKEN`: bearer token for `/admin/*` (32+ random chars)
+- `PAIR_TOKEN_SECRET`: HMAC key for pair tokens (32+ random chars, **separate** from `ADMIN_TOKEN`)
+- `WEB_ORIGIN`: CORS allowlist, comma-separated
+- `REVIEW_GEN_API_KEY`: shared key the Node API sends to the Python service as `X-API-Key`. Required in production, so nobody else can spend your LLM budget through `/generate`.
+- The six provider keys from the [Review Systems](#review-systems) table, plus `CHANDRA_API_KEY` for PDF parsing (from [datalab.to](https://www.datalab.to)). Each provider key enables one system **and** its seat on the judge panel.
 
 Optional:
+- `RATING_BASELINE_SLUG`: the system pinned at 1000 on the Bradley-Terry board (default `claude-sonnet-5`). Changing it renumbers every rating, so pick a high-volume system and leave it alone. Retiring that system is fine, since disabled systems keep their battle history.
 
-- `RATING_BASELINE_SLUG` — system pinned at 1000 on the Bradley-Terry
-  board (default `claude-sonnet-5`). BT ratings are only defined up to an additive
-  constant, so one system fixes the origin. Change it and every BT rating
-  renumbers, so pick a high-volume system and leave it: retiring the
-  system is fine, since disabled systems keep their battle history.
+`db:seed` only enables a system when its provider key is present. A partly filled `.env` gives you a smaller lineup and a smaller judge panel rather than failed reviews. The judge has no mock fallback: a pair whose judges all fail is marked `FAILED`. If only some fail, the pair is `PARTIAL`, and `tsx scripts/rescore-missing.ts` re-runs just the missing judges.
 
-For the review systems (and the judge panel) you also need
-`ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `ZAI_API_KEY`,
-`OPENAI_API_KEY`, `MISTRAL_API_KEY`, and `CHANDRA_API_KEY` for PDF
-parsing.
-
-## Looking at the database
-
-The database is the `postgres` service in [docker-compose.yml](docker-compose.yml)
-— one local instance, nothing managed. Three ways to read it:
-
+#### 3. Launch everything
 ```bash
-# 1. Browser UI — read-only table viewer, started automatically by `pnpm dev`
-pnpm --filter @reviewarena/api db:browser      # → http://localhost:4983
+pnpm dev     # postgres + review-gen :8001 + api :8000 + web :5173
+```
+This runs every process in its own [mprocs](mprocs.yaml) pane. Then open <http://localhost:5173>.
 
-# 2. psql inside the container (no local psql needed)
+## Looking at the Database
+
+The database is the `postgres` service in [docker-compose.yml](docker-compose.yml): one local instance, nothing managed. Read it with psql inside the container (no local psql needed):
+```bash
 docker exec -it reviewarena-postgres psql -U reviewarena -d reviewarena
 ```
 
-The browser UI ([scripts/db-browser.ts](apps/api/scripts/db-browser.ts)) is
-deliberately minimal: `node:http` + the `pg` pool, no extra dependencies.
-Every query is a `SELECT`, table names are whitelisted from `pg_tables`
-rather than taken from the URL, and it binds `127.0.0.1` only. Drizzle
-Studio (`db:studio`) does not work on Node 24 with the pinned
-`drizzle-kit@0.30.x` — it patches undici internals that no longer exist,
-and fails with a misleading `ETIMEDOUT`.
+Drizzle Studio (`db:studio`) does not work on Node 24 with the pinned `drizzle-kit@0.30.x`. It patches undici internals that no longer exist and fails with a misleading `ETIMEDOUT`.
 
-Useful one-shots: `db:inspect` (latest paper + its review statuses),
-`db:wipe-data` (truncate study data, keep the reviewer registry),
-`db:retire-system <slug> --yes` (hard-delete one system and everything
-referencing it — for pre-study lineup swaps only; the normal path is
-`enabled=false`), `db:nuke` (drop everything).
+Useful one-shots:
+- `db:inspect`: the latest paper and its review statuses
+- `db:wipe-data`: delete papers, reviews and votes, keep the review systems
+- `db:retire-system <slug> --yes`: hard-delete one system and everything that references it, including its votes. To retire a system normally, set `enabled=false` instead.
+- `db:nuke`: drop everything
 
 ## Deployment
 
-**There is no deploy automation in this repo.** The Vercel and Google
-Cloud workflows were removed pending the move to a self-hosted VM; the
-only workflow left is [ci.yml](.github/workflows/ci.yml), which
-type-checks and tests but never deploys. Pushing to `main` no longer
-changes any running environment — and no longer runs migrations against
-a live database.
+**There is no deploy automation in this repo.** The only workflow is [ci.yml](.github/workflows/ci.yml), which type-checks and tests but never deploys. Pushing to `main` does not change any running environment or run migrations against a live database.
 
-Nothing needs a GPU: PDF parsing and every review system are third-party
-APIs, so the three services are small, stateless, CPU-only processes.
-
+Nothing needs a GPU. PDF parsing and every review system are third-party APIs, so the three services are small, stateless, CPU-only processes.
 ```bash
 pnpm install --frozen-lockfile
 pnpm --filter @reviewarena/shared-types build
@@ -273,146 +215,73 @@ pnpm --filter @reviewarena/api db:seed
 #   review-gen: uvicorn app.main:app --host 0.0.0.0 --port 8001 --workers 2
 #   web:        any static host serving apps/web/dist/  (Vite SPA)
 ```
+`apps/api/Dockerfile` and `services/review-gen/Dockerfile` build plain containers with no platform-specific glue. A reverse proxy (see [Caddyfile](deploy/Caddyfile)) terminates TLS, serves the SPA, and routes `/api/*` to the API process.
 
-`apps/api/Dockerfile` and `services/review-gen/Dockerfile` are kept —
-they build plain containers with no platform-specific glue, so they carry
-over to the VM. A reverse proxy (Caddy / Nginx) terminates TLS, serves
-the SPA, and routes `/api/*` to the API process.
+#### Still tied to Google Cloud
+arXiv parsing calls a self-hosted `arxiv2md` instance. Its default URL is hard-coded in [arxiv2md.py](services/review-gen/app/parsing/arxiv2md.py) and still points at Cloud Run. The source, with a Dockerfile, is in `services/cloudrun/arxiv2md/`. Run that container on the VM and set `ARXIV2MD_BASE` to its address, or arXiv uploads will break once the Cloud Run service is torn down. PDF uploads are unaffected.
 
-### Still tied to Google Cloud
+#### Operating checklist
+There is **no model warm-up step**: every review system is a hosted API. Keep the API's request timeout generous (300 s) and review-gen's more generous still (600 s), because a reasoning model streaming a long review can run for minutes. Before expecting traffic, check that:
+- each provider key in `.env` is live and has budget left;
+- `db:seed` has been re-run, so the systems you expect are `enabled` (a missing key silently disables its system);
+- provider rate limits cover the expected concurrency. Size the review-gen worker count against the rate limits, not the CPU.
 
-One runtime dependency survives the cleanup: arXiv parsing calls a
-self-hosted `arxiv2md` instance whose default URL is hard-coded in
-[arxiv2md.py](services/review-gen/app/parsing/arxiv2md.py) and still
-points at Cloud Run. Its source is in `services/cloudrun/arxiv2md/` (with
-a Dockerfile). Run that container on the VM and set `ARXIV2MD_BASE` to
-the new address, or arXiv uploads break once the Cloud Run service is
-torn down. PDF uploads are unaffected — they go to Datalab's hosted API.
+**Backup**: a nightly `pg_dump`. PDFs are never stored, only the parsed structure (jsonb) and the review outputs.
 
-### Before a study window
+## Rating Systems
 
-There is **no model warm-up step** — every review system is a hosted
-provider API, so there are no weights to load and no multi-minute cold
-start to pre-empt. Keep the API's request timeout generous (300 s) and
-review-gen's more generous still (600 s): a reasoning model streaming a
-long review can run for minutes.
+The rating is **Bradley-Terry**: a maximum-likelihood fit over the whole comparison log, independent of vote order, and what LMArena publishes. It is ported from [FastChat](https://github.com/lm-sys/FastChat) (Apache 2.0), `fastchat/serve/monitor/rating_systems.py`: `preprocess_for_bt` / `fit_bt` / `scale_and_offset` / `compute_bt` / `compute_bootstrap_bt`, in [apps/api/src/rating/bt.ts](apps/api/src/rating/bt.ts). Constants are FastChat's defaults (BASE=10, SCALE=400, INIT=1000). Style control is left out because it needs per-response length and markdown features we don't collect.
 
-What is worth checking before a session:
+LMArena's weighted `get_battle_pair` sampler is *not* used. With a lineup this small there is nothing for it to skip, so [select-pair.ts](apps/api/src/pair/select-pair.ts) draws uniformly over eligible pairs and keeps only LMArena's eligibility rules.
 
-- each provider key in `.env` is live and in budget;
-- `pnpm --filter @reviewarena/api db:seed` has been re-run, so the
-  systems you expect are `enabled` (a missing key silently disables its
-  system);
-- provider rate limits are high enough for the expected concurrency —
-  size the review-gen worker count against them, not against CPU.
+The BT port has two documented deviations. Neither moves the estimate wherever FastChat's own estimate is well defined:
+1. **An MM (Zermelo/Hunter/Newman) fixed point instead of scipy's L-BFGS-B**, since Node has no L-BFGS. It maximizes the same likelihood, so it reaches the same estimate. Tests are in [bt.test.ts](apps/api/src/rating/__tests__/bt.test.ts).
+2. **A connectivity guard.** The BT estimate is finite only if the win graph is strongly connected (Ford 1957). An unbeaten or winless system diverges, and FastChat reports wherever `maxiter=100` stopped. We fit the largest strongly connected component and report the rest as unranked. This keeps BT usable while the vote count is still small, and on the eight sparse per-dimension boards, where such gaps are the norm.
 
-**Backup**: nightly `pg_dump`. PDFs are never persisted — only the
-parsed structure (jsonb) and review outputs are stored.
+BT ratings are only defined up to an additive constant, so `RATING_BASELINE_SLUG` is pinned at 1000. This keeps snapshots comparable as systems are added and retired; FastChat pins `mixtral-8x7b-instruct-v0.1` at 1114 for the same reason. Boards on which the baseline has not battled are mean-centred instead, recorded per snapshot row as `anchor`.
 
-## Algorithmic credits
+## Getting the Data Out
 
-Both rating systems are ported from
-[LMSYS FastChat](https://github.com/lm-sys/FastChat) (Apache 2.0),
-`fastchat/serve/monitor/rating_systems.py`. Constants are FastChat's
-defaults (K=4, BASE=10, SCALE=400, INIT=1000). LMArena's
-`get_battle_pair` weighted sampler is *not* used: with six systems and a
-120-comparison budget there is nothing for it to skip, so
-[apps/api/src/pair/select-pair.ts](apps/api/src/pair/select-pair.ts) draws
-uniformly over eligible pairs and keeps only its eligibility rules.
-
-- **Elo** — `compute_elo` / `compute_bootstrap_elo`, in
-  [apps/api/src/elo/elo.ts](apps/api/src/elo/elo.ts). Order-dependent, and
-  no longer computed at runtime: kept so the thesis analysis can replay the
-  vote log and compare its ranking against Bradley-Terry's.
-- **Bradley-Terry** — `preprocess_for_bt` / `fit_bt` / `scale_and_offset`
-  / `compute_bt` / `compute_bootstrap_bt`, in
-  [apps/api/src/elo/bt.ts](apps/api/src/elo/bt.ts). This is the default
-  board, matching LMArena's current public leaderboard (minus style
-  control, which needs per-response length and markdown features we do
-  not collect).
-
-Two documented deviations in the BT port, neither of which moves the
-estimate where FastChat's own estimate is well-defined:
-
-1. **MM (Zermelo/Hunter/Newman) fixed point instead of scipy L-BFGS-B**,
-   since Node has no L-BFGS. Same likelihood, same MLE. Checked against a
-   fixture generated from FastChat's own `compute_bt`
-   ([bt-parity.test.ts](apps/api/src/elo/__tests__/bt-parity.test.ts)):
-   our fit reaches `|grad|inf = 1.5e-08` where FastChat's L-BFGS stops at
-   `3.4e-03`, so the ~5e-4-point gap between the two is *their*
-   `gtol=1e-6`, not our error.
-2. **A connectivity guard.** The BT MLE is finite only if the win-graph is
-   strongly connected (Ford 1957) — an unbeaten or winless system diverges,
-   and FastChat reports whatever `maxiter=100` reached. We fit the largest
-   strongly-connected component and report the rest as unranked. This is
-   what makes BT usable at thesis scale (~250 votes) and on the eight
-   sparse per-dimension boards, where separation is the norm rather than
-   the exception.
-
-BT ratings are identified only up to an additive constant, so
-`RATING_BASELINE_SLUG` (default `claude-sonnet-5`) is pinned at 1000 to keep
-snapshots comparable as systems are added and retired — FastChat pins
-`mixtral-8x7b-instruct-v0.1` at 1114 for the same reason. Boards where the
-baseline has not battled are mean-centred instead, recorded per snapshot row
-as `anchor`.
-
-## Status
-
-- [x] **Checkpoint 1** — Monorepo, manifests, docker-compose, README
-- [x] **Checkpoint 2** — Schema (Paper, ReviewSystem, Review, Vote,
-       DimensionVote, EloSnapshot, MetricScore)
-- [x] **Checkpoint 3** — Express routes + Elo module + Vitest cases
-- [x] **Checkpoint 4** — Four frontend screens (Leaderboard, Upload,
-       Comparison, Reveal)
-- [x] **Checkpoint 5** — FastAPI review-gen + the live frontier adapters
-- [x] **Checkpoint 6** — Upload → parse → pair-select → generate →
-       vote → Elo → snapshot → reveal, with SSE streaming end-to-end
-- [x] **Checkpoint 7** — LLM-as-judge scoring (sole automatic metric;
-       BLEU/ROUGE later removed), BERTopic / word-frequency analytics
-- [x] **Checkpoint 8** — Admin CRUD + CSV/JSON export, Cloud Run / Vercel
-       deploys, admin JSON/CSV export
-
-## Testing
-
-```bash
-pnpm --filter @reviewarena/api test         # Elo math, pair selection, HMAC
-pnpm --filter @reviewarena/api typecheck
-pnpm --filter @reviewarena/web typecheck
-```
-
-## Decisions log
-
-- **8 dimensions, not 5.** Spec listed 5; thesis mockup canonical at 8.
-- **Prisma → Drizzle.** TS inference from schema beats codegen.
-- **Express, not Fastify.** Set-Cookie dropped from `onRequest` hooks.
-- **Chandra (Datalab), not GROBID.** Chandra preserves equations +
-  tables; GROBID's TEI XML lost both, on top of being a 6 GB Docker
-  image. Hosted, so there is nothing to operate.
-- **Pre-select 2, then generate** (was fan-out to all enabled systems) —
-  2 reviews per arena paper instead of one per enabled system, so the cost
-  of a paper no longer grows with the pool (2 of 6 today).
-- **SSE end-to-end streaming** — keeps the connection alive across
-  multi-minute reasoning runs instead of one long blocking request.
-- **Frontier commercial systems only.** The open-weight specialists
-  (DeepReviewer, OpenReviewer, CycleReviewer, SEA) needed self-hosted
-  GPUs; their adapters and serving code were removed and their DB rows
-  disabled rather than deleted, so past votes stay analysable.
-- **Anonymous httpOnly session cookie.** No IP, fingerprint, or email.
-- **`PAIR_TOKEN_SECRET` separate from `ADMIN_TOKEN`.** Leaking admin
-  must not let an attacker forge pair tokens.
-- **K = 4 (FastChat default).** Full-history replay; smaller K stops
-  the most recent vote from dominating the rating.
-
-## Getting the data out
-
-This repo is the running system; the analysis of what it collects lives
-outside it. Everything the analysis needs comes through the admin export:
-
+All collected data can be downloaded through the admin export:
 ```bash
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   https://<host>/api/admin/export.json > export.json
 ```
+The same route serves CSV. `votes` and `dimension_votes` are the primary record. Every rating in `ratings` is a pure function of them and can be refitted from the export alone.
 
-The same route serves CSV. `votes` + `dimension_votes` are the primary
-record — every rating in `ratings` is a pure function of them and can be
-refitted from the export alone.
+## Development
+
+#### Testing
+```bash
+pnpm --filter @reviewarena/api test         # rating math, pair selection, HMAC
+pnpm --filter @reviewarena/api typecheck
+pnpm --filter @reviewarena/web typecheck
+```
+
+#### Decisions log
+- **8 rating dimensions, not 5**, so votes can separate factual accuracy from tone and coverage.
+- **Prisma → Drizzle.** Types inferred from the schema beat codegen.
+- **Express, not Fastify.** Fastify dropped Set-Cookie headers set in `onRequest` hooks.
+- **Chandra (Datalab), not GROBID.** Chandra keeps equations and tables; GROBID's TEI XML lost both, and it was a 6 GB Docker image. Chandra is hosted, so there is nothing to run.
+- **Pre-select 2, then generate** (it used to fan out to every enabled system). An arena paper now gets 2 reviews instead of one per enabled system, so its cost no longer grows with the pool.
+- **Server-sent events end to end.** They keep the connection alive through multi-minute reasoning runs instead of one long blocking request.
+- **Frontier commercial systems only.** The open-weight specialists (DeepReviewer, OpenReviewer, CycleReviewer, SEA) needed self-hosted GPUs. Their adapters and serving code were removed, so every system is now one HTTP call to its provider.
+- **Anonymous httpOnly session cookie.** No IP, fingerprint or email.
+- **`PAIR_TOKEN_SECRET` separate from `ADMIN_TOKEN`.** A leaked admin token must not let an attacker forge pair tokens.
+
+## Controlled Study Mode
+
+Besides the open arena, ReviewArena has an optional study mode for controlled experiments. In study mode, registered participants get fixed pairs in a balanced rotation, and every pair is judged by the full LLM panel. The code is in [apps/api/src/study/](apps/api/src/study/). The open arena doesn't need any of it.
+
+## Citation
+
+ReviewArena was built as a bachelor thesis project at the Ubiquitous Knowledge Processing Lab (UKP), TU Darmstadt. Please cite it if you find the repository helpful.
+```bibtex
+@thesis{gupta2026reviewarena,
+      title={ReviewArena: Benchmarking Automated Peer Review Systems through Human Pairwise Comparison},
+      author={Rohan Gupta},
+      year={2026},
+      type={Bachelor's thesis},
+      school={Technische Universit{\"a}t Darmstadt, Ubiquitous Knowledge Processing Lab}
+}
+```

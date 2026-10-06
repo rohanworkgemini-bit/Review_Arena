@@ -488,7 +488,6 @@ select judge_status, count(*) from reviews group by 1;         -- COMPLETE`}</Pr
             rows={[
               [<K>db:push</K>, "Apply schema.ts to the database. No migration files — it diffs."],
               [<K>db:seed</K>, "Insert or update the six review systems. Safe to re-run."],
-              [<K>db:browser</K>, "Read-only table viewer on :4983."],
               [<K>db:inspect</K>, "Row counts and health summary."],
               [<K>db:wipe-data</K>, "Delete papers, reviews and votes. Keeps systems and participants."],
               [<K>db:retire-system</K>, "Hard-delete one system and everything referencing it. Pre-study only."],

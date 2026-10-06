@@ -33,11 +33,6 @@ const AdminPage = lazy(() =>
 const ConsentPage = lazy(() =>
   import("@/pages/ConsentPage").then((m) => ({ default: m.ConsentPage })),
 );
-const InstructionsPage = lazy(() =>
-  import("@/pages/InstructionsPage").then((m) => ({
-    default: m.InstructionsPage,
-  })),
-);
 // Standalone (default export) — the study flow ships its own chrome and
 // deliberately hides the app shell: participants must not see the
 // leaderboard while judging.
@@ -157,14 +152,6 @@ export function App() {
                 element={
                   <AppShell>
                     <AdminPage />
-                  </AppShell>
-                }
-              />
-              <Route
-                path="/instructions"
-                element={
-                  <AppShell>
-                    <InstructionsPage />
                   </AppShell>
                 }
               />

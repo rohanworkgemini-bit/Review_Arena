@@ -15,7 +15,6 @@ const COOKIE_NAME = "ra_sid";
 const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       sessionId: string;

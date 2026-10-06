@@ -435,17 +435,6 @@ function HowItWorks() {
               </div>
             </div>
           ))}
-          <p className="border-t border-rule pt-[22px] text-[15px] text-graphite">
-            The full rubric — what each of the eight dimensions asks, and how
-            to read a pair — is on the{" "}
-            <Link
-              to="/instructions"
-              className="border-b border-red pb-0.5 text-red transition-colors hover:text-ink"
-            >
-              instructions page
-            </Link>
-            .
-          </p>
         </div>
       </div>
     </section>

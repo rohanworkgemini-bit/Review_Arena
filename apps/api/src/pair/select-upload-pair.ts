@@ -1,5 +1,5 @@
 /**
- * Upload-time pair selection — 
+ * Upload-time pair selection.
  *
  * Picks 2 systems from review_systems BEFORE generation starts, so we
  * only spend GPU/API budget on the pair the user will actually see.

@@ -117,7 +117,7 @@ export function ComparisonPage() {
   // "too fast to be real" is a quality flag in the analysis.
   const startedAt = useMemo(
     () => draft?.startedAt ?? Date.now(),
-    [paperId, draft], // eslint-disable-line react-hooks/exhaustive-deps
+    [paperId, draft],
   );
 
   // Record of the vote already cast for this paper in this tab, if any.

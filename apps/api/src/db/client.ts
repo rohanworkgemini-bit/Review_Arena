@@ -25,7 +25,7 @@ function build() {
   // pool was exhausted well before 20 concurrent participants, and an
   // exhausted pool does not queue politely — connectionTimeoutMillis
   // makes the request throw after 5s. 50 leaves Postgres's default 100
-  // half free for psql, db:browser and the tunnel.
+  // half free for psql, the scripts and the tunnel.
   const poolMax = Number(process.env.DB_POOL_MAX ?? 50);
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -38,7 +38,6 @@ function build() {
   // uncaught exception and kills the process — turning a database hiccup
   // into a full API outage.
   pool.on("error", (err) => {
-    // eslint-disable-next-line no-console
     console.error("[db] idle pool client error (recovering):", err.message);
   });
   _pool = pool;

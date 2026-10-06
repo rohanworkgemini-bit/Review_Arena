@@ -3,7 +3,6 @@ import {
   Trophy,
   Vote,
   Shield,
-  BookOpen,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -33,7 +32,6 @@ const navItems: NavItem[] = [
   { to: "/upload", label: "Vote", icon: Vote },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { to: "/admin", label: "Admin", icon: Shield },
-  { to: "/instructions", label: "Instructions", icon: BookOpen },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {

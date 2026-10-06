@@ -21,9 +21,6 @@ export function Footer() {
           <Link to="/consent" className="transition-colors hover:text-ink">
             Data processing
           </Link>
-          <Link to="/instructions" className="transition-colors hover:text-ink">
-            How it works
-          </Link>
         </div>
       </div>
       {/* Anonymous session id — shown so participants can quote it in a
