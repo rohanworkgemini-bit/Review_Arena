@@ -11,7 +11,7 @@ ReviewArena's core features include:
 - A pluggable set of review systems: each one is an adapter around a provider API, enabled by setting its key.
 - An LLM judge panel that scores the same pairs, so automatic and human judgments can be compared.
 - Venue-specific review forms (ICLR, ICML, NeurIPS 2026) plus a venue-neutral default.
-- A full data export of every vote, review and rating.
+
 
 ## News
 - [2026/10] 🔥 The venue-neutral **General** review form is now the default, alongside ICLR, ICML and NeurIPS 2026.
