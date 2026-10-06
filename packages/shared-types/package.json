@@ -16,6 +16,7 @@
   ],
   "scripts": {
     "build": "tsc -b",
+    "prepare": "tsc -b",
     "dev": "tsc -b --watch",
     "typecheck": "tsc --noEmit"
   },

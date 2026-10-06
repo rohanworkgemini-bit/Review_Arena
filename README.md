@@ -3,7 +3,7 @@
 
 ReviewArena is an open platform for benchmarking automated peer review systems through human pairwise comparison and Bradley-Terry ranking.
 
-Chatbot Arena does this for chatbots; ReviewArena does it for paper reviews. Anyone can upload a paper, read two anonymous AI reviews of it side by side, and vote for the better one. The votes build a public leaderboard of review systems. The rating and pairing code is inspired from [FastChat](https://github.com/lm-sys/FastChat).
+ReviewArena does it for paper reviews. Anyone can upload a paper, read two anonymous AI reviews of it side by side, and vote for the better one. The votes build a public leaderboard of review systems. The rating code is inspired from [FastChat](https://github.com/lm-sys/FastChat).
 
 ReviewArena's core features include:
 - A side-by-side review arena: upload a PDF or arXiv link, watch two anonymous reviews stream in live from two LLMs, and vote for the more useful one.
@@ -11,7 +11,7 @@ ReviewArena's core features include:
 - A pluggable set of review systems: each one is an adapter around a provider API, enabled by setting its key.
 - An LLM judge panel that scores the same pairs, so automatic and human judgments can be compared.
 - Venue-specific review forms (ICLR, ICML, NeurIPS 2026) plus a venue-neutral default.
-
+- A full data export of every vote, review and rating.
 
 ## News
 - [2026/10] 🔥 The venue-neutral **General** review form is now the default, alongside ICLR, ICML and NeurIPS 2026.
