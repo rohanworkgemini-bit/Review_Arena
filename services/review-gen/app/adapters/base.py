@@ -74,6 +74,30 @@ def friendly_error(exc: Exception) -> str:
     return text
 
 
+class TruncatedOutputError(RuntimeError):
+    """The model stopped because it hit its output-token limit. The text
+    so far is a cut-off review, and storing it as COMPLETED would put a
+    half-written review in front of voters and the judge."""
+
+
+# Stop/finish reasons that mean "ran out of output tokens", across SDKs:
+# Anthropic stop_reason "max_tokens", OpenAI-compatible finish_reason
+# "length", Gemini FinishReason.MAX_TOKENS (an enum; matched by .name).
+_TRUNCATION_REASONS = {"max_tokens", "length"}
+
+
+def raise_if_truncated(reason: object) -> None:
+    """Raise TruncatedOutputError if `reason` is an output-limit stop."""
+    if reason is None:
+        return
+    name = str(getattr(reason, "name", reason)).lower()
+    if name in _TRUNCATION_REASONS:
+        raise TruncatedOutputError(
+            f"The model hit its output-token limit (stop reason: {name}) "
+            "before finishing the review, so the review is incomplete."
+        )
+
+
 @dataclass
 class GenerationMetrics:
     """Fairness accounting for one generation (docs/FAIRNESS.md A4).

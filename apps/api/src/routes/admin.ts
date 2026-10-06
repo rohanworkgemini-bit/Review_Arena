@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
 import { normalizeArxivId } from "./papers-helpers.js";
 import {
   CreateReviewSystemRequestSchema,
@@ -11,9 +11,9 @@ import { db } from "../db/client.js";
 import { papers, participants, reviews, reviewSystems, votes } from "../db/schema.js";
 import { requireAdmin } from "../plugins/admin-auth.js";
 import type { JudgeClient } from "../clients/judge-client.js";
-import { scorePaper } from "../pipeline/score-paper.js";
+import { renderPaperText, scorePaper } from "../pipeline/score-paper.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
-import type { Orchestrator } from "../pipeline/orchestrator.js";
+import { generateIntoReview, type Orchestrator } from "../pipeline/orchestrator.js";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { logger } from "../logger.js";
 import type { Config } from "../config.js";
@@ -73,7 +73,7 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
     // Whether the open arena accepts new papers. Off for the study window.
     arenaEnabled: z.boolean().optional(),
   });
-  const { judge, orchestrator: orch, reviewGen } = deps;
+  const { judge, reviewGen } = deps;
 
   // All admin routes require the bearer token.
   router.use("/admin", guard);
@@ -356,9 +356,9 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
 
   // ─── Regenerate stuck reviews ──────────────────────────────────────
 
-  // Deletes any non-COMPLETED reviews for the paper and re-runs the
-  // generation pipeline. Recovers from API restarts that orphaned
-  // GENERATING rows mid-flight.
+  // Re-runs generation, in place, for every non-COMPLETED review of the
+  // paper. Recovers from API restarts that orphaned GENERATING rows
+  // mid-flight, and from FAILED generations.
   router.post("/admin/papers/:id/regenerate", async (req, res, next) => {
     try {
       const paper = await db.query.papers.findFirst({
@@ -375,20 +375,45 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         });
         return;
       }
-      // Drop everything except COMPLETED so we don't re-run successful
-      // generations and incur the cost.
-      const deleted = await db
-        .delete(reviews)
-        .where(and(eq(reviews.paperId, paper.id), ne(reviews.status, "COMPLETED")))
-        .returning({ id: reviews.id });
-      // Fire-and-forget so the response returns immediately.
-      void orch
-        .generateAllReviews(paper, paper.parsedStructure as unknown as ParsedPaper)
-        .catch((err) => req.log?.error?.({ err }, "regenerate crashed"));
+      // Re-run every non-COMPLETED review IN PLACE — same rows, same ids,
+      // same systems. Deleting and regenerating via generateAllReviews would
+      // insert a fresh row for every enabled system (an arena paper would
+      // end up with far more than its pair, which the judge never scores),
+      // cascade away a study paper's study_comparisons, and hit the votes FK
+      // if a vote references the row. Mirrors POST /study/retry, but also
+      // picks up PENDING and orphaned GENERATING rows (API restart mid-run).
+      // COMPLETED rows are kept so successful generations aren't re-billed.
+      const stale = await db.query.reviews.findMany({
+        where: and(eq(reviews.paperId, paper.id), ne(reviews.status, "COMPLETED")),
+        with: { reviewSystem: true },
+      });
+      if (stale.length > 0) {
+        await db
+          .update(reviews)
+          .set({
+            status: "GENERATING",
+            judgeStatus: "PENDING",
+            errorMessage: null,
+            structured: null,
+            rawOutput: null,
+            generationMs: null,
+            updatedAt: new Date(),
+          })
+          .where(inArray(reviews.id, stale.map((r) => r.id)));
+        const parsed = paper.parsedStructure as unknown as ParsedPaper;
+        const paperText = judge ? renderPaperText(parsed) : undefined;
+        // Fire-and-forget so the response returns immediately.
+        // generateIntoReview never rejects (it records FAILED on the row).
+        for (const row of stale) {
+          void generateIntoReview(
+            row.id, paper, parsed, row.reviewSystem, reviewGen, judge, paperText,
+          ).catch((err) => req.log?.error?.({ err, reviewId: row.id }, "regenerate crashed"));
+        }
+      }
       const payload = {
         ok: true,
         paperId: paper.id,
-        dropped: deleted.length,
+        retried: stale.length,
         message: "Generation re-dispatched. Poll GET /papers/:id for progress.",
       };
       const validated = AdminRegenResponseSchema.parse(payload);
@@ -445,13 +470,23 @@ export function adminRouter(config: Config, deps: AdminDeps): Router {
         ]);
       const isTestRow = (participantId: string | null) =>
         participantId !== null && testIds.has(participantId);
+      const excludedPapers = paperRows.filter((p) => isTestRow(p.participantId));
+      const excludedPaperIds = new Set(excludedPapers.map((p) => p.id));
+      const excludedReviewIds = new Set(
+        excludedPapers.flatMap((p) => p.reviews.map((r) => r.id)),
+      );
       const payload = {
         exportedAt: new Date().toISOString(),
         systems,
         papers: paperRows.filter((p) => !isTestRow(p.participantId)),
         votes: voteRows.filter((v) => !isTestRow(v.participantId)),
-        metrics: metricRows,
-        verdicts: verdictRows,
+        // Metric scores and judge verdicts hang off a paper (directly, or via
+        // its review); drop those whose paper was excluded above so the
+        // export doesn't carry dry-run judging the papers/votes left out.
+        metrics: metricRows.filter((m) => !excludedReviewIds.has(m.reviewId)),
+        verdicts: verdictRows.filter((v) => !excludedPaperIds.has(v.paperId)),
+        // Rating snapshots are computed boards, and the fit (votes.ts
+        // eligibleVoteWhere) already excludes test votes — left as-is.
         snapshots: snapshotRows,
       };
       const validated = AdminExportResponseSchema.parse(payload);

@@ -74,6 +74,7 @@ export default function StudyPage() {
     }
   });
   const [entered, setEntered] = useState<boolean>(() => !!code);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   // Drafts are cleared on submit, so what remains is abandoned comparisons.
   // Sweep them once per session rather than leaving keys to accumulate in a
@@ -87,7 +88,9 @@ export default function StudyPage() {
       <StudyFrame>
         <CodeEntry
           initial={code}
+          error={codeError}
           onSubmit={(c) => {
+            setCodeError(null);
             setCode(c);
             setEntered(true);
             try {
@@ -104,7 +107,8 @@ export default function StudyPage() {
     <StudyFrame>
       <StudyFlow
         code={code}
-        onBadCode={() => {
+        onBadCode={(message) => {
+          setCodeError(message);
           setEntered(false);
         }}
       />
@@ -124,7 +128,15 @@ function StudyFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function CodeEntry({ initial, onSubmit }: { initial: string; onSubmit: (c: string) => void }) {
+function CodeEntry({
+  initial,
+  error,
+  onSubmit,
+}: {
+  initial: string;
+  error: string | null;
+  onSubmit: (c: string) => void;
+}) {
   const [value, setValue] = useState(initial);
   return (
     <div className="mx-auto max-w-md pt-16 text-center">
@@ -143,17 +155,24 @@ function CodeEntry({ initial, onSubmit }: { initial: string; onSubmit: (c: strin
         <input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="e.g. maple-1234"
+          placeholder="e.g. maple-larch-4821"
           className="flex-1 border border-rule bg-white px-3 py-2 font-mono text-sm outline-none focus:border-ink"
           autoFocus
         />
         <Button type="submit">Start</Button>
       </form>
+      {error && <p className="mt-3 text-sm text-red">{error}</p>}
     </div>
   );
 }
 
-function StudyFlow({ code, onBadCode }: { code: string; onBadCode: () => void }) {
+function StudyFlow({
+  code,
+  onBadCode,
+}: {
+  code: string;
+  onBadCode: (message: string) => void;
+}) {
   const qc = useQueryClient();
   const stateQuery = useQuery({
     queryKey: ["study-state", code],
@@ -175,13 +194,17 @@ function StudyFlow({ code, onBadCode }: { code: string; onBadCode: () => void })
   });
 
   useEffect(() => {
-    if (stateQuery.error instanceof ApiError && stateQuery.error.status === 404) {
+    if (!(stateQuery.error instanceof ApiError)) return;
+    if (stateQuery.error.status === 404) {
       try {
         localStorage.removeItem(CODE_KEY);
       } catch {
         /* noop */
       }
-      onBadCode();
+      onBadCode("That code wasn't recognised. Check it and try again.");
+    } else if (stateQuery.error.status === 429) {
+      // The server locks out an address after repeated wrong codes.
+      onBadCode("Too many unrecognised codes. Wait 15 minutes, then try again.");
     }
   }, [stateQuery.error, onBadCode]);
 
@@ -530,7 +553,13 @@ function GeneratingScreen({ code, paper }: { code: string; paper: StudyPaperStat
   const total = paper.reviewsTotal ?? 6;
   const done = paper.reviewsCompleted ?? 0;
   const failed = paper.reviewsFailed ?? 0;
-  const retry = useMutation({ mutationFn: () => studyRetry(code, paper.paperId!) });
+  const qc = useQueryClient();
+  const retry = useMutation({
+    mutationFn: () => studyRetry(code, paper.paperId!),
+    // Polling is off once every unvoted comparison has failed; refetch so the
+    // retried rows (now GENERATING) make the state busy again and polling resumes.
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["study-state", code] }),
+  });
   return (
     <div className="mx-auto max-w-xl pt-10 text-center">
       <h1 className="mb-3 font-serif text-2xl font-semibold">

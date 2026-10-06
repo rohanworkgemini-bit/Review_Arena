@@ -23,8 +23,39 @@ from app.adapters.base import (
     GenerationResult,
     StreamEvent,
     friendly_error,
+    raise_if_truncated,
 )
 from app.schemas import ParsedPaper
+
+
+def _candidate_text(response: Any) -> tuple[str, Any]:
+    """(text, finish_reason) of the first candidate, read from its parts.
+
+    Not `response.text`: that accessor raises ValueError for any chunk
+    with no text Part — e.g. the finish-only last chunk of a stream — which
+    turned a fully-arrived review into a failure.
+    """
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return "", None
+    candidate = candidates[0]
+    parts = getattr(getattr(candidate, "content", None), "parts", None) or []
+    text = "".join(getattr(part, "text", "") or "" for part in parts)
+    return text, getattr(candidate, "finish_reason", None)
+
+
+def _require_text(raw: str, finish_reason: Any, response: Any) -> None:
+    """An output-limit stop is an error; so is a response with no text at
+    all (safety block, blocked prompt), which `.text` used to raise on."""
+    raise_if_truncated(finish_reason)
+    if not raw.strip():
+        reason = getattr(finish_reason, "name", finish_reason)
+        feedback = getattr(response, "prompt_feedback", None)
+        raise RuntimeError(
+            f"Gemini returned no review text (finish_reason={reason}, "
+            f"prompt_feedback={feedback})"
+        )
+
 
 # The review-form system prompt is built per selected conference in
 # __init__ — see app/prompts/review/ (single source for the form
@@ -82,7 +113,8 @@ class GeminiAdapter(Adapter):
             generation_config=self._generation_config,
             request_options={"timeout": PROVIDER_TIMEOUT_S},
         )
-        raw = response.text or ""
+        raw, finish_reason = _candidate_text(response)
+        _require_text(raw, finish_reason, response)
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
 
@@ -95,17 +127,22 @@ class GeminiAdapter(Adapter):
                 yield StreamEvent(type="error", error="Empty paper text")
                 return
             chunks: list[str] = []
+            finish_reason = None
+            last_chunk = None
             for chunk in self._model.generate_content(
                 prompt,
                 generation_config=self._generation_config,
                 stream=True,
                 request_options={"timeout": PROVIDER_TIMEOUT_S},
             ):
-                delta = getattr(chunk, "text", "") or ""
+                last_chunk = chunk
+                delta, chunk_finish = _candidate_text(chunk)
+                finish_reason = chunk_finish or finish_reason
                 if delta:
                     chunks.append(delta)
                     yield StreamEvent(type="token", text=delta)
             raw = "".join(chunks).strip()
+            _require_text(raw, finish_reason, last_chunk)
             review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
             yield StreamEvent(
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)

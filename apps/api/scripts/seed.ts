@@ -132,7 +132,7 @@ async function main() {
         "OpenAI GPT-5.6 Terra (balanced tier of the 5.6 family) with our " +
         "zero-shot reviewer prompt.",
       adapterKey: "gpt-5.6-terra",
-      config: { model: "gpt-5.6-terra", use_max_completion_tokens: true },
+      config: { model: "gpt-5.6-terra" },
       enabled: !!process.env.OPENAI_API_KEY,
     },
     {

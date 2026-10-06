@@ -14,6 +14,7 @@ import asyncio
 import hmac
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -45,7 +46,7 @@ from app.adapters._budget import (
     count_tokens,
     render_canonical,
 )
-from app.judge import judge_pair
+from app.judge import JudgeNonRetryableError, judge_pair
 from app.parsing import (
     Arxiv2MdError,
     ChandraError,
@@ -330,6 +331,25 @@ async def stream_generate(req: GenerateRequest, request: Request):
         import json as _json
         start = time.perf_counter()
         iterator = None
+        # Close coordination. asyncio.wait_for's idle timeout abandons the
+        # hop but cannot stop the worker thread, which is still blocked in
+        # next(iterator) — close() from here would then fail with
+        # "generator already executing" and the provider stream would keep
+        # running (and billing). So whoever finishes last closes: if a hop
+        # is still in flight, mark it abandoned and _next closes the
+        # generator itself the moment next() returns (the next chunk or
+        # the SDK read timeout), which shuts the provider stream.
+        hop_lock = threading.Lock()
+        hop_state = {"busy": False, "abandoned": False}
+
+        def _close_iterator() -> None:
+            close = getattr(iterator, "close", None)
+            if close is not None:
+                try:
+                    close()
+                except Exception:  # noqa: BLE001 — best-effort cleanup
+                    logger.debug("iterator close failed", exc_info=True)
+
         try:
             # Run the (synchronous) adapter generator in a worker thread
             # via an iterator hop so we can interleave is_disconnected()
@@ -340,9 +360,18 @@ async def stream_generate(req: GenerateRequest, request: Request):
 
             def _next():
                 try:
-                    return next(iterator)
+                    evt = next(iterator)
                 except StopIteration:
+                    evt = sentinel
+                with hop_lock:
+                    hop_state["busy"] = False
+                    abandoned = hop_state["abandoned"]
+                if abandoned:
+                    # The loop gave up on this hop (idle timeout) while
+                    # next() was running; close here, now that it returned.
+                    _close_iterator()
                     return sentinel
+                return evt
 
             while True:
                 if await request.is_disconnected():
@@ -358,6 +387,8 @@ async def stream_generate(req: GenerateRequest, request: Request):
                 # timeouts bound each SDK attempt; this bounds the gap the
                 # caller will tolerate between events — mirroring the Node
                 # bridge's own 120s idle watchdog.
+                with hop_lock:
+                    hop_state["busy"] = True
                 try:
                     evt = await asyncio.wait_for(
                         run_in_threadpool(_next), timeout=STREAM_IDLE_TIMEOUT_S
@@ -404,12 +435,12 @@ async def stream_generate(req: GenerateRequest, request: Request):
             # HTTP response to nondeterministic GC — and some SDKs keep
             # billing until the connection actually drops.
             if iterator is not None:
-                close = getattr(iterator, "close", None)
-                if close is not None:
-                    try:
-                        await run_in_threadpool(close)
-                    except Exception:  # noqa: BLE001 — best-effort cleanup
-                        logger.debug("iterator close failed", exc_info=True)
+                with hop_lock:
+                    in_flight = hop_state["busy"]
+                    hop_state["abandoned"] = True
+                if not in_flight:
+                    await run_in_threadpool(_close_iterator)
+                # else: the in-flight _next closes it once next() returns.
 
     return StreamingResponse(
         event_source(),
@@ -440,8 +471,16 @@ def judge_pair_endpoint(req: JudgePairRequest) -> dict:
     """One panel member's pairwise verdict: paper + both reviews in one
     request per pass, two order-swapped passes (position-bias control).
     'A'/'B' in the response refer to review_a/review_b of THIS request.
-    The Node side fans out one call per panel member."""
-    result = judge_pair(req.review_a, req.review_b, req.paper_text, model=req.model)
+    The Node side fans out one call per panel member.
+
+    Errors: 422 for a failure that would repeat identically on retry
+    (auth, unknown model, context-length rejection, refusal, missing key);
+    anything else stays a 500, which the caller may retry."""
+    try:
+        result = judge_pair(req.review_a, req.review_b, req.paper_text, model=req.model)
+    except JudgeNonRetryableError as e:
+        logger.warning("judge-pair %s non-retryable: %s", req.model, e)
+        raise HTTPException(status_code=422, detail=f"non-retryable judge failure: {e}") from e
     return {
         "judge_model": req.model,
         "overall_preference": result.overall_preference,

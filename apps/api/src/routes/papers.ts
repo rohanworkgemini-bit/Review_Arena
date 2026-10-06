@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { reviewSystems } from "../db/schema.js";
 import { db } from "../db/client.js";
-import { papers, reviews } from "../db/schema.js";
+import { papers, reviews, type Paper } from "../db/schema.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { JudgeClient } from "../clients/judge-client.js";
 import type { Orchestrator } from "../pipeline/orchestrator.js";
@@ -431,8 +431,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
       // selector and precreate review rows. The browser opens SSE
       // streams to /reviews/stream/:reviewId which trigger the model
       // calls and forward tokens live.
-      const pairSlugs = await resolvePairSlugs(paperId);
-      await orchestrator.precreateReviews(updated!, pairSlugs);
+      await precreatePair(updated!);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, paperId }, "PDF pipeline failed");
@@ -471,8 +470,7 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
         })
         .where(eq(papers.id, paperId))
         .returning();
-      const pairSlugs = await resolvePairSlugs(paperId);
-      await orchestrator.precreateReviews(updated!, pairSlugs);
+      await precreatePair(updated!);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error({ err, paperId, arxivId }, "arXiv pipeline failed");
@@ -488,19 +486,28 @@ export function papersRouter(config: Config, deps: PapersDeps): Router {
   // than one per enabled system (2 of 6 today), and that does not change
   // as the pool grows. Study papers are the exception: they generate all
   // six, because the rotation needs three disjoint pairs from one paper.
-  async function resolvePairSlugs(paperId: string): Promise<readonly string[]> {
+  //
+  // Throws when no pair can be formed, so the pipeline's catch marks the
+  // paper PARSE_FAILED with the reason (the upload/compare UI already
+  // renders PARSE_FAILED as a terminal error). There is no "all enabled
+  // systems" fallback: with an empty slug list precreateReviews creates
+  // nothing, which would leave the paper PARSED with zero reviews and the
+  // voter on a spinner forever.
+  async function precreatePair(paper: Paper): Promise<void> {
     const pair = await selectUploadPair();
     if (!pair) {
-      // Fewer than 2 enabled systems — let the orchestrator fan out to
-      // whatever it finds (likely 0 or 1) so the failure surfaces
-      // honestly as "no reviews generated".
-      logger.warn(
-        { paperId },
-        "selectUploadPair returned null; orchestrator will use all enabled systems as fallback",
+      logger.error({ paperId: paper.id }, "selectUploadPair returned null; no reviewable pair");
+      throw new Error(
+        "Fewer than two review systems are currently available, so no review pair could be generated. Please try again later.",
       );
-      return [];
     }
-    return [pair.slugA, pair.slugB];
+    const created = await orchestrator.precreateReviews(paper, [pair.slugA, pair.slugB]);
+    if (created.length < 2) {
+      // A chosen system was disabled between selection and insert.
+      throw new Error(
+        "A selected review system became unavailable while starting generation. Please upload again.",
+      );
+    }
   }
 
   return router;

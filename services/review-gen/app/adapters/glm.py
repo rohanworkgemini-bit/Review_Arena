@@ -32,6 +32,7 @@ from app.adapters.base import (
     PROVIDER_MAX_RETRIES,
     StreamEvent,
     friendly_error,
+    raise_if_truncated,
 )
 from app.schemas import ParsedPaper
 
@@ -100,6 +101,7 @@ class GLMAdapter(Adapter):
                 "The PDF probably contains no extractable text."
             )
         response = self._client.chat.completions.create(**self._kwargs(prompt, stream=False))
+        raise_if_truncated(response.choices[0].finish_reason)
         raw = response.choices[0].message.content or ""
         review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
         return GenerationResult(review=review, raw_output=raw, metrics=self._metrics(prompt, raw))
@@ -111,13 +113,19 @@ class GLMAdapter(Adapter):
                 yield StreamEvent(type="error", error="Empty paper text")
                 return
             chunks: list[str] = []
-            for event in self._client.chat.completions.create(**self._kwargs(prompt, stream=True)):
-                if not event.choices:
-                    continue
-                delta = event.choices[0].delta.content or ""
-                if delta:
-                    chunks.append(delta)
-                    yield StreamEvent(type="token", text=delta)
+            finish_reason = None
+            # `with` so an abandoned stream (generator close()) shuts the
+            # HTTP response instead of leaving it to GC.
+            with self._client.chat.completions.create(**self._kwargs(prompt, stream=True)) as stream:
+                for event in stream:
+                    if not event.choices:
+                        continue
+                    finish_reason = event.choices[0].finish_reason or finish_reason
+                    delta = event.choices[0].delta.content or ""
+                    if delta:
+                        chunks.append(delta)
+                        yield StreamEvent(type="token", text=delta)
+            raise_if_truncated(finish_reason)
             raw = "".join(chunks).strip()
             review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
             yield StreamEvent(

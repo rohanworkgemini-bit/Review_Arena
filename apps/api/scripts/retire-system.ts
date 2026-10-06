@@ -73,32 +73,40 @@ async function main() {
     return;
   }
 
-  await pool.query("BEGIN");
+  // One checked-out client for the whole transaction: pool.query may hand
+  // each statement a different pooled connection, which would leave BEGIN,
+  // the deletes and COMMIT on separate sessions (no atomicity).
+  const client = await pool.connect();
   try {
-    const { rows: reviewRows } = await pool.query<{ id: string }>(
-      `SELECT id FROM reviews WHERE review_system_id = $1`,
-      [system.id],
-    );
-    const reviewIds = reviewRows.map((r) => r.id);
-    const { rows: voteRows } = await pool.query<{ id: string }>(
-      `SELECT id FROM votes WHERE review_a_id = ANY($1) OR review_b_id = ANY($1)`,
-      [reviewIds],
-    );
-    const voteIds = voteRows.map((v) => v.id);
+    await client.query("BEGIN");
+    try {
+      const { rows: reviewRows } = await client.query<{ id: string }>(
+        `SELECT id FROM reviews WHERE review_system_id = $1`,
+        [system.id],
+      );
+      const reviewIds = reviewRows.map((r) => r.id);
+      const { rows: voteRows } = await client.query<{ id: string }>(
+        `SELECT id FROM votes WHERE review_a_id = ANY($1) OR review_b_id = ANY($1)`,
+        [reviewIds],
+      );
+      const voteIds = voteRows.map((v) => v.id);
 
-    // FKs without ON DELETE CASCADE: un-link, then delete.
-    await pool.query(`UPDATE ratings SET trigger_vote_id = NULL WHERE trigger_vote_id = ANY($1)`, [voteIds]);
-    await pool.query(`UPDATE study_comparisons SET vote_id = NULL WHERE vote_id = ANY($1)`, [voteIds]);
-    await pool.query(`DELETE FROM dimension_votes WHERE vote_id = ANY($1)`, [voteIds]);
-    await pool.query(`DELETE FROM votes WHERE id = ANY($1)`, [voteIds]);
-    // Cascades metric_scores, judge_verdicts, study_comparisons.
-    await pool.query(`DELETE FROM reviews WHERE id = ANY($1)`, [reviewIds]);
-    await pool.query(`DELETE FROM ratings WHERE review_system_id = $1`, [system.id]);
-    await pool.query(`DELETE FROM review_systems WHERE id = $1`, [system.id]);
-    await pool.query("COMMIT");
-  } catch (e) {
-    await pool.query("ROLLBACK");
-    throw e;
+      // FKs without ON DELETE CASCADE: un-link, then delete.
+      await client.query(`UPDATE ratings SET trigger_vote_id = NULL WHERE trigger_vote_id = ANY($1)`, [voteIds]);
+      await client.query(`UPDATE study_comparisons SET vote_id = NULL WHERE vote_id = ANY($1)`, [voteIds]);
+      await client.query(`DELETE FROM dimension_votes WHERE vote_id = ANY($1)`, [voteIds]);
+      await client.query(`DELETE FROM votes WHERE id = ANY($1)`, [voteIds]);
+      // Cascades metric_scores, judge_verdicts, study_comparisons.
+      await client.query(`DELETE FROM reviews WHERE id = ANY($1)`, [reviewIds]);
+      await client.query(`DELETE FROM ratings WHERE review_system_id = $1`, [system.id]);
+      await client.query(`DELETE FROM review_systems WHERE id = $1`, [system.id]);
+      await client.query("COMMIT");
+    } catch (e) {
+      await client.query("ROLLBACK");
+      throw e;
+    }
+  } finally {
+    client.release();
   }
 
   const remaining = await count(pool, `SELECT COUNT(*)::text AS count FROM review_systems WHERE slug = $1`, [slug]);

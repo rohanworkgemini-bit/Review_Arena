@@ -27,6 +27,11 @@ export interface UploadPair {
  * Select an upload-time pair. Returns the two chosen slugs in stable
  * (A, B) order — caller can shuffle for blinding if desired (the sampler
  * already coin-flips internally).
+ *
+ * Returns null when no pair can be formed (fewer than 2 enabled systems,
+ * or the sampler finds no eligible pair). There is no fallback downstream —
+ * precreateReviews creates nothing for an empty slug list — so the caller
+ * must fail the upload rather than proceed.
  */
 export async function selectUploadPair(
   options: { rng?: () => number } = {},

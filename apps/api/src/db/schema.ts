@@ -116,7 +116,7 @@ export const participants = pgTable("participants", {
   // and during the study window. Everything they produce is written exactly
   // as a real participant's is — same rotations, same judging — and then
   // excluded at read time: from the Bradley-Terry fit (routes/votes.ts
-  // loadBattles) and from the analysis exports. Excluding at read time
+  // eligibleVoteWhere) and from the analysis exports. Excluding at read time
   // rather than refusing to store means a test session exercises the real
   // write path, which is the point of having it.
   isTest: boolean("is_test").notNull().default(false),

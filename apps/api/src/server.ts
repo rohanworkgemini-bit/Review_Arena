@@ -40,6 +40,12 @@ const orchestrator = makeOrchestrator(reviewGen, judge);
 
 const app: Express = express();
 
+// Production sits behind exactly one reverse-proxy hop (Caddy). Without
+// this, req.ip is Caddy's container IP for every visitor and the per-IP
+// rate-limit bucket is shared by everyone. Local dev has no proxy and no
+// X-Forwarded-For, so req.ip falls back to the socket address.
+app.set("trust proxy", 1);
+
 // Per-request log line — one short colored line per call, no cookie/header
 // dump. 2xx → info, 4xx → warn, 5xx + errors → error. Polling endpoints
 // (/health and per-paper status poll) are silenced on success so they
@@ -91,6 +97,10 @@ app.use(
 // valid pair token to do anything.
 const allowedOrigins = webOriginList(config);
 
+// Tagged so the final error handler answers 403 (logged at warn) instead
+// of treating a disallowed origin as an unhandled 500.
+class CorsRejectedError extends Error {}
+
 function originAllowed(origin: string): boolean {
   for (const allowed of allowedOrigins) {
     if (allowed === origin) return true;
@@ -112,7 +122,7 @@ app.use(
       // No Origin header: same-origin / curl / mobile webview — allow.
       if (!origin) return cb(null, true);
       if (originAllowed(origin)) return cb(null, true);
-      return cb(new Error(`CORS: origin ${origin} not allowed`));
+      return cb(new CorsRejectedError(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
   }),
@@ -232,7 +242,9 @@ app.use(studyRouter(config, reviewGen, judge));
 app.use(adminRouter(config, { reviewGen, judge, orchestrator }));
 
 // Upload errors deserve a real status + message: without this branch a
-// too-large PDF surfaces as an opaque 500 "unexpected error".
+// too-large PDF surfaces as an opaque 500 "unexpected error". The limit
+// differs per route (arena/admin 10MB, study 25MB) and MulterError doesn't
+// carry it, so the message names no number rather than a wrong one.
 app.use(
   (err: Error, _req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (err instanceof multer.MulterError) {
@@ -240,9 +252,14 @@ app.use(
       res.status(tooBig ? 413 : 400).json({
         error: tooBig ? "FileTooLarge" : "UploadError",
         message: tooBig
-          ? "The PDF is larger than the upload limit (10MB)."
+          ? "The PDF is larger than the upload limit."
           : `Upload failed: ${err.code}`,
       });
+      return;
+    }
+    if (err instanceof CorsRejectedError) {
+      logger.warn({ err: err.message }, "cors_rejected");
+      res.status(403).json({ error: "Forbidden", message: "Origin not allowed." });
       return;
     }
     next(err);

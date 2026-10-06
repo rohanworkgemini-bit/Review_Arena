@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   SubmitVoteRequestSchema,
   type VoteDimension,
@@ -21,6 +22,7 @@ import {
   outcomeOf,
   type Battle,
   type BootstrapInterval,
+  type Winner,
 } from "../rating/bt.js";
 import type { Config } from "../config.js";
 import { logger } from "../logger.js";
@@ -43,6 +45,11 @@ function isUniqueViolation(err: unknown, constraintName?: string): boolean {
   if (!constraintName) return true;
   return e.constraint === constraintName || e.constraint_name === constraintName;
 }
+
+/** Votes decided faster than this are flagged as potential botting:
+ *  recorded, but excluded from every board (B4). A missing decision time is
+ *  not flagged. Shared with study votes so both modes filter identically. */
+export const DECISION_TIME_FLOOR_MS = 3000;
 
 export function votesRouter(config: Config): Router {
   const router = Router();
@@ -95,9 +102,7 @@ export function votesRouter(config: Config): Router {
 
       const outcome = outcomeOf(body.winner);
 
-      // Quality flagging: votes with decision time < 3s flagged for potential
-      // botting. Flagged votes recorded but excluded from the ratings (B4).
-      const DECISION_TIME_FLOOR_MS = 3000;
+      // Quality flagging (B4): see DECISION_TIME_FLOOR_MS.
       const qualityFlagged = (body.decisionMs ?? Infinity) < DECISION_TIME_FLOOR_MS;
       if (qualityFlagged) {
         logger.info(
@@ -114,44 +119,26 @@ export function votesRouter(config: Config): Router {
       // point MLEs, which drift a little from the bootstrap medians the
       // leaderboard stores.
       //
-      const beforeBattles = await loadBattles(db);
-      // The battle only enters the "after" fit if it would survive
-      // loadBattles' filters, so a flagged or failed comparison correctly
-      // shows no movement.
+      // The log is read once per request (slugs + verdicts only, through the
+      // shared eligibility rule) and both fits run off that one read. It is
+      // not handed on to the snapshot worker: that runs later, coalesced
+      // across votes, and must see every vote committed by then — a log read
+      // before this insert would miss concurrent ones.
+      const log = await loadVoteLog(db);
+      // The battle only enters the "after" fit if it would survive the
+      // board's eligibility rule (eligibleVoteWhere), so a flagged or failed
+      // comparison correctly shows no movement. This is that rule evaluated
+      // on the vote about to be written; the test-participant clause cannot
+      // apply because arena votes never carry a participantId.
       const countsTowardBoard =
         reviewA.status === "COMPLETED" &&
         reviewB.status === "COMPLETED" &&
         reviewA.judgeStatus !== "FAILED" &&
         reviewB.judgeStatus !== "FAILED" &&
         !qualityFlagged;
-      const afterBattles: Battle[] = countsTowardBoard
-        ? [
-            ...beforeBattles,
-            { a: reviewA.reviewSystem.slug, b: reviewB.reviewSystem.slug, outcome },
-          ]
-        : beforeBattles;
       const btOpts = { baselineSlug: config.RATING_BASELINE_SLUG };
-      const btBeforeRatings = computeBT(beforeBattles, btOpts).ratings;
-      const btAfterRatings = computeBT(afterBattles, btOpts).ratings;
-      // null = this system is not on the BT board yet: too few comparisons to
-      // connect it to the rest of the field (see bt.ts, Ford's condition).
-      const btBeforeA = btBeforeRatings.get(reviewA.reviewSystem.slug) ?? null;
-      const btBeforeB = btBeforeRatings.get(reviewB.reviewSystem.slug) ?? null;
-      const btAfterA = btAfterRatings.get(reviewA.reviewSystem.slug) ?? null;
-      const btAfterB = btAfterRatings.get(reviewB.reviewSystem.slug) ?? null;
-
-      logger.info(
-        {
-          votePayload: { winner: body.winner, decisionMs: body.decisionMs },
-          systems: { A: reviewA.reviewSystem.slug, B: reviewB.reviewSystem.slug },
-          btBeforeA,
-          btBeforeB,
-          btAfterA,
-          btAfterB,
-          battleCount: beforeBattles.length,
-        },
-        "vote_submitted: before snapshot",
-      );
+      const slugA = reviewA.reviewSystem.slug;
+      const slugB = reviewB.reviewSystem.slug;
 
       // The transaction is deliberately insert-only. Snapshot recompute
       // (9 boards x 200 bootstrap rounds) used to run in here behind a
@@ -211,36 +198,73 @@ export function votesRouter(config: Config): Router {
               ),
             ),
           });
+          let reveal: ReturnType<typeof revealFor> | null = null;
+          if (existing) {
+            // The stored vote is already in the log (if it counts), so
+            // "before" is the log without it and "after" the log with it
+            // exactly once — not the log plus a second copy, which would
+            // show a delta nobody's vote caused. A unique violation means
+            // the original committed, but possibly after our read above
+            // (a concurrent double-submit), so re-read in that rare case.
+            const entries = log.some((e) => e.voteId === existing.id)
+              ? log
+              : await loadVoteLog(db);
+            const { before, own } = splitOwnVote(entries, existing.id);
+            reveal = revealFor(before, own, slugA, slugB, btOpts);
+          }
           res.status(409).json({
             error: "Conflict",
             message: "This pair has already been voted on for this session.",
             voteId: existing?.id ?? null,
-            reveal: existing
-              ? {
-                  // The verdict already on record, not the retried body —
-                  // they should agree, but the stored one is the truth.
-                  winner: existing.winner,
-                  reviewA: {
-                    reviewId: reviewA.id,
-                    systemSlug: reviewA.reviewSystem.slug,
-                    systemName: reviewA.reviewSystem.name,
-                    btBefore: btBeforeA,
-                    btAfter: btAfterA,
-                  },
-                  reviewB: {
-                    reviewId: reviewB.id,
-                    systemSlug: reviewB.reviewSystem.slug,
-                    systemName: reviewB.reviewSystem.name,
-                    btBefore: btBeforeB,
-                    btAfter: btAfterB,
-                  },
-                }
-              : null,
+            reveal:
+              existing && reveal
+                ? {
+                    // The verdict already on record, not the retried body —
+                    // they should agree, but the stored one is the truth.
+                    winner: existing.winner,
+                    reviewA: {
+                      reviewId: reviewA.id,
+                      systemSlug: slugA,
+                      systemName: reviewA.reviewSystem.name,
+                      btBefore: reveal.btBeforeA,
+                      btAfter: reveal.btAfterA,
+                    },
+                    reviewB: {
+                      reviewId: reviewB.id,
+                      systemSlug: slugB,
+                      systemName: reviewB.reviewSystem.name,
+                      btBefore: reveal.btBeforeB,
+                      btAfter: reveal.btAfterB,
+                    },
+                  }
+                : null,
           });
           return;
         }
         throw err;
       }
+
+      const { btBeforeA, btBeforeB, btAfterA, btAfterB } = revealFor(
+        log.map((e) => e.battle),
+        countsTowardBoard ? { a: slugA, b: slugB, outcome } : null,
+        slugA,
+        slugB,
+        btOpts,
+      );
+
+      logger.info(
+        {
+          voteId,
+          votePayload: { winner: body.winner, decisionMs: body.decisionMs },
+          systems: { A: slugA, B: slugB },
+          btBeforeA,
+          btBeforeB,
+          btAfterA,
+          btAfterB,
+          battleCount: log.length,
+        },
+        "vote_submitted: before snapshot",
+      );
 
       // Recompute all boards off the request path (coalesced under the
       // advisory lock) and drop the read cache once fresh rows land.
@@ -252,14 +276,14 @@ export function votesRouter(config: Config): Router {
           winner: body.winner,
           reviewA: {
             reviewId: reviewA.id,
-            systemSlug: reviewA.reviewSystem.slug,
+            systemSlug: slugA,
             systemName: reviewA.reviewSystem.name,
             btBefore: btBeforeA,
             btAfter: btAfterA,
           },
           reviewB: {
             reviewId: reviewB.id,
-            systemSlug: reviewB.reviewSystem.slug,
+            systemSlug: slugB,
             systemName: reviewB.reviewSystem.name,
             btBefore: btBeforeB,
             btAfter: btAfterB,
@@ -280,54 +304,179 @@ export function votesRouter(config: Config): Router {
 // a tx, but we don't want to over-constrain).
 type DbExecutor = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-async function loadBattles(executor: DbExecutor): Promise<Battle[]> {
-  const [rows, testParticipants] = await Promise.all([
-    executor.query.votes.findMany({
-      orderBy: asc(votes.createdAt),
-      with: {
-        reviewA: { with: { reviewSystem: true } },
-        reviewB: { with: { reviewSystem: true } },
-      },
-    }),
-    // Read every time rather than memoised: the set changes only when codes
-    // are minted, and a stale cache here would silently put a dry run on the
-    // public board. Ten rows.
-    executor.query.participants.findMany({ where: eq(participants.isTest, true) }),
-  ]);
-  const testIds = new Set(testParticipants.map((p) => p.id));
-  // FAIRNESS B1 — a comparison where either side did not COMPLETE is an
-  // infra failure (cold-start, loop, empty stream), not low review
-  // quality. Exclude those from the ratings so the leaderboard ranks
-  // reviewing, not uptime. (Reliability is reported separately.)
-  // Also exclude judge_status FAILED (no panel member scored the pair) so a
-  // silent judge failure can't corrupt the human-vs-judge analysis. PARTIAL
-  // (some panel members returned) still counts; per-judge strictness lives
-  // in the offline analysis, not the leaderboard.
-  // FAIRNESS B4 — exclude votes flagged for low quality (e.g., decision time
-  // < 3s) to detect potential botting or inattentive votes.
-  // Dry runs — a vote cast under a T-code is a real vote through the real
-  // path, deliberately so, but it is us walking the flow rather than a
-  // participant judging reviews. participantId is null on arena votes, so
-  // this only ever touches study rows.
-  return rows
-    .filter(
-      (v) =>
-        !(v.participantId && testIds.has(v.participantId)) &&
-        v.reviewA.status === "COMPLETED" &&
-        v.reviewB.status === "COMPLETED" &&
-        // Judge FAILED = we could not score this review; exclude it so a
-        // silent judge failure can't corrupt the human-vs-judge analysis.
-        // PENDING (not yet judged) still counts — the human vote is valid
-        // regardless of whether the judge has caught up.
-        v.reviewA.judgeStatus !== "FAILED" &&
-        v.reviewB.judgeStatus !== "FAILED" &&
-        !v.qualityFlagged,
-    )
-    .map((v) => ({
-      a: v.reviewA.reviewSystem.slug,
-      b: v.reviewB.reviewSystem.slug,
-      outcome: outcomeOf(v.winner),
-    }));
+// ─── Vote eligibility ─────────────────────────────────────────────────────
+// ONE rule decides which votes count, for all nine boards (overall + eight
+// dimensions) and for the leaderboard's totalVotes. It is a SQL predicate
+// over `votes` joined to its two reviews under the aliases below; every
+// reader (loadVoteLog, loadBoardRows, countEligibleVotes) applies it, so the boards
+// cannot drift apart again (the dimension boards once kept test-participant
+// and judge-FAILED votes the overall board dropped).
+//
+// FAIRNESS B1 — a comparison where either side did not COMPLETE is an
+// infra failure (cold-start, loop, empty stream), not low review quality.
+// Exclude those so the leaderboard ranks reviewing, not uptime.
+// (Reliability is reported separately.)
+// Judge FAILED (no panel member scored the pair) is excluded so a silent
+// judge failure can't corrupt the human-vs-judge analysis. PARTIAL (some
+// panel members returned) and PENDING (not yet judged) still count — the
+// human vote is valid regardless; per-judge strictness lives in the offline
+// analysis, not the leaderboard.
+// FAIRNESS B4 — exclude votes flagged for low quality (e.g., decision time
+// < 3s) to detect potential botting or inattentive votes.
+// Dry runs — a vote cast under a T-code is a real vote through the real
+// path, deliberately so, but it is us walking the flow rather than a
+// participant judging reviews. participantId is null on arena votes, so
+// this only ever touches study rows. Evaluated in the query rather than
+// memoised: a stale set would silently put a dry run on the public board.
+const eligReviewA = alias(reviews, "elig_review_a");
+const eligReviewB = alias(reviews, "elig_review_b");
+const eligSystemA = alias(reviewSystems, "elig_system_a");
+const eligSystemB = alias(reviewSystems, "elig_system_b");
+
+function eligibleVoteWhere(): SQL {
+  return and(
+    eq(eligReviewA.status, "COMPLETED"),
+    eq(eligReviewB.status, "COMPLETED"),
+    ne(eligReviewA.judgeStatus, "FAILED"),
+    ne(eligReviewB.judgeStatus, "FAILED"),
+    eq(votes.qualityFlagged, false),
+    sql`NOT EXISTS (SELECT 1 FROM ${participants} WHERE ${participants.id} = ${votes.participantId} AND ${participants.isTest})`,
+  )!;
+}
+
+/** Number of votes that count toward the boards — the same rule the fit
+ *  uses. Exported for the leaderboard's totalVotes. */
+export async function countEligibleVotes(executor: DbExecutor = db): Promise<number> {
+  const [row] = await executor
+    .select({ c: count() })
+    .from(votes)
+    .innerJoin(eligReviewA, eq(eligReviewA.id, votes.reviewAId))
+    .innerJoin(eligReviewB, eq(eligReviewB.id, votes.reviewBId))
+    .where(eligibleVoteWhere());
+  return row?.c ?? 0;
+}
+
+/** One eligible overall verdict, keyed by its vote. */
+export interface VoteLogEntry {
+  voteId: string;
+  battle: Battle;
+}
+
+/** The overall board's battle log, oldest first: slugs and verdicts only. */
+async function loadVoteLog(executor: DbExecutor): Promise<VoteLogEntry[]> {
+  const rows = await executor
+    .select({
+      voteId: votes.id,
+      a: eligSystemA.slug,
+      b: eligSystemB.slug,
+      winner: votes.winner,
+    })
+    .from(votes)
+    .innerJoin(eligReviewA, eq(eligReviewA.id, votes.reviewAId))
+    .innerJoin(eligReviewB, eq(eligReviewB.id, votes.reviewBId))
+    .innerJoin(eligSystemA, eq(eligSystemA.id, eligReviewA.reviewSystemId))
+    .innerJoin(eligSystemB, eq(eligSystemB.id, eligReviewB.reviewSystemId))
+    .where(eligibleVoteWhere())
+    .orderBy(asc(votes.createdAt), asc(votes.id));
+  return rows.map((r) => ({
+    voteId: r.voteId,
+    battle: { a: r.a, b: r.b, outcome: outcomeOf(r.winner) },
+  }));
+}
+
+/** One row per (eligible vote, dimension verdict); dimension fields are null
+ *  for a vote with no dimension rows (left join). */
+export interface BoardRow {
+  voteId: string;
+  a: string;
+  b: string;
+  winner: Winner;
+  dimension: VoteDimension | null;
+  dimensionWinner: Winner | null;
+}
+
+/** Every eligible vote with its systems and dimension verdicts, in one
+ *  query, oldest vote first. */
+async function loadBoardRows(executor: DbExecutor): Promise<BoardRow[]> {
+  return executor
+    .select({
+      voteId: votes.id,
+      a: eligSystemA.slug,
+      b: eligSystemB.slug,
+      winner: votes.winner,
+      dimension: dimensionVotes.dimension,
+      dimensionWinner: dimensionVotes.winner,
+    })
+    .from(votes)
+    .innerJoin(eligReviewA, eq(eligReviewA.id, votes.reviewAId))
+    .innerJoin(eligReviewB, eq(eligReviewB.id, votes.reviewBId))
+    .innerJoin(eligSystemA, eq(eligSystemA.id, eligReviewA.reviewSystemId))
+    .innerJoin(eligSystemB, eq(eligSystemB.id, eligReviewB.reviewSystemId))
+    .leftJoin(dimensionVotes, eq(dimensionVotes.voteId, votes.id))
+    .where(eligibleVoteWhere())
+    .orderBy(asc(votes.createdAt), asc(votes.id), asc(dimensionVotes.createdAt));
+}
+
+/** All nine battle lists from one pass over the joined rows. Rows must be
+ *  grouped by vote (as loadBoardRows orders them); each vote enters the
+ *  overall board once however many dimension rows it carries. Every board
+ *  is built from the same eligible votes — there is no per-board filter. */
+export function partitionBoards(rows: readonly BoardRow[]): {
+  overall: Battle[];
+  byDimension: Map<VoteDimension, Battle[]>;
+} {
+  const overall: Battle[] = [];
+  const byDimension = new Map<VoteDimension, Battle[]>(
+    voteDimensionEnum.enumValues.map((d) => [d, []]),
+  );
+  let lastVoteId: string | null = null;
+  for (const r of rows) {
+    if (r.voteId !== lastVoteId) {
+      overall.push({ a: r.a, b: r.b, outcome: outcomeOf(r.winner) });
+      lastVoteId = r.voteId;
+    }
+    if (r.dimension !== null && r.dimensionWinner !== null) {
+      // Same converter as the overall board — that is the point of storing
+      // both verdicts in one encoding.
+      byDimension.get(r.dimension)!.push({ a: r.a, b: r.b, outcome: outcomeOf(r.dimensionWinner) });
+    }
+  }
+  return { overall, byDimension };
+}
+
+/** For a replayed vote: the log without it, and its own battle (null when
+ *  it does not count toward the board). */
+export function splitOwnVote(
+  entries: readonly VoteLogEntry[],
+  voteId: string,
+): { before: Battle[]; own: Battle | null } {
+  const before: Battle[] = [];
+  let own: Battle | null = null;
+  for (const e of entries) {
+    if (e.voteId === voteId) own = e.battle;
+    else before.push(e.battle);
+  }
+  return { before, own };
+}
+
+/** Reveal numbers: BT on `before`, and on `before` + `added` (the same fit
+ *  reused when the vote does not count). null = not on the BT board yet: too
+ *  few comparisons to connect it to the field (see bt.ts, Ford's condition). */
+export function revealFor(
+  before: readonly Battle[],
+  added: Battle | null,
+  slugA: string,
+  slugB: string,
+  opts: { baselineSlug: string },
+): { btBeforeA: number | null; btBeforeB: number | null; btAfterA: number | null; btAfterB: number | null } {
+  const beforeRatings = computeBT(before, opts).ratings;
+  const afterRatings = added ? computeBT([...before, added], opts).ratings : beforeRatings;
+  return {
+    btBeforeA: beforeRatings.get(slugA) ?? null,
+    btBeforeB: beforeRatings.get(slugB) ?? null,
+    btAfterA: afterRatings.get(slugA) ?? null,
+    btAfterB: afterRatings.get(slugB) ?? null,
+  };
 }
 
 // ─── Snapshot worker ──────────────────────────────────────────────────────
@@ -366,60 +515,40 @@ export function scheduleSnapshotRecompute(voteId: string, baselineSlug: string):
 
 /** All nine boards in one transaction, under the writer lock. Exported for
  *  scripts/recompute-leaderboard.ts, which refreshes the snapshots after a
- *  change to the rating method without waiting for a new vote. */
+ *  change to the rating method without waiting for a new vote.
+ *
+ *  One query reads every eligible vote with its systems and dimension
+ *  verdicts; the nine battle lists are partitioned in memory. All nine
+ *  inserts share the transaction's now(), so they form one snapshot batch. */
 export async function recomputeAllLeaderboards(triggerVoteId: string, baselineSlug: string): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${ELO_WRITER_LOCK})`);
-    await snapshotLeaderboard(tx, triggerVoteId, null, baselineSlug);
+    const boards = partitionBoards(await loadBoardRows(tx));
+    await snapshotLeaderboard(tx, triggerVoteId, null, baselineSlug, boards.overall);
     for (const d of voteDimensionEnum.enumValues) {
-      await snapshotLeaderboard(tx, triggerVoteId, d, baselineSlug);
+      await snapshotLeaderboard(tx, triggerVoteId, d, baselineSlug, boards.byDimension.get(d) ?? []);
     }
   });
 }
 
 /** Exported for scripts/seed-demo-votes.ts, which writes votes straight to
- *  the database and so must refresh the snapshots the board reads from. */
+ *  the database and so must refresh the snapshots the board reads from.
+ *  `battles` lets recomputeAllLeaderboards pass a pre-partitioned board;
+ *  without it the board is loaded here under the same eligibility rule.
+ *
+ *  A snapshot is the set of rows one call inserts (one INSERT, so one
+ *  computed_at); the leaderboard reads only the newest such set per board. */
 export async function snapshotLeaderboard(
   executor: DbExecutor,
   triggerVoteId: string,
   dimension: VoteDimension | null,
   baselineSlug: string,
+  battles?: readonly Battle[],
 ): Promise<void> {
-  let battles: Battle[];
-  if (dimension === null) {
-    battles = await loadBattles(executor);
-  } else {
-    const rows = await executor.query.dimensionVotes.findMany({
-      where: eq(dimensionVotes.dimension, dimension),
-      with: {
-        vote: {
-          with: {
-            reviewA: { with: { reviewSystem: true } },
-            reviewB: { with: { reviewSystem: true } },
-          },
-        },
-      },
-      orderBy: asc(dimensionVotes.createdAt),
-    });
-    // FAIRNESS B1 — exclude dimension votes on failed comparisons too.
-    // FAIRNESS B4 — exclude votes flagged for low quality.
-    battles = rows
-      .filter(
-        (dv) =>
-          dv.vote.reviewA.status === "COMPLETED" &&
-          dv.vote.reviewB.status === "COMPLETED" &&
-          !dv.vote.qualityFlagged,
-      )
-      .map((dv) => ({
-        a: dv.vote.reviewA.reviewSystem.slug,
-        b: dv.vote.reviewB.reviewSystem.slug,
-        // Same converter as the overall board above — that is the point of
-        // storing both verdicts in one encoding.
-        outcome: outcomeOf(dv.winner),
-      }));
+  if (battles === undefined) {
+    const boards = partitionBoards(await loadBoardRows(executor));
+    battles = dimension === null ? boards.overall : (boards.byDimension.get(dimension) ?? []);
   }
-
-  if (battles.length === 0) return;
 
   // Bradley-Terry only. Online Elo rows are no longer written: the thesis
   // analysis recomputes Elo offline from the vote log to compare against BT,
@@ -461,5 +590,21 @@ export async function snapshotLeaderboard(
   // a number for them.
   const rows = toRows(btCI, "BT", btAnchor);
 
-  if (rows.length > 0) await executor.insert(ratings).values(rows);
+  if (rows.length > 0) {
+    await executor.insert(ratings).values(rows);
+  } else {
+    // Nothing on this board can be ranked (no eligible battles left, or no
+    // connected pair). An empty snapshot has no row to carry its
+    // computed_at, so the only way to stop the leaderboard serving the
+    // previous snapshot as current is to remove this board's BT rows —
+    // the same choice scripts/seed-demo-votes.ts makes when no votes remain.
+    await executor
+      .delete(ratings)
+      .where(
+        and(
+          dimension === null ? isNull(ratings.dimension) : eq(ratings.dimension, dimension),
+          eq(ratings.method, "BT"),
+        ),
+      );
+  }
 }

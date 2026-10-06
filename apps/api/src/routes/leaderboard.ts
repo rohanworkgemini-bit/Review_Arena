@@ -1,10 +1,15 @@
 import { Router } from "express";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { VoteDimensionSchema } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
-import { ratings, papers, reviewSystems, votes } from "../db/schema.js";
+import { ratings, papers, reviewSystems } from "../db/schema.js";
 import { LeaderboardResponseSchema } from "./schemas.js";
 import type { Config } from "../config.js";
+// Circular with votes.ts (which imports invalidateLeaderboardCache from
+// here); safe because neither side touches the other's bindings at module
+// evaluation time.
+import { countEligibleVotes } from "./votes.js";
 
 // The only board served. Online Elo rows are no longer written (see
 // votes.ts snapshotLeaderboard); rows from before that change still sit in
@@ -60,9 +65,22 @@ export function leaderboardRouter(config: Config): Router {
         ? eq(ratings.dimension, dimension)
         : isNull(ratings.dimension);
 
-      // Latest snapshot per system via DISTINCT ON.
+      // The newest snapshot for this board, and only that one. A snapshot is
+      // the batch of rows one snapshotLeaderboard call inserts — a single
+      // INSERT, so every row in it carries the same computed_at (now() is
+      // fixed per transaction). Taking the latest row per system across all
+      // time instead would keep showing a stale rating for a system that
+      // dropped out of the newest fit; here such a system has no row and so
+      // lands in `unranked` below. The max is taken in SQL so computed_at's
+      // microseconds never round-trip through a JS Date.
+      const r2 = alias(ratings, "ratings_latest");
+      const r2DimCondition = dimension ? eq(r2.dimension, dimension) : isNull(r2.dimension);
+      const latestComputedAt = db
+        .select({ at: sql`max(${r2.computedAt})` })
+        .from(r2)
+        .where(and(r2DimCondition, eq(r2.method, method)));
       const latest = await db
-        .selectDistinctOn([ratings.reviewSystemId], {
+        .select({
           reviewSystemId: ratings.reviewSystemId,
           rating: ratings.rating,
           ratingCiLow: ratings.ratingCiLow,
@@ -74,8 +92,13 @@ export function leaderboardRouter(config: Config): Router {
         })
         .from(ratings)
         .innerJoin(reviewSystems, eq(reviewSystems.id, ratings.reviewSystemId))
-        .where(and(dimCondition, eq(ratings.method, method)))
-        .orderBy(ratings.reviewSystemId, desc(ratings.computedAt));
+        .where(
+          and(
+            dimCondition,
+            eq(ratings.method, method),
+            sql`${ratings.computedAt} = (${latestComputedAt})`,
+          ),
+        );
 
       const entries = [...latest]
         .sort((a, b) => b.rating - a.rating)
@@ -107,13 +130,16 @@ export function leaderboardRouter(config: Config): Router {
         .map((s) => ({ systemSlug: s.slug, systemName: s.name }));
 
       const [paperCountRow] = await db.select({ c: sql<number>`count(*)::int` }).from(papers);
-      const [voteCountRow] = await db.select({ c: sql<number>`count(*)::int` }).from(votes);
+      // Votes that count toward the ratings, under the same eligibility rule
+      // as the fit (votes.ts eligibleVoteWhere) — not every row in `votes`,
+      // which would include quality-flagged, dry-run and failed-review votes.
+      const totalVotes = await countEligibleVotes(db);
 
       const result = LeaderboardResponseSchema.parse({
         dimension,
         method,
         totalPapers: paperCountRow?.c ?? 0,
-        totalVotes: voteCountRow?.c ?? 0,
+        totalVotes,
         entries,
         unranked,
         anchor: anchorParse.success ? anchorParse.data : null,

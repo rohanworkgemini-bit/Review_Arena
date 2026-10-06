@@ -30,13 +30,20 @@ import { participants } from "../src/db/schema.js";
 
 const DEFAULT_COUNT = 20;
 
-// Memorable but unguessable enough for a supervised study: word + 4 digits
-// (≈ 200k combinations per word list entry; codes are capability tokens
-// handed out in person, not internet-facing secrets).
+// Memorable but hard to guess: two distinct tree words + 4 digits, e.g.
+// "maple-larch-4821" — 32 × 31 × 9000 ≈ 8.9M codes, ~50× the old
+// word-4digits shape (20 × 9000 = 180k), which was small enough to
+// enumerate against /study/state's 404-vs-200. The API also rate-limits
+// failed code lookups per IP (routes/study.ts). Codes minted in the old
+// shape stay valid — the lookup is an exact match on whatever is stored.
+// The first twenty words are the original list; keep this in sync with
+// deploy/sql/ops/mint-participants.sql.
 const WORDS = [
   "maple", "cedar", "birch", "aspen", "alder", "hazel", "rowan", "olive",
   "pine", "oak", "elm", "fir", "ash", "yew", "beech", "larch",
   "linden", "spruce", "walnut", "willow",
+  "poplar", "cherry", "holly", "juniper", "laurel", "acacia", "cypress", "hemlock",
+  "magnolia", "sequoia", "myrtle", "sumac",
 ];
 
 // Ids are P01, P02, ... — a LABEL ONLY, continuing from the highest that
@@ -64,7 +71,10 @@ function idFor(n: number, prefix: string): string {
 }
 
 function newCode(): string {
-  return `${WORDS[randomInt(WORDS.length)]}-${randomInt(1000, 10000)}`;
+  const first = randomInt(WORDS.length);
+  // Second word drawn from the other 31, so it never repeats the first.
+  const second = (first + 1 + randomInt(WORDS.length - 1)) % WORDS.length;
+  return `${WORDS[first]}-${WORDS[second]}-${randomInt(1000, 10000)}`;
 }
 
 function parseArgs(argv: string[]): { count: number | null; list: boolean; test: boolean } {
@@ -123,10 +133,10 @@ async function main() {
   const ordered = [...existing].sort((a, b) =>
     a.isTest === b.isTest ? a.id.localeCompare(b.id) : a.isTest ? 1 : -1,
   );
-  console.log("participant  | code         | kind");
-  console.log("-------------|--------------|------");
+  console.log("participant  | code                   | kind");
+  console.log("-------------|------------------------|------");
   for (const p of ordered) {
-    console.log(`${p.id.padEnd(12)} | ${p.code.padEnd(12)} | ${p.isTest ? "test" : "real"}`);
+    console.log(`${p.id.padEnd(12)} | ${p.code.padEnd(22)} | ${p.isTest ? "test" : "real"}`);
   }
   const real = existing.filter((p) => !p.isTest).length;
   const tests = existing.length - real;

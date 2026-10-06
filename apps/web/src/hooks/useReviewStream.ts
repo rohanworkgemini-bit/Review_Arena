@@ -9,6 +9,8 @@ import type { StructuredReview } from "@reviewarena/shared-types";
  * Disconnect handling:
  *   - 'done' → close, mark done=true, no auto-reconnect.
  *   - 'error' with payload → surface message, mark error, close.
+ *   - 'error' without payload and readyState CLOSED (non-200 response,
+ *     e.g. 403/404) → terminal immediately; the browser won't reconnect.
  *   - 'error' without payload (transport hiccup) → tolerate up to
  *     STALL_MS of silence, then surface as a stall error so the UI can
  *     offer a retry instead of spinning forever.
@@ -137,6 +139,20 @@ export function useReviewStream(
       if (msg) {
         if (stallTimer.current) clearTimeout(stallTimer.current);
         setState((prev) => ({ ...prev, error: msg }));
+        es.close();
+        return;
+      }
+      // CLOSED after a bare error means the browser gave up for good (non-200
+      // response such as 403/404, or a wrong content type) — it will not
+      // reconnect, so waiting for more errors or the watchdog is pointless.
+      if (es.readyState === EventSource.CLOSED) {
+        if (stallTimer.current) clearTimeout(stallTimer.current);
+        setState((prev) => ({
+          ...prev,
+          error:
+            prev.error ??
+            "Couldn't open the review stream. Use Retry, or reload the page.",
+        }));
         es.close();
         return;
       }

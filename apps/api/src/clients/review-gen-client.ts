@@ -205,9 +205,12 @@ export class ReviewGenClient {
 
     // Parse SSE chunks from the stream. SSE events are separated by
     // blank lines; each event has `event:` and `data:` lines.
+    // A streaming decoder holds back a multi-byte UTF-8 character split
+    // across chunks instead of turning each half into U+FFFD.
+    const decoder = new TextDecoder("utf-8");
     let buffer = "";
     for await (const chunk of respBody) {
-      buffer += chunk.toString("utf8");
+      buffer += decoder.decode(chunk, { stream: true });
       // Process every complete event (terminated by blank line) we have so far.
       let sepIdx;
       while ((sepIdx = buffer.indexOf("\n\n")) >= 0) {
@@ -217,7 +220,8 @@ export class ReviewGenClient {
         if (evt) yield evt;
       }
     }
-    // Flush any final block.
+    // Flush the decoder's held-back bytes, then any final block.
+    buffer += decoder.decode();
     if (buffer.trim()) {
       const evt = parseSseBlock(buffer);
       if (evt) yield evt;

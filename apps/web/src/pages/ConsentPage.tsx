@@ -82,7 +82,7 @@ export function ConsentPage() {
             A participant code, if you were given one
           </span>{" "}
           — invited participants in the controlled study receive a short code
-          (for example <span className="font-mono text-ink">maple-1553</span>)
+          (for example <span className="font-mono text-ink">maple-larch-4821</span>)
           handed out in person. It is not derived from anything about you, but
           it does link together the papers you upload and every comparison you
           make. Whoever handed you the code knows which code is yours, so your

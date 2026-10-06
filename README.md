@@ -3,7 +3,7 @@
 
 ReviewArena is an open platform for benchmarking automated peer review systems through human pairwise comparison and Bradley-Terry ranking.
 
-Chatbot Arena does this for chatbots; ReviewArena does it for paper reviews. Anyone can upload a paper, read two anonymous AI reviews of it side by side, and vote for the better one. The votes build a public leaderboard of review systems. The rating and pairing code is ported from [FastChat](https://github.com/lm-sys/FastChat), the system behind Chatbot Arena.
+Chatbot Arena does this for chatbots; ReviewArena does it for paper reviews. Anyone can upload a paper, read two anonymous AI reviews of it side by side, and vote for the better one. The votes build a public leaderboard of review systems. The rating and pairing code is inspired from [FastChat](https://github.com/lm-sys/FastChat).
 
 ReviewArena's core features include:
 - A side-by-side review arena: upload a PDF or arXiv link, watch two anonymous reviews stream in live from two LLMs, and vote for the more useful one.

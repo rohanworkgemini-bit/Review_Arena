@@ -164,12 +164,25 @@ def _split_sections(md: str) -> dict[str, str]:
     return out
 
 
+# Leading list markers only: "- ", "-foo", "• ", "* ", "+ ", "1. ", "2) ",
+# possibly nested ("- 1. "). A bare digit run is content, not a marker —
+# the old character-set lstrip turned "3D reconstruction" into
+# "D reconstruction" and "10% gain" into "% gain". "*" and "+" need a
+# space so "**Bold**" keeps its emphasis for strip_inline_emphasis; "-"
+# before a digit is a negative number ("-3% drop"), not a bullet.
+_BULLET_RX = re.compile(r"^(?:[-•](?![\d-])\s*|[*+]\s+|\d+[.)]\s+)+")
+_RULE_RX = re.compile(r"^[-*_](?:\s*[-*_]){2,}$")  # --- / *** / ___ separators
+
+
 def _bulletize(text: str) -> list[str]:
     if not text:
         return []
     items: list[str] = []
     for raw in text.split("\n"):
-        cleaned = raw.strip().lstrip("-*•").lstrip("0123456789. )").strip()
+        cleaned = raw.strip()
+        if _RULE_RX.match(cleaned):
+            continue
+        cleaned = _BULLET_RX.sub("", cleaned).strip()
         cleaned = strip_inline_emphasis(cleaned)
         if cleaned:
             items.append(cleaned)

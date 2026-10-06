@@ -385,6 +385,21 @@ export function computeBT(battles: readonly Battle[], opts: BTOptions = {}): BTR
  * contribute no sample for that system, rather than whatever value an
  * unbounded fit stopped at. Percentiles are taken over
  * the samples a system actually has; a system with none stays unranked.
+ *
+ * Anchoring. Every round uses the same origin as the full-data fit
+ * (computeBT), so the percentiles are taken over draws on one scale:
+ *
+ *   - Full fit baseline-anchored (the baseline is in the full-data
+ *     component): each round is shifted so the baseline sits at INIT_RATING.
+ *     A round whose resample leaves the baseline outside its component has
+ *     no way to express its draws on that scale, so the whole round is
+ *     dropped from every system's percentiles. This is the standard
+ *     treatment for replicates in which the statistic is undefined; the
+ *     alternative — mean-centring those rounds — mixes two origins in one
+ *     interval, which is what this used to do. The dropped count is logged.
+ *   - Full fit mean-centred (no baseline, or baseline outside the full-data
+ *     component): every round is mean-centred too, even one where the
+ *     baseline happens to land in the resample's component.
  */
 export function bootstrapBTCI(
   battles: readonly Battle[],
@@ -395,9 +410,16 @@ export function bootstrapBTCI(
   if (battles.length === 0) return new Map();
 
   const c = opts.c ?? DEFAULT_BT;
-  const baselineSlug = opts.baselineSlug ?? null;
   const { models, rows } = preprocessForBT(battles);
   if (models.length < 2) return new Map();
+
+  // Mirror computeBT's anchoring decision on the full data.
+  const requestedBaseline = opts.baselineSlug || null;
+  const fullMembers = largestStronglyConnected(rows, models.length);
+  const baselineIdx = requestedBaseline === null ? -1 : models.indexOf(requestedBaseline);
+  const baselineAnchored =
+    fullMembers.length >= 2 && baselineIdx >= 0 && fullMembers.includes(baselineIdx);
+  const roundBaseline = baselineAnchored ? requestedBaseline : null;
 
   const voteCount = new Map<string, number>();
   for (const { a, b } of battles) {
@@ -410,6 +432,8 @@ export function bootstrapBTCI(
   const samples = new Map<string, number[]>();
   for (const m of models) samples.set(m, []);
 
+  let usedRounds = 0;
+  let droppedNoAnchor = 0;
   for (let round = 0; round < rounds; round++) {
     const counts = multinomialCounts(battles.length, probs, rng);
     const resampled: BTRow[] = [];
@@ -420,11 +444,26 @@ export function bootstrapBTCI(
 
     const members = largestStronglyConnected(resampled, models.length);
     if (members.length < 2) continue;
+    if (baselineAnchored && !members.includes(baselineIdx)) {
+      droppedNoAnchor++;
+      continue;
+    }
     const fitRows = componentRows(resampled, members, models.length);
     const { pi } = fitBT(fitRows, members.length, opts.maxIter ?? BT_MAX_ITER, opts.tol ?? BT_TOL);
-    const { ratings } = scaleAndOffset(pi, members, models, c, baselineSlug);
+    const { ratings } = scaleAndOffset(pi, members, models, c, roundBaseline);
     for (const [slug, rating] of ratings) samples.get(slug)!.push(rating);
+    usedRounds++;
   }
+
+  logger.debug(
+    {
+      requestedRounds: rounds,
+      usedRounds,
+      droppedNoAnchor,
+      anchor: baselineAnchored ? "BASELINE" : "MEAN",
+    },
+    "bt_bootstrap_complete",
+  );
 
   return intervalsFrom(samples, voteCount);
 }
@@ -479,16 +518,6 @@ function intervalsFrom(
     });
   }
   return out;
-}
-
-/** Win probability implied by two BT ratings. */
-export function btWinProbability(
-  ratingA: number,
-  ratingB: number,
-  c: BTConstants = DEFAULT_BT,
-): number {
-  const alpha = Math.log(c.BASE) / c.SCALE;
-  return 1 / (1 + Math.exp(alpha * (ratingB - ratingA)));
 }
 
 /**

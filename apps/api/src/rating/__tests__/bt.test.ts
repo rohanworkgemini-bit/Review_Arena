@@ -6,7 +6,6 @@ import {
   preprocessForBT,
   largestStronglyConnected,
   multinomialCounts,
-  btWinProbability,
   mulberry32,
   outcomeOf,
   percentile,
@@ -60,7 +59,9 @@ describe("computeBT", () => {
 
   it("implies exactly the observed win rate", () => {
     const { ratings } = computeBT(record("a", "b", 3, 1));
-    expect(btWinProbability(ratings.get("a")!, ratings.get("b")!)).toBeCloseTo(0.75, 9);
+    const alpha = Math.log(DEFAULT_BT.BASE) / DEFAULT_BT.SCALE;
+    const pA = 1 / (1 + Math.exp(alpha * (ratings.get("b")! - ratings.get("a")!)));
+    expect(pA).toBeCloseTo(0.75, 9);
   });
 
   it("is invariant to battle order — the property Elo does not have", () => {
@@ -250,6 +251,52 @@ describe("bootstrapBTCI", () => {
     const ci = bootstrapBTCI(battles, 100, { baselineSlug: "mid" });
     const iv = ci.get("mid")!;
     expect(iv.ciHigh - iv.ciLow).toBeCloseTo(0, 9);
+  });
+
+  describe("anchoring matches the full-data fit in every round", () => {
+    // `base` only ever tied `mid`, once. Any round that draws that tie puts
+    // base level with mid exactly (a lone tie row gives pi_base = pi_mid),
+    // so with base pinned to 1000 mid is 1000 too. Rounds that miss the tie
+    // (~37% of them) have no baseline; if they were mean-centred instead,
+    // mid's samples would scatter away from 1000.
+    const fragile = [...battles, battle("base", "mid", 0.5)];
+
+    it("is baseline-anchored on the full data", () => {
+      expect(computeBT(fragile, { baselineSlug: "base" }).anchor).toBe("BASELINE");
+    });
+
+    it("drops rounds without the baseline instead of mean-centring them", () => {
+      const ci = bootstrapBTCI(fragile, 200, { baselineSlug: "base" }, mulberry32(11));
+      const mid = ci.get("mid")!;
+      expect(mid.ciLow).toBeCloseTo(1000, 6);
+      expect(mid.ciHigh).toBeCloseTo(1000, 6);
+      expect(mid.rating).toBeCloseTo(1000, 6);
+      // And the other systems' intervals sit on the same origin: strong's
+      // gap over mid, not over the field mean.
+      const point = computeBT(fragile, { baselineSlug: "base" }).ratings;
+      expect(ci.get("strong")!.ciLow).toBeLessThan(point.get("strong")!);
+      expect(ci.get("strong")!.ciHigh).toBeGreaterThan(point.get("strong")!);
+    });
+
+    it("mean-centres every round when the full fit is mean-centred", () => {
+      // Baseline absent from the board: no round may pin anything.
+      const ci = bootstrapBTCI(fragile, 100, { baselineSlug: "absent" }, mulberry32(11));
+      const free = bootstrapBTCI(fragile, 100, {}, mulberry32(11));
+      for (const [slug, iv] of free) {
+        expect(ci.get(slug)!.ciLow).toBe(iv.ciLow);
+        expect(ci.get(slug)!.ciHigh).toBe(iv.ciHigh);
+      }
+    });
+
+    it("leaves the CI to the point fit when no round contributes a sample", () => {
+      // Zero usable rounds (the limit of every round dropping its baseline):
+      // leaderboardBT must still return the full-data fit.
+      const { rows, anchor } = leaderboardBT(fragile, 0, { baselineSlug: "base" });
+      expect(anchor).toBe("BASELINE");
+      const iv = rows.get("strong")!;
+      expect(iv.ciLow).toBe(iv.rating);
+      expect(iv.ciHigh).toBe(iv.rating);
+    });
   });
 });
 

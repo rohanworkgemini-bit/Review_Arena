@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, lt, ne, or } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
 import {
@@ -9,7 +9,11 @@ import {
   reviews,
   studyComparisons,
 } from "../db/schema.js";
-import type { JudgeClient, PairJudgeResult } from "../clients/judge-client.js";
+import {
+  JudgeNonRetryableError,
+  type JudgeClient,
+  type PairJudgeResult,
+} from "../clients/judge-client.js";
 import { STUDY_SLUGS } from "../study/rotation.js";
 import {
   PANEL_CONCURRENCY,
@@ -18,6 +22,7 @@ import {
   type PanelMember,
 } from "./judge-panel.js";
 import { logger } from "../logger.js";
+import { STALE_JUDGE_AFTER_MS } from "./sweeper.js";
 import { getJudgeModels, isJudgeEnabled } from "../settings.js";
 
 // Judge-panel pipeline (2026-09; study papers only).
@@ -388,7 +393,8 @@ async function persistJudgeVerdict(
 
 /**
  * Manual re-judge for a study paper (admin endpoint / backfill). Resets the
- * paper's pairs to PENDING and runs the panel again — only the members
+ * paper's pairs to PENDING (except pairs a live panel run holds RUNNING)
+ * and runs the panel again — only the members
  * without a verdict unless `force`. Arena papers are a logged no-op.
  */
 export async function scorePaper(paperId: string, judge: JudgeClient, force = false): Promise<void> {
@@ -405,10 +411,22 @@ export async function scorePaper(paperId: string, judge: JudgeClient, force = fa
   // paper has rotation comparisons.
   const parsed = paper.parsedStructure as unknown as ParsedPaper;
 
+  // Reset only pairs no live panel run owns. A RUNNING row is claimed by an
+  // in-flight scorePairIfReady; flipping it back to PENDING would let
+  // claimPair succeed again and start a second, billable panel run on the
+  // same pair. RUNNING rows older than the sweeper's stale-claim cutoff
+  // are treated as stranded (same rule the sweeper uses) and reset too.
+  const staleJudgeCutoff = new Date(Date.now() - STALE_JUDGE_AFTER_MS);
   await db
     .update(reviews)
     .set({ judgeStatus: "PENDING", updatedAt: new Date() })
-    .where(and(eq(reviews.paperId, paperId), eq(reviews.status, "COMPLETED")));
+    .where(
+      and(
+        eq(reviews.paperId, paperId),
+        eq(reviews.status, "COMPLETED"),
+        or(ne(reviews.judgeStatus, "RUNNING"), lt(reviews.updatedAt, staleJudgeCutoff)),
+      ),
+    );
 
   await scorePairIfReady(paperId, judge, renderPaperText(parsed), force);
 }
@@ -438,6 +456,7 @@ async function judgePairWithRetry(
     try {
       return await judge.judgePair(reviewA, reviewB, paperText, model);
     } catch (err) {
+      if (err instanceof JudgeNonRetryableError) throw err;
       lastErr = err;
       if (i < attempts - 1) {
         await new Promise((r) => setTimeout(r, 500 * 2 ** i));
@@ -447,7 +466,14 @@ async function judgePairWithRetry(
   throw lastErr;
 }
 
+// The judge reads exactly the paper text the reviewers were given: the
+// canonical text review-gen renders once at parse time (sections plus
+// figure/table captions, tables and references). Until 2026-10-06 the judge
+// got a TS re-render with sections only, so it could not check claims about
+// tables or cited work; verdicts before that date used that shorter text.
+// The fallback is for papers parsed before canonicalText existed.
 export function renderPaperText(parsed: ParsedPaper): string {
+  if (parsed.canonicalText) return parsed.canonicalText;
   const parts: string[] = [];
   if (parsed.title) parts.push(`# ${parsed.title}`);
   if (parsed.abstract) parts.push(`Abstract: ${parsed.abstract}`);

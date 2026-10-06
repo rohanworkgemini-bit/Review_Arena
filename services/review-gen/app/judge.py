@@ -44,6 +44,17 @@ JUDGE_RETRY_MAX = 5
 JUDGE_RETRY_BASE_SEC = 1.0
 
 
+class JudgeTransientError(RuntimeError):
+    """A judge pass still failed after every retry on a transient error
+    (rate limit, timeout, malformed JSON). Retrying later may succeed."""
+
+
+class JudgeNonRetryableError(RuntimeError):
+    """The judge failed in a way that repeats identically on every call
+    (auth, unknown model, context-length rejection, refusal, missing key).
+    /judge-pair answers 422 for it instead of 500."""
+
+
 @dataclass
 class JudgeResult:
     """One review's scores within a pairwise verdict."""
@@ -132,7 +143,7 @@ def _provider_for(model: str) -> _Provider:
     key = model.lower()
     matches = [prefix for prefix in _PROVIDERS if key.startswith(prefix)]
     if not matches:
-        raise RuntimeError(
+        raise JudgeNonRetryableError(
             f"no judge provider for model={model!r}; known prefixes: "
             f"{', '.join(sorted(_PROVIDERS))}"
         )
@@ -299,8 +310,9 @@ def _one_judge_pass(
     model: str,
 ) -> dict:
     """Single judge call with retry on transient errors. Dispatches on the
-    provider kind. Returns the parsed JSON dict. Raises RuntimeError if all
-    retries fail. `client` is the provider SDK client (None for Gemini)."""
+    provider kind. Returns the parsed JSON dict. Raises JudgeTransientError
+    if all retries fail; a non-transient error is re-raised as-is on the
+    first attempt. `client` is the provider SDK client (None for Gemini)."""
     last_err: Exception | None = None
     for attempt in range(JUDGE_RETRY_MAX):
         try:
@@ -350,7 +362,7 @@ def _one_judge_pass(
                     attempt + 1, JUDGE_RETRY_MAX, e, sleep_s,
                 )
                 time.sleep(sleep_s)
-    raise RuntimeError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
+    raise JudgeTransientError(f"judge call failed after {JUDGE_RETRY_MAX} attempts: {last_err}")
 
 
 # There is no default judge model (panel design, 2026-09, set BEFORE any
@@ -370,7 +382,7 @@ def _client_for(model: str, provider: _Provider) -> Any:
     required key is missing; no mock fallback."""
     api_key = os.environ.get(provider.env)
     if not api_key:
-        raise RuntimeError(
+        raise JudgeNonRetryableError(
             f"judge with model={model!r} requires {provider.env} "
             "in the environment. There is no mock fallback."
         )
@@ -480,8 +492,8 @@ def judge_pair(
 ) -> PairJudgeResult:
     """Compare two reviews of one paper with one panel member. Two
     order-swapped passes; a preference stands only where both orderings
-    agree (else TIE). Raises RuntimeError if no pass returns a valid
-    payload."""
+    agree (else TIE). Raises JudgeNonRetryableError if every pass failed
+    non-transiently, else RuntimeError if no pass returns a valid payload."""
     provider = _provider_for(model)
     client = _client_for(model, provider)
 
@@ -493,6 +505,7 @@ def judge_pair(
 
     valid: list[tuple[dict, str]] = []  # (payload, a_position)
     raw_passes: list[dict] = []
+    hard_errors: list[Exception] = []  # non-transient pass failures
     for first, second, a_pos in orders:
         system_prompt, user_prompt = _build_pair_prompts(paper_text, first, second)
         try:
@@ -504,8 +517,14 @@ def judge_pair(
                 user_prompt=user_prompt,
                 model=model,
             )
-        except RuntimeError as e:
+        except JudgeTransientError as e:
             logger.warning("pairwise judge pass (A as %s) failed: %s", a_pos, e)
+            continue
+        except Exception as e:  # noqa: BLE001 — non-transient (auth, 400, refusal, ...)
+            # Still run the other pass: one good pass is a usable degraded
+            # verdict (passes_used=1), same as after a transient failure.
+            logger.warning("pairwise judge pass (A as %s) failed permanently: %s", a_pos, e)
+            hard_errors.append(e)
             continue
         raw_passes.append({"a_position": a_pos, "payload": data})
         if _valid_pair_pass(data):
@@ -517,6 +536,12 @@ def judge_pair(
             )
 
     if not valid:
+        if len(hard_errors) == len(orders):
+            # Every pass failed the same way it would on a retry; tell the
+            # caller not to bother.
+            raise JudgeNonRetryableError(
+                f"both pairwise judge passes failed permanently: {hard_errors[-1]!r}"
+            )
         raise RuntimeError("both pairwise judge passes failed or returned invalid payloads")
 
     def to_ab(pref: str, a_pos: str) -> str:

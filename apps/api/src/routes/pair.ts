@@ -123,8 +123,9 @@ export function pairRouter(config: Config): Router {
       // already has exactly 2 review rows for the chosen pair. They may
       // still be GENERATING — that's fine, the browser opens SSE streams
       // to /reviews/stream/:reviewId for token-level rendering and only
-      // needs the pairToken now. We accept GENERATING and COMPLETED rows
-      // here; FAILED/PENDING are skipped.
+      // needs the pairToken now. Fresh selection accepts GENERATING and
+      // COMPLETED rows; FAILED/PENDING are skipped (a resumed pair is
+      // served whatever its status — see below).
       const enabled = await db.query.reviewSystems.findMany({
         where: eq(reviewSystems.enabled, true),
         columns: { id: true },
@@ -136,6 +137,60 @@ export function pairRouter(config: Config): Router {
             with: { reviewSystem: true },
           })
         : [];
+
+      // ─── Resume an in-flight round ───────────────────────────────────────
+      // LMArena semantics: a pair is locked from the moment the user starts
+      // the round until they vote. Refreshing the page should keep showing
+      // the same pair — otherwise the user thinks "let me re-read review A"
+      // and is surprised by a different one. The frontend persists the
+      // pairToken in sessionStorage and sends it back here on every reload.
+      //
+      // Checked BEFORE the readiness gate below and against every review of
+      // the paper, whatever its status: once one side of the pair FAILED,
+      // the paper has fewer than two GENERATING/COMPLETED reviews, and the
+      // gate would answer NotReady forever — the UI would spin out its
+      // whole generation budget on a pair it could already show (it renders
+      // a FAILED side as an error and still lets the user vote).
+      const resumeTokenRaw = req.query.pairToken;
+      if (typeof resumeTokenRaw === "string" && resumeTokenRaw.length > 0) {
+        const decoded = verifyPairToken(resumeTokenRaw, config.PAIR_TOKEN_SECRET);
+        if (
+          decoded &&
+          decoded.paperId === paperId &&
+          decoded.sessionId === req.sessionId
+        ) {
+          const reviewA = allReviews.find((r) => r.id === decoded.reviewAId);
+          const reviewB = allReviews.find((r) => r.id === decoded.reviewBId);
+          if (reviewA && reviewB) {
+            res.json({
+              paper: {
+                id: paper.id,
+                title: paper.userTitle ?? paper.extractedTitle,
+                conference: paper.conference,
+              },
+              reviewA: {
+                reviewId: reviewA.id,
+                structured: reviewA.structured ?? null,
+                rawOutput: reviewA.rawOutput ?? null,
+                status: reviewA.status,
+              },
+              reviewB: {
+                reviewId: reviewB.id,
+                structured: reviewB.structured ?? null,
+                rawOutput: reviewB.rawOutput ?? null,
+                status: reviewB.status,
+              },
+              pairToken: resumeTokenRaw,
+            });
+            return;
+          }
+        }
+        // Token was malformed, expired, for a different session, or pointed
+        // at reviews that have since been deleted (or whose system was
+        // disabled). Fall through to fresh selection — silent recovery
+        // rather than 4xx.
+      }
+
       const eligible = allReviews.filter(
         (r) => r.status === "GENERATING" || r.status === "COMPLETED",
       );
@@ -145,41 +200,6 @@ export function pairRouter(config: Config): Router {
           message: `paper ${paperId} only has ${eligible.length} completed review(s).`,
         });
         return;
-      }
-
-      // ─── Resume an in-flight round ───────────────────────────────────────
-      // LMArena semantics: a pair is locked from the moment the user starts
-      // the round until they vote. Refreshing the page should keep showing
-      // the same pair — otherwise the user thinks "let me re-read review A"
-      // and is surprised by a different one. The frontend persists the
-      // pairToken in sessionStorage and sends it back here on every reload.
-      const resumeTokenRaw = req.query.pairToken;
-      if (typeof resumeTokenRaw === "string" && resumeTokenRaw.length > 0) {
-        const decoded = verifyPairToken(resumeTokenRaw, config.PAIR_TOKEN_SECRET);
-        if (
-          decoded &&
-          decoded.paperId === paperId &&
-          decoded.sessionId === req.sessionId
-        ) {
-          const reviewA = eligible.find((r) => r.id === decoded.reviewAId);
-          const reviewB = eligible.find((r) => r.id === decoded.reviewBId);
-          if (reviewA && reviewB) {
-            res.json({
-              paper: {
-                id: paper.id,
-                title: paper.userTitle ?? paper.extractedTitle,
-                conference: paper.conference,
-              },
-              reviewA: { reviewId: reviewA.id, structured: reviewA.structured, rawOutput: reviewA.rawOutput ?? null },
-              reviewB: { reviewId: reviewB.id, structured: reviewB.structured, rawOutput: reviewB.rawOutput ?? null },
-              pairToken: resumeTokenRaw,
-            });
-            return;
-          }
-        }
-        // Token was malformed, expired, for a different session, or pointed
-        // at reviews that have since been deleted. Fall through to fresh
-        // selection — silent recovery rather than 4xx.
       }
 
       const candidates: SystemForPairing[] = eligible.map((r) => ({

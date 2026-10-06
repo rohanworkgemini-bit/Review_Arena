@@ -1,3 +1,4 @@
+
 """Claude (Anthropic) base adapter.
 
 Native Anthropic SDK — cheaper and more reliable than going through
@@ -38,6 +39,7 @@ from app.adapters.base import (
     PROVIDER_MAX_RETRIES,
     StreamEvent,
     friendly_error,
+    raise_if_truncated,
 )
 from app.schemas import ParsedPaper
 
@@ -125,6 +127,7 @@ class ClaudeAdapter(Adapter):
             for delta in stream.text_stream:
                 if delta:
                     chunks.append(delta)
+            raise_if_truncated(stream.get_final_message().stop_reason)
         # text_stream yields only text blocks; thinking blocks are the
         # model's internal reasoning and never reach the user-facing output.
         raw = "".join(chunks).strip()
@@ -146,7 +149,8 @@ class ClaudeAdapter(Adapter):
                     if delta:
                         chunks.append(delta)
                         yield StreamEvent(type="token", text=delta)
-            raw = "".join(chunks).strip()
+                raise_if_truncated(stream.get_final_message().stop_reason)
+            raw ="".join(chunks).strip()
             review = parse_markdown_review(raw, scale=ScoreScale.ICLR)
             yield StreamEvent(
                 type="done", result=review, raw_output=raw, metrics=self._metrics(prompt, raw)

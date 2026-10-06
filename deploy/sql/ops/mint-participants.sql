@@ -28,7 +28,11 @@
 --   id   'P' (or 'T' for dry runs) + zero-padded sequence, continuing from
 --        the highest existing number of that prefix: P01..P20 already there
 --        means the next real batch is P21..P40
---   code '<tree word>-<4 digits>'
+--   code '<tree word>-<other tree word>-<4 digits>', e.g. maple-larch-4821
+--        (32 x 31 x 9000 ~ 8.9M codes). Before 2026-10 it was
+--        '<tree word>-<4 digits>' (20 x 9000 = 180k, enumerable against the
+--        404-vs-200 of /study/state); codes already minted in that shape
+--        stay valid, nothing here rewrites existing rows.
 --
 -- The sequence is a LABEL ONLY. Until 2026-09 the P-number doubled as a
 -- schedule -- P01 meant rotations R1 then R2 -- which is what capped the
@@ -64,8 +68,12 @@ DECLARE
   words     text[] := ARRAY[
     'maple','cedar','birch','aspen','alder','hazel','rowan','olive',
     'pine','oak','elm','fir','ash','yew','beech','larch',
-    'linden','spruce','walnut','willow'
+    'linden','spruce','walnut','willow',
+    'poplar','cherry','holly','juniper','laurel','acacia','cypress','hemlock',
+    'magnolia','sequoia','myrtle','sumac'
   ];
+  nwords    int := array_length(words, 1);
+  w1        int;
   next_n    int;
   made      int := 0;
   attempts  int := 0;
@@ -103,8 +111,12 @@ BEGIN
 
     new_id := prefix || lpad(next_n::text, 2, '0');
 
-    -- 1000..9999, matching randomInt(1000, 10000) in the script.
-    new_code := words[1 + floor(random() * array_length(words, 1))::int]
+    -- Two distinct words + 1000..9999, matching newCode() in the script.
+    -- The second index is offset from the first by 1..nwords-1 (mod
+    -- nwords), so the words never repeat.
+    w1 := floor(random() * nwords)::int;
+    new_code := words[1 + w1]
+                || '-' || words[1 + (w1 + 1 + floor(random() * (nwords - 1))::int) % nwords]
                 || '-' || (1000 + floor(random() * 9000))::int::text;
 
     -- Only the code can collide; the id is sequential and checked above.

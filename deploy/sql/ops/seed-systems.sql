@@ -50,7 +50,7 @@ VALUES
   (gen_random_uuid()::text, 'gpt-5.6-terra', 'GPT-5.6 Terra',
    'OpenAI GPT-5.6 Terra (balanced tier of the 5.6 family) with our zero-shot reviewer prompt.',
    'gpt-5.6-terra',
-   '{"model":"gpt-5.6-terra","use_max_completion_tokens":true}'::jsonb, true),
+   '{"model":"gpt-5.6-terra"}'::jsonb, true),
 
   (gen_random_uuid()::text, 'claude-sonnet-5', 'Claude Sonnet 5',
    'Anthropic Claude Sonnet 5 (mid tier) via the native Anthropic SDK, adaptive thinking enabled.',

@@ -16,11 +16,17 @@ import { db } from "../db/client.js";
 import { reviews } from "../db/schema.js";
 import { logger } from "../logger.js";
 
-const STALE_AFTER_MS = 15 * 60_000;
+// Measured from the moment generation actually STARTED: both generation
+// paths (the SSE stream route and generateIntoReview) stamp updatedAt when
+// they begin a run, so a row precreated long before its stream opened is
+// not swept the instant generation begins. Each run's final COMPLETED /
+// FAILED write is guarded on that stamp (see claimGeneration), so a run
+// swept here and then retried cannot overwrite the newer run's result.
+export const STALE_AFTER_MS = 15 * 60_000;
 // A judge claim covers the whole six-member panel: each member is retried
 // up to 4× against an 8-minute per-call deadline, so a healthy-but-slow
 // panel can legitimately hold RUNNING for ~30 min. 90 min leaves margin.
-const STALE_JUDGE_AFTER_MS = 90 * 60_000;
+export const STALE_JUDGE_AFTER_MS = 90 * 60_000;
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 
 async function sweepOnce(): Promise<void> {

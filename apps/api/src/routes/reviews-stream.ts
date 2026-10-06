@@ -15,6 +15,7 @@ import { db } from "../db/client.js";
 import type { ReviewGenClient } from "../clients/review-gen-client.js";
 import type { JudgeClient } from "../clients/judge-client.js";
 import { renderPaperText, scorePairIfReady } from "../pipeline/score-paper.js";
+import { claimGeneration, isCurrentRun } from "../pipeline/orchestrator.js";
 import { logger } from "../logger.js";
 
 // SSE frame schemas for type safety
@@ -141,16 +142,9 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       return;
     }
 
-    // Single-flight per reviewId. If another request is already invoking
-    // the model for this reviewId, wait for it; then short-circuit to
-    // the COMPLETED replay branch (or surface the error it landed on).
-    const existing = inFlightStreams.get(reviewId);
-    if (existing) {
-      try {
-        await existing;
-      } catch {
-        /* primary handler already wrote FAILED — fall through */
-      }
+    // Replays a review's current terminal state (or the error it landed on)
+    // to an opener that did not run the model itself.
+    const replayFinal = async () => {
       const final = await db.query.reviews.findFirst({
         where: eq(reviews.id, reviewId),
       });
@@ -166,8 +160,54 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
         sse("error", { message: final?.errorMessage ?? "primary stream failed" });
       }
       res.end();
+    };
+
+    // Single-flight per reviewId. If another request is already invoking
+    // the model for this reviewId, wait for it; then short-circuit to
+    // the COMPLETED replay branch (or surface the error it landed on).
+    const existing = inFlightStreams.get(reviewId);
+    if (existing) {
+      try {
+        await existing;
+      } catch {
+        /* primary handler already wrote FAILED — fall through */
+      }
+      await replayFinal().catch((err: unknown) => next(err));
       return;
     }
+
+    // Register synchronously — no await between the get() above and this
+    // set() — so two concurrent openers can never both pass the check.
+    let releaseFlight!: () => void;
+    const flight = new Promise<void>((resolve) => {
+      releaseFlight = resolve;
+    });
+    inFlightStreams.set(reviewId, flight);
+    const release = () => {
+      if (inFlightStreams.get(reviewId) === flight) inFlightStreams.delete(reviewId);
+      releaseFlight();
+    };
+
+    // Atomically (re)enter GENERATING and stamp updatedAt with this run's
+    // marker — always, even if the row was already GENERATING, so the
+    // sweeper's clock starts now (see claimGeneration). The conditional
+    // UPDATE also closes the cross-check window: if the row went terminal
+    // since we read it (a previous run just finished), replay instead of
+    // re-billing the model.
+    let runStamp: Date | null;
+    try {
+      runStamp = await claimGeneration(review.id);
+    } catch (err) {
+      release();
+      next(err);
+      return;
+    }
+    if (!runStamp) {
+      release();
+      await replayFinal().catch((err: unknown) => next(err));
+      return;
+    }
+    const stamp: Date = runStamp;
 
     sendHeaders();
 
@@ -215,13 +255,6 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       }, IDLE_TIMEOUT_MS);
     };
 
-    if (review.status !== "GENERATING") {
-      await db
-        .update(reviews)
-        .set({ status: "GENERATING", errorMessage: null, updatedAt: new Date() })
-        .where(eq(reviews.id, review.id));
-    }
-
     const work = (async () => {
       let accumulated = "";
       const startedAt = Date.now();
@@ -248,7 +281,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
               generation_ms: evt.generationMs,
             });
 
-            await db
+            const written = await db
               .update(reviews)
               .set({
                 status: "COMPLETED",
@@ -257,13 +290,27 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
                 generationMs: evt.generationMs,
                 // FAIRNESS A4 — per-generation token accounting.
                 inputTokensSent: evt.metrics?.inputTokens ?? null,
-                inputTokensConsumed: evt.metrics?.inputTokens ?? null,
+                // review-gen reports only our own pre-send count, not the
+                // provider's billed usage, so there is no honest value here.
+                inputTokensConsumed: null,
                 contextWindow: evt.metrics?.contextWindow ?? null,
                 outputTokens: evt.metrics?.outputTokens ?? null,
                 timeToFirstTokenMs: firstTokenMs,
                 updatedAt: new Date(),
               })
-              .where(eq(reviews.id, review.id));
+              // Only if this is still the current run (not swept + retried).
+              .where(isCurrentRun(review.id, stamp))
+              .returning({ id: reviews.id });
+            if (written.length === 0) {
+              logger.warn({ reviewId: review.id }, "stream result discarded: run superseded");
+              sse("error", {
+                type: "error",
+                code: "GENERATION_FAILED",
+                message: "This generation was cancelled after stalling — reload to see the current state.",
+                retriable: true,
+              });
+              continue;
+            }
 
             logger.info(
               {
@@ -315,7 +362,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
                 rawOutput: accumulated || null,
                 updatedAt: new Date(),
               })
-              .where(eq(reviews.id, review.id));
+              .where(isCurrentRun(review.id, stamp));
 
             logger.warn(
               { reviewId: review.id, code, message: evt.message },
@@ -353,7 +400,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
         await db
           .update(reviews)
           .set({ status: "FAILED", errorMessage: message, updatedAt: new Date() })
-          .where(eq(reviews.id, review.id))
+          .where(isCurrentRun(review.id, stamp))
           .catch(() => {/* best effort */});
 
         logger.error(
@@ -375,7 +422,6 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       }
     })();
 
-    inFlightStreams.set(reviewId, work);
     try {
       await work;
     } catch (err) {
@@ -383,7 +429,7 @@ export function reviewsStreamRouter(deps: ReviewsStreamDeps): Router {
       // that still escapes gets logged, never rethrown (see above).
       logger.error({ err, reviewId }, "stream_handler_escaped_error");
     } finally {
-      inFlightStreams.delete(reviewId);
+      release();
       req.off("close", onClose);
       try {
         res.end();

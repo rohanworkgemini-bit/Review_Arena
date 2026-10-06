@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, type SQL } from "drizzle-orm";
 import type { ParsedPaper } from "@reviewarena/shared-types";
 import { db } from "../db/client.js";
 import { reviews, reviewSystems, type Paper, type ReviewSystem } from "../db/schema.js";
@@ -56,6 +56,8 @@ export function makeOrchestrator(
       // browser can open SSE streams keyed by reviewId. Always inserts
       // fresh rows — every upload gets a new pair, no idempotency on
       // (paper, system). The user wants fresh reviews on every upload.
+      // An empty list creates nothing (there is no "all systems"
+      // fallback); callers must treat fewer than 2 rows as a failure.
       if (slugs.length === 0) return [];
       const enabled = await db.query.reviewSystems.findMany({
         where: eq(reviewSystems.enabled, true),
@@ -85,6 +87,46 @@ export function makeOrchestrator(
       return out;
     },
   };
+}
+
+/**
+ * Start one generation run on a review row: (re)enter GENERATING and stamp
+ * updatedAt with a fresh per-run marker, atomically and only if the row is
+ * still startable (PENDING or GENERATING — never over a COMPLETED/FAILED
+ * row). Returns the marker, or null when the row was not claimable.
+ *
+ * Two jobs:
+ *  - The stuck-row sweeper ages GENERATING rows by updatedAt, so this stamp
+ *    makes its 15-minute clock run from when generation actually started
+ *    rather than from row creation (rows are precreated at upload time and
+ *    may sit for a while before their stream opens).
+ *  - The marker identifies THIS run. The final COMPLETED/FAILED write is
+ *    guarded by `isCurrentRun` (status still GENERATING AND updatedAt still
+ *    equal to our marker), so a run the sweeper already failed — and that
+ *    was then retried, which re-stamps updatedAt — can no longer clobber
+ *    the newer run's result when it eventually returns.
+ * Nothing else writes updatedAt on a GENERATING row while a run is live
+ * (judge claims only touch COMPLETED rows), so the marker is stable.
+ */
+export async function claimGeneration(reviewId: string): Promise<Date | null> {
+  // JS Dates are millisecond-precision, which timestamptz round-trips
+  // exactly, so equality on the stamp is reliable.
+  const runStamp = new Date();
+  const claimed = await db
+    .update(reviews)
+    .set({ status: "GENERATING", errorMessage: null, updatedAt: runStamp })
+    .where(and(eq(reviews.id, reviewId), inArray(reviews.status, ["PENDING", "GENERATING"])))
+    .returning({ id: reviews.id });
+  return claimed.length > 0 ? runStamp : null;
+}
+
+/** WHERE clause for a run's terminal write: only if it is still the current run. */
+export function isCurrentRun(reviewId: string, runStamp: Date): SQL {
+  return and(
+    eq(reviews.id, reviewId),
+    eq(reviews.status, "GENERATING"),
+    eq(reviews.updatedAt, runStamp),
+  )!;
 }
 
 async function generateOne(
@@ -129,14 +171,20 @@ export async function generateIntoReview(
   judge?: JudgeClient,
   paperText?: string,
 ): Promise<void> {
+  let runStamp: Date | null = null;
   try {
+    runStamp = await claimGeneration(reviewId);
+    if (!runStamp) {
+      logger.warn({ reviewId }, "generateIntoReview: row not startable (already terminal); skipping");
+      return;
+    }
     const result = await client.generate(
       system.adapterKey,
       parsed,
       system.config ?? {},
       paper.conference,
     );
-    await db
+    const written = await db
       .update(reviews)
       .set({
         status: "COMPLETED",
@@ -145,12 +193,20 @@ export async function generateIntoReview(
         generationMs: result.generationMs,
         // FAIRNESS A4 — per-generation token accounting.
         inputTokensSent: result.metrics?.inputTokens ?? null,
-        inputTokensConsumed: result.metrics?.inputTokens ?? null,
+        // review-gen reports only our own pre-send count, not the
+        // provider's billed usage, so there is no honest value for this.
+        inputTokensConsumed: null,
         contextWindow: result.metrics?.contextWindow ?? null,
         outputTokens: result.metrics?.outputTokens ?? null,
         updatedAt: new Date(),
       })
-      .where(eq(reviews.id, reviewId));
+      .where(isCurrentRun(reviewId, runStamp))
+      .returning({ id: reviews.id });
+    if (written.length === 0) {
+      // Swept to FAILED (and possibly retried) while we were generating.
+      logger.warn({ reviewId }, "generation result discarded: run superseded");
+      return;
+    }
 
     // Fire pairwise judging now, in the background. The review is COMPLETED
     // in the DB so /pair can already serve it; the judge compares both
@@ -168,10 +224,14 @@ export async function generateIntoReview(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    logger.warn({ err, reviewId, adapter: system.adapterKey }, "generation failed");
+    // If the claim itself failed (no stamp), fall back to the unguarded
+    // write so the row cannot be left GENERATING.
     await db
       .update(reviews)
       .set({ status: "FAILED", errorMessage: message, updatedAt: new Date() })
-      .where(eq(reviews.id, reviewId));
+      .where(runStamp ? isCurrentRun(reviewId, runStamp) : eq(reviews.id, reviewId))
+      .catch((e: unknown) => logger.error({ err: e, reviewId }, "failed to record generation failure"));
     // Don't rethrow — one failing adapter shouldn't abort the others.
   }
 }

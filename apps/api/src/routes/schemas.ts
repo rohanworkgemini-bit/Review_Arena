@@ -157,7 +157,7 @@ export type AdminReviewSystemsListResponse = z.infer<typeof AdminReviewSystemsLi
 export const AdminRegenResponseSchema = z.object({
   ok: z.boolean(),
   paperId: CuidSchema,
-  dropped: z.number().int(),
+  retried: z.number().int(),
   message: z.string(),
 });
 

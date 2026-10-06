@@ -25,6 +25,10 @@ export interface PairJudgeResult {
 // There is no default judge model: the judge is a panel of the six study
 // systems (see pipeline/judge-panel.ts), and every call names its member's
 // backing model id explicitly. Python routes on that id.
+/** A judge failure that retrying cannot fix: review-gen answered 4xx
+ *  (bad request, unknown model, missing key, safety block). */
+export class JudgeNonRetryableError extends Error {}
+
 export class JudgeClient {
   private readonly apiKey: string;
 
@@ -58,7 +62,10 @@ export class JudgeClient {
       bodyTimeout: 8 * 60_000,
     });
     const text = await body.text();
-    if (statusCode >= 400) throw new Error(`judge-pair ${model} ${statusCode}: ${text}`);
+    if (statusCode >= 400) {
+      const message = `judge-pair ${model} ${statusCode}: ${text}`;
+      throw statusCode < 500 ? new JudgeNonRetryableError(message) : new Error(message);
+    }
     return JSON.parse(text) as PairJudgeResult;
   }
 }

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createId } from "@paralleldrive/cuid2";
 import { SubmitVoteRequestSchema, type VoteDimension } from "@reviewarena/shared-types";
 import { signPairToken } from "../pair.js";
+import { partitionBoards, revealFor, splitOwnVote, type BoardRow, type VoteLogEntry } from "../votes.js";
+import { computeBT } from "../../rating/bt.js";
 
 describe("Vote Request Validation (SubmitVoteRequestSchema)", () => {
   const validDimensions = [
@@ -170,7 +172,7 @@ describe("Vote Battle Inclusion Filters", () => {
       status: "GENERATING", // not COMPLETED
     };
 
-    // This should be filtered out by votes.ts loadBattles()
+    // This should be filtered out by votes.ts eligibleVoteWhere()
     expect(["COMPLETED", "FAILED", "PENDING"]).toContain("COMPLETED");
     expect(["COMPLETED", "FAILED", "PENDING"]).not.toContain("GENERATING");
   });
@@ -178,7 +180,7 @@ describe("Vote Battle Inclusion Filters", () => {
   it("should exclude only judge_status FAILED from the ratings (panel rule)", () => {
     const statuses = ["PENDING", "COMPLETE", "PARTIAL", "FAILED"] as const;
 
-    // Mirrors loadBattles() in votes.ts: FAILED = no panel member scored
+    // Mirrors eligibleVoteWhere() in votes.ts: FAILED = no panel member scored
     // the pair. PARTIAL (some judges returned) and PENDING (arena, never
     // judged) still count — the human vote is valid regardless.
     const shouldInclude = (status: typeof statuses[number]) => status !== "FAILED";
@@ -212,5 +214,82 @@ describe("Vote Dedup Protection", () => {
 
     // In SQL, these would violate the unique constraint
     expect(vote1.pairSig).toBe(vote2.pairSig);
+  });
+});
+
+describe("partitionBoards (one query, nine boards)", () => {
+  const dims = (winners: Partial<Record<VoteDimension, "A" | "B" | "TIE">>) =>
+    Object.entries(winners) as [VoteDimension, "A" | "B" | "TIE"][];
+  const rowsFor = (
+    voteId: string,
+    a: string,
+    b: string,
+    winner: "A" | "B" | "TIE",
+    d: [VoteDimension, "A" | "B" | "TIE"][],
+  ): BoardRow[] =>
+    d.length === 0
+      ? [{ voteId, a, b, winner, dimension: null, dimensionWinner: null }]
+      : d.map(([dimension, dimensionWinner]) => ({ voteId, a, b, winner, dimension, dimensionWinner }));
+
+  it("puts each vote on the overall board once and each verdict on its dimension", () => {
+    const rows = [
+      ...rowsFor("v1", "x", "y", "A", dims({ CRITIQUE_CLARITY: "B", FALSE_CLAIMS: "TIE" })),
+      ...rowsFor("v2", "y", "z", "TIE", dims({ CRITIQUE_CLARITY: "A" })),
+      ...rowsFor("v3", "x", "z", "B", []),
+    ];
+    const { overall, byDimension } = partitionBoards(rows);
+    expect(overall).toEqual([
+      { a: "x", b: "y", outcome: 1 },
+      { a: "y", b: "z", outcome: 0.5 },
+      { a: "x", b: "z", outcome: 0 },
+    ]);
+    expect(byDimension.get("CRITIQUE_CLARITY")).toEqual([
+      { a: "x", b: "y", outcome: 0 },
+      { a: "y", b: "z", outcome: 1 },
+    ]);
+    expect(byDimension.get("FALSE_CLAIMS")).toEqual([{ a: "x", b: "y", outcome: 0.5 }]);
+    // All eight boards exist, empty or not.
+    expect(byDimension.size).toBe(8);
+    expect(byDimension.get("CONSTRUCTIVE_TONE")).toEqual([]);
+  });
+
+  it("returns empty boards for no votes", () => {
+    const { overall, byDimension } = partitionBoards([]);
+    expect(overall).toEqual([]);
+    for (const b of byDimension.values()) expect(b).toEqual([]);
+  });
+});
+
+describe("reveal on a replayed (409) vote", () => {
+  const opts = { baselineSlug: "x" };
+  const log: VoteLogEntry[] = [
+    { voteId: "v1", battle: { a: "x", b: "y", outcome: 1 } },
+    { voteId: "v2", battle: { a: "x", b: "y", outcome: 0 } },
+    { voteId: "v3", battle: { a: "y", b: "z", outcome: 1 } },
+    { voteId: "v4", battle: { a: "y", b: "z", outcome: 0 } },
+    { voteId: "own", battle: { a: "x", b: "z", outcome: 1 } },
+    { voteId: "v5", battle: { a: "x", b: "z", outcome: 0 } },
+  ];
+
+  it("takes the stored vote out of 'before' and counts it once in 'after'", () => {
+    const { before, own } = splitOwnVote(log, "own");
+    expect(before).toHaveLength(5);
+    expect(own).toEqual({ a: "x", b: "z", outcome: 1 });
+    const reveal = revealFor(before, own, "x", "z", opts);
+    const all = computeBT(log.map((e) => e.battle), opts).ratings;
+    const without = computeBT(before, opts).ratings;
+    expect(reveal.btAfterB).toBeCloseTo(all.get("z")!, 9);
+    expect(reveal.btBeforeB).toBeCloseTo(without.get("z")!, 9);
+    // Not the old behaviour of appending the vote a second time.
+    const doubled = computeBT([...log.map((e) => e.battle), own!], opts).ratings;
+    expect(reveal.btAfterB).not.toBeCloseTo(doubled.get("z")!, 3);
+  });
+
+  it("shows no movement when the stored vote does not count toward the board", () => {
+    const { before, own } = splitOwnVote(log, "not-in-log");
+    expect(own).toBeNull();
+    const reveal = revealFor(before, own, "x", "z", opts);
+    expect(reveal.btAfterA).toBe(reveal.btBeforeA);
+    expect(reveal.btAfterB).toBe(reveal.btBeforeB);
   });
 });
